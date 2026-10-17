@@ -1,33 +1,41 @@
 # hdgife
 
-A [libGDX](https://libgdx.com/) project generated with [gdx-liftoff](https://github.com/libgdx/gdx-liftoff).
+A grab-bag of extensions for [libKTX](https://libktx.github.io/) that I use in my own libGDX projects. It's still early, so expect things to move around.
 
-This project was generated with a Kotlin project template that includes Kotlin application launchers and [KTX](https://libktx.github.io/) utilities.
+## Setup
 
-## Platforms
+Add JitPack to your repositories:
 
-- `core`: Main module with the application logic shared by all platforms.
-- `lwjgl3`: Primary desktop platform using LWJGL3; was called 'desktop' in older docs.
+```groovy
+repositories {
+  maven { url = 'https://jitpack.io' }
+}
+```
 
-## Gradle
+Then add the dependency to your core module. Use a release tag or a commit hash for the version:
 
-This project uses [Gradle](https://gradle.org/) to manage dependencies.
-The Gradle wrapper was included, so you can run Gradle tasks using `gradlew.bat` or `./gradlew` commands.
-Useful Gradle tasks and flags:
+```groovy
+dependencies {
+  api "com.github.halfdeadgames:hdgife:<tag>"
+}
+```
 
-- `--continue`: when using this flag, errors will not stop the tasks from running.
-- `--daemon`: thanks to this flag, Gradle daemon will be used to run chosen tasks.
-- `--offline`: when using this flag, cached dependency archives will be used.
-- `--refresh-dependencies`: this flag forces validation of all dependencies. Useful for snapshot versions.
-- `build`: builds sources and archives of every project.
-- `cleanEclipse`: removes Eclipse project data.
-- `cleanIdea`: removes IntelliJ project data.
-- `clean`: removes `build` folders, which store compiled classes and built archives.
-- `eclipse`: generates Eclipse project data.
-- `idea`: generates IntelliJ project data.
-- `lwjgl3:jar`: builds application's runnable jar, which can be found at `lwjgl3/build/libs`.
-- `lwjgl3:run`: starts the application.
-- `test`: runs unit tests (if any).
+hdgife declares its dependencies with `api`, so you get these transitively: KTX 1.14.2-rc1, libGDX 1.14.2, Fleks, blade-ink and sjInGameConsole. You don't need to add them yourself, and if you do, keep the versions in line with these.
 
-Note that most tasks that are not specific to a single project can be run with `name:` prefix, where the `name` should be replaced with the ID of a specific project.
-For example, `core:clean` removes `build` folder only from the `core` project.
+## Testing locally
+
+To try changes before pushing, publish to your local Maven repo:
+
+```
+./gradlew :core:publishToMavenLocal
+```
+
+In the consuming project, add `mavenLocal()` to your repositories and use version `1.0.0`.
+
+## Test harness
+
+The `lwjgl3` module is a small desktop app for poking at things. It isn't published. Run it with:
+
+```
+./gradlew lwjgl3:run
+```

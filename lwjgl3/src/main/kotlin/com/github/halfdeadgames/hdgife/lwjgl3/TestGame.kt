@@ -1,4 +1,4 @@
-package com.github.halfdeadgames.hdgife
+package com.github.halfdeadgames.hdgife.lwjgl3
 
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.Texture.TextureFilter.Linear
@@ -11,7 +11,7 @@ import ktx.assets.toInternalFile
 import ktx.async.KtxAsync
 import ktx.graphics.use
 
-class Main : KtxGame<KtxScreen>() {
+class TestGame : KtxGame<KtxScreen>() {
     override fun create() {
         KtxAsync.initiate()
 

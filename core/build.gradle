@@ -28,6 +28,21 @@ dependencies {
   }
 }
 
+apply plugin: 'maven-publish'
+
+java {
+  withSourcesJar()
+}
+
+publishing {
+  publications {
+    maven(MavenPublication) {
+      from components.java
+      artifactId = 'hdgife'
+    }
+  }
+}
+
 jar {
   duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
