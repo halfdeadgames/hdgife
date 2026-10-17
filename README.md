@@ -185,7 +185,8 @@ It opens a dialog tester for `assets/ink/main.ink`. The backtick key toggles the
 | --- | --- |
 | `vars` | Lists every ink variable with its value. |
 | `get <name>` | Prints one variable, or says it isn't declared. |
-| `set <name> <value>` | Sets an ink variable. The value is tried as an int, then a float, then `true`/`false` (any case), and falls back to a string. So `set x 5` gives an int, and there's no way to set the string "5". |
+| `set <name> <value>` | Sets an ink variable, keeping its current type. `set player_hp 5` stays an int, `set player_name 5` gives the string "5". |
+| `set <name> <value> <type>` | Same, with an explicit type: `int`, `float`, `bool` or `string`. If the value doesn't parse, nothing changes. |
 | `stat <entity> <stat> <value>` | Sets a stat on the test state provider and syncs it to ink. Value must be a number. Whole numbers go into ink as ints, so they print without `.0`. |
 | `hp <value>` | Shortcut for `stat player hp <value>`. |
 | `choose <n>` | Picks a choice by index, starting at 0. |

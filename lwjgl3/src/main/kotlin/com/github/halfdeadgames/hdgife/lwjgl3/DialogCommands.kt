@@ -51,9 +51,56 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
         control.log(if (value == null) "$name is not a declared variable" else "$name = $value")
     }
 
+    /** Sets the variable using its current type in the story. */
     fun set(name: String, value: String) {
+        val current = control.getVariable(name)
+        if (current == null) {
+            control.log("$name is not a declared variable")
+            return
+        }
+        val type = when (current) {
+            is Int -> "int"
+            is Float -> "float"
+            is Boolean -> "bool"
+            is String -> "string"
+            else -> {
+                control.log("$name is a ${current.javaClass.simpleName}, which set can't handle. Use an explicit type")
+                return
+            }
+        }
+        assign(name, value, type)
+    }
+
+    /** Sets the variable with an explicit type: int, float, bool or string. */
+    fun set(name: String, value: String, type: String) {
+        if (control.getVariable(name) == null) {
+            control.log("$name is not a declared variable")
+            return
+        }
+        assign(name, value, type)
+    }
+
+    private fun assign(name: String, text: String, type: String) {
+        val parsed: Any? = when (type.lowercase()) {
+            "int" -> text.toIntOrNull()
+            "float" -> text.toFloatOrNull()
+            "bool", "boolean" -> when (text.lowercase()) {
+                "true" -> true
+                "false" -> false
+                else -> null
+            }
+            "string", "str" -> text
+            else -> {
+                control.log("Unknown type '$type'. Use int, float, bool or string")
+                return
+            }
+        }
+        if (parsed == null) {
+            control.log("Cannot read '$text' as $type, $name unchanged")
+            return
+        }
         try {
-            control.setVariable(name, parseValue(value))
+            control.setVariable(name, parsed)
             control.log("$name = ${control.getVariable(name)}")
         } catch (e: Exception) {
             control.log("Cannot set $name: ${e.message}")
@@ -81,11 +128,4 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
     fun reload() = control.reload()
 
     fun restart() = control.restart()
-
-    private fun parseValue(text: String): Any =
-        text.toIntOrNull() ?: text.toFloatOrNull() ?: when (text.lowercase()) {
-            "true" -> true
-            "false" -> false
-            else -> text
-        }
 }
