@@ -179,4 +179,17 @@ The `lwjgl3` module is a small desktop app I use for poking at things. It isn't 
 ./gradlew lwjgl3:run
 ```
 
-It opens a dialog tester for `assets/ink/main.ink`. Press the backtick key to open the console. Commands are `vars`, `get`, `set`, `stat`, `hp`, `choose`, `divert`, `reload`, `restart` and `help`. Drop mod `.ink` files in `assets/mods/` and they get picked up on `reload`.
+It opens a dialog tester for `assets/ink/main.ink`. The backtick key toggles the console. Commands:
+
+| Command | What it does |
+| --- | --- |
+| `vars` | Lists every ink variable with its value. |
+| `get <name>` | Prints one variable, or says it isn't declared. |
+| `set <name> <value>` | Sets an ink variable. The value is tried as an int, then a float, then `true`/`false` (any case), and falls back to a string. So `set x 5` gives an int, and there's no way to set the string "5". |
+| `stat <entity> <stat> <value>` | Sets a stat on the test state provider and syncs it to ink. Value must be a number. Whole numbers go into ink as ints, so they print without `.0`. |
+| `hp <value>` | Shortcut for `stat player hp <value>`. |
+| `choose <n>` | Picks a choice by index, starting at 0. |
+| `divert <path>` | Jumps to an ink path (`knot` or `knot.stitch`) and continues from there. Bad paths log an error. |
+| `reload` | Recompiles `main.ink` plus any mod `.ink` files in `assets/mods/`, swaps in the new story and clears the log. Story state starts fresh. |
+| `restart` | Resets the current story's state and clears the log. Doesn't recompile. |
+| `help` | Lists the commands. Comes from the console library. |
