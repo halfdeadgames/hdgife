@@ -4,6 +4,7 @@ import com.badlogic.gdx.files.FileHandle
 import com.bladecoder.ink.compiler.Compiler
 import com.bladecoder.ink.compiler.IFileHandler
 import com.bladecoder.ink.runtime.Error.ErrorType
+import com.bladecoder.ink.runtime.InkNativePatch
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.HdgifeLog
 import java.io.FileNotFoundException
@@ -28,6 +29,11 @@ import java.io.FileNotFoundException
 class InkCompilerService {
     /** Gets ink warnings and notes. Null means they are dropped. */
     var log: HdgifeLog? = null
+
+    init {
+        // FLOOR, CEILING and INT crash on floats in Blade Ink 1.3.2, see InkNativePatch
+        InkNativePatch.apply()
+    }
 
     /** Compiles [sources]. The first is the root and the others are included after it, in order. */
     fun compile(sources: List<InkSource>): Story {

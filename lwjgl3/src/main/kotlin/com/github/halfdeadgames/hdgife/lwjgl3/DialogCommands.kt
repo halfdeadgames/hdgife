@@ -43,6 +43,9 @@ interface DialogControl {
     fun divert(path: String)
     fun reload()
     fun restart()
+    fun setChoiceMode(mode: ChoiceMode)
+    fun save()
+    fun load()
 }
 
 /** Console commands. `help` comes from the base class. Args arrive as strings and are parsed here. */
@@ -157,6 +160,18 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
     }
 
     fun divert(path: String) = control.divert(path)
+
+    /** How choices with unmet requirements are shown: hide, grey or show. */
+    fun choicemode(mode: String) {
+        val parsed = ChoiceMode.entries.firstOrNull { it.name.equals(mode, ignoreCase = true) }
+        if (parsed == null) control.log("Mode must be hide, grey or show") else control.setChoiceMode(parsed)
+    }
+
+    /** Keeps the story state (JSON) in memory. */
+    fun save() = control.save()
+
+    /** Restores the last `save`. */
+    fun load() = control.load()
 
     fun reload() = control.reload()
 

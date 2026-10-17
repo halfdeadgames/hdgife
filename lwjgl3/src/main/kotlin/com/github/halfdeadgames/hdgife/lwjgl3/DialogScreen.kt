@@ -4,6 +4,8 @@ import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
 import com.badlogic.gdx.InputMultiplexer
 import com.badlogic.gdx.graphics.Color
+import com.badlogic.gdx.graphics.Colors
+import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Label
@@ -14,8 +16,10 @@ import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener
 import com.badlogic.gdx.utils.viewport.ScreenViewport
 import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
-import com.github.halfdeadgames.hdgife.story.DialogChoice
+import com.github.halfdeadgames.hdgife.story.ChoiceRequirement
+import com.github.halfdeadgames.hdgife.story.DialogLine
 import com.github.halfdeadgames.hdgife.story.DialogStep
+import com.github.halfdeadgames.hdgife.story.TextSpan
 import com.github.halfdeadgames.hdgife.story.NumberFormat
 import com.github.halfdeadgames.hdgife.story.Rounding
 import com.github.halfdeadgames.hdgife.story.StoryManager
@@ -33,6 +37,46 @@ import ktx.scene2d.scene2d
 import ktx.scene2d.textButton
 
 private val log = logger<DialogScreen>()
+
+/** How this harness treats choices whose requirements are not met. The engine leaves that to the game. */
+enum class ChoiceMode { HIDE, GREY, SHOW }
+
+/**
+ * Harness-only mapping from engine style names to libGDX color markup. The engine just reports names.
+ * `em` and `b` get fixed colors, `color=NAME` uses a libGDX named color, anything else is left unstyled.
+ */
+private fun styleColor(span: TextSpan): String? {
+    var result: String? = null
+    for (style in span.styles) {
+        when (style.name) {
+            "em" -> result = "#ffd27f"
+            "b" -> result = "#ffffff"
+            "color" -> {
+                val name = style.value?.uppercase()
+                if (name != null && Colors.get(name) != null) result = name
+            }
+        }
+    }
+    return result
+}
+
+/** Spans to libGDX markup. A literal `[` is doubled so it isn't read as markup. */
+private fun toMarkup(spans: List<TextSpan>): String {
+    val out = StringBuilder()
+    for (span in spans) {
+        val color = styleColor(span)
+        if (color != null) out.append('[').append(color).append(']')
+        out.append(span.text.replace("[", "[["))
+        if (color != null) out.append("[]")
+    }
+    return out.toString()
+}
+
+private fun describe(r: ChoiceRequirement): String {
+    if (!r.valid) return "bad requirement '${r.raw}'"
+    val have = r.actual?.let { "have ${it.toString().removeSuffix(".0")}" } ?: "stat missing"
+    return "${r.entity ?: "?"}.${r.stat} ${r.op?.symbol} ${r.target.toString().removeSuffix(".0")} ($have)"
+}
 
 private fun Actor.onChange(block: () -> Unit) {
     addListener(object : ChangeListener() {
@@ -60,11 +104,15 @@ class DialogScreen(
     private val restartButton: TextButton
     private val dim = Color(0.6f, 0.6f, 0.6f, 1f)
     private var scrollPending = false
-    private var lastChoices: List<DialogChoice> = emptyList()
+    private var lastStep: DialogStep? = null
+    private var choiceMode = ChoiceMode.GREY
+    private var savedState: String? = null
 
     init {
         // ktx-scene2d builders read the default skin
         Scene2DSkin.defaultSkin = skin
+        // spans are drawn with libGDX color markup, so every skin font needs it on
+        for (font in skin.getAll(BitmapFont::class.java).values()) font.data.markupEnabled = true
         statusLabel = scene2d.label("")
         restartButton = scene2d.textButton("Restart").apply { onChange { restart() } }
 
@@ -138,19 +186,37 @@ class DialogScreen(
         showStep(step)
     }
 
+    private fun addDialogLine(line: DialogLine) {
+        val prefix = line.speaker?.let { "[#9ecbff]${it.replace("[", "[[")}:[] " } ?: ""
+        addLine(prefix + toMarkup(line.spans))
+        if (!line.tags.isEmpty) addLine("# " + line.tags.raw.joinToString(", "), dim)
+    }
+
     private fun showStep(step: DialogStep) {
-        if (step.text.isNotEmpty()) for (paragraph in step.text.lines()) addLine(paragraph)
-        for (tag in step.tags) addLine("# $tag", dim)
-        lastChoices = step.choices
+        for (line in step.lines) addDialogLine(line)
+        lastStep = step
+        buildChoices(step)
+        statusLabel.setText(if (step.ended) "Story ended." else "")
+        restartButton.isVisible = step.ended
+    }
+
+    /** Harness policy: hide, grey out (with the targets shown) or show unavailable choices. The engine blocks none. */
+    private fun buildChoices(step: DialogStep) {
         choiceTable.clearChildren()
         for (choice in step.choices) {
-            val button = scene2d.textButton(choice.text)
+            if (!choice.available && choiceMode == ChoiceMode.HIDE) continue
+            val markup = StringBuilder(toMarkup(choice.spans))
+            if (!choice.available) {
+                val needs = choice.requirements.filter { !it.met }.joinToString("; ") { describe(it) }
+                markup.append("  [#ff8a80](needs ").append(needs.replace("[", "[[")).append(")[]")
+            }
+            val button = scene2d.textButton("")
+            button.label.setText(markup.toString())
             button.label.wrap = true
+            if (!choice.available && choiceMode == ChoiceMode.GREY) button.isDisabled = true
             button.onChange { choose(choice.index) }
             choiceTable.add(button).growX().padBottom(4f).row()
         }
-        statusLabel.setText(if (step.ended) "Story ended." else "")
-        restartButton.isVisible = step.ended
     }
 
     override fun log(message: String) = console.log(message)
@@ -193,7 +259,7 @@ class DialogScreen(
     }
 
     override fun choose(index: Int) {
-        val choice = lastChoices.firstOrNull { it.index == index }
+        val choice = lastStep?.choices?.firstOrNull { it.index == index }
         if (choice == null) {
             console.log("No choice $index")
             return
@@ -205,6 +271,35 @@ class DialogScreen(
             log.error(e) { "Story error" }
             console.log("Story error: ${e.message}")
         }
+    }
+
+    override fun setChoiceMode(mode: ChoiceMode) {
+        choiceMode = mode
+        lastStep?.let { buildChoices(it) }
+        console.log("Choice mode: ${mode.name.lowercase()}")
+    }
+
+    override fun save() {
+        val json = manager.saveState()
+        savedState = json
+        console.log("Saved ${json.length} chars in memory. Stat values are not part of it.")
+    }
+
+    override fun load() {
+        val json = savedState
+        if (json == null) {
+            console.log("Nothing saved yet")
+            return
+        }
+        try {
+            manager.loadState(json)
+        } catch (e: Exception) {
+            console.log("Load failed: ${e.message}")
+            return
+        }
+        addLine("(state loaded, speaker is now ${manager.speaker ?: "none"})", dim)
+        advance()
+        console.log("Loaded")
     }
 
     override fun divert(path: String) {

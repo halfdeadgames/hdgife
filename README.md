@@ -94,6 +94,8 @@ var formatOverride: ((entityId: String, statName: String) -> NumberFormat?)? // 
 var textCleaner: (String) -> String // default cleanLine
 var log: HdgifeLog? // null by default
 var seed: Int?
+var speakerTagKey: String // default "speaker"
+var requirementsTagKey: String // default "requires"
 ```
 
 `stateProvider` is optional. Without one, `stat`/`stat_of` return 0, `has_stat` returns false and `syncStatsToInk` does nothing. Assigning `story` binds the stat functions to the new story (after a reload, say). Not thread-safe. Keep it on one thread. `variableNamer` is private.
@@ -112,14 +114,47 @@ fun syncStatsToInk(entityId: String, statNames: List<String>): List<String>
 
 `saveState()` and `loadState(json)` wrap ink's own state JSON. With `INCLUDE hdgife.ink` the speaker lives in the ink variable `hdgife_speaker` and the seed is in the ink state (ink's `SEED_RANDOM` plus the position in the random sequence), so one string is all the game stores. After `loadState`, ink continues with the same random results. Load it only into the same compiled story. Without the library, `speaker` is a plain field that you keep yourself. Your own stat values aren't included. blade-ink's seed setter is package-private, so `seed = n` (same as `seedRandom`) goes through ink and needs the library. The `seed` getter only returns the last value set through this manager.
 
-`textCleaner` is applied to every output line and choice text. The default collapses spaces and removes spaces before `, . ; : ! ?`. Replace it for other languages or styles.
+`textCleaner` is applied to every output line and choice text, before style markers are read (so a marker can leave a double space). The default collapses spaces and removes spaces before `, . ; : ! ?`. Replace it for other languages or styles.
 
 ```kotlin
-data class DialogStep(val text: String, val tags: List<String>, val choices: List<DialogChoice>, val ended: Boolean)
-data class DialogChoice(val index: Int, val text: String, val tags: List<String>)
+data class DialogStep(val lines: List<DialogLine>, val tags: Tags, val choices: List<DialogChoice>, val ended: Boolean) {
+    val text: String // plain text of all lines joined with "\n"
+}
+data class DialogLine(val text: String, val speaker: String?, val tags: Tags, val spans: List<TextSpan>)
+data class DialogChoice(val index: Int, val text: String, val spans: List<TextSpan>, val tags: Tags,
+                        val requirements: List<ChoiceRequirement>) {
+    val available: Boolean // all requirements met, or none
+}
+data class ChoiceRequirement(val entity: String?, val stat: String, val op: Comparison?, val target: Float,
+                             val actual: Float?, val met: Boolean, val raw: String) { val valid: Boolean }
+enum class Comparison(val symbol: String) { GREATER, GREATER_EQUAL, LESS, LESS_EQUAL, EQUAL, NOT_EQUAL }
+data class Tags(val raw: List<String>, val map: Map<String, String>) // get(key), has(key), all(key), isEmpty
+data class TextSpan(val text: String, val styles: List<Style>)
+data class Style(val name: String, val value: String? = null)
 ```
 
-`text` has repeated spaces collapsed and spaces before `, . ; : ! ?` removed. Each ink line is one paragraph, joined with `\n`. Empty lines are dropped. `tags` collects every tag seen in the step. `ended` means no choices and nothing left to continue.
+Each ink line is one `DialogLine`. Empty lines are dropped. `ended` means no choices and nothing left to continue. The engine reports and the game decides: `choose` never refuses a choice, and unavailable ones are not removed. Ink's own conditional choices (`* {cond} [text]`) are still hidden by ink itself.
+
+**Tags.** `key: value` becomes key to value (split at the first colon, trimmed), a bare `#shout` becomes `shout` with an empty value. If the part before the colon is not a plain word, like `Note to self: hi`, the whole tag is a bare key. A repeated key keeps the last value in `map`. `raw` has every tag in order and `all(key)` returns every value of a repeated key. A line gets the tags written on it plus tags on empty lines just above it (the way ink attaches them). `DialogStep.tags` is the union for the step. A choice only gets tags written inside its brackets, see below.
+
+**Speakers.** `StoryManager.speaker` is the persistent speaker. Ink changes it with `~ speak("guard")` (`speak("")` clears it), or the game sets it (`beginScene`, `speaker = ...`). It lives in the ink variable `hdgife_speaker`, so it is part of `saveState`. A line can name a speaker for itself with a tag, `# speaker: guard` (key from `speakerTagKey`). That applies to that one line only and does not change the persistent speaker. `DialogLine.speaker` is the tag speaker if there is one, else the persistent speaker at that line, else null. `stat(name)` and the default requirement entity always use the persistent speaker. `speak` is declared EXTERNAL but the engine does not bind it. The ink body in hdgife.ink does the work, which keeps it in saved state and safe in ink's lookahead.
+
+**Requirements.** Put `requires` in a tag inside the choice brackets:
+
+```ink
+* [Lift the boulder # requires: strength >= 12]
+* [Haggle # requires: strength >= 5, merchant.mood > 30]
+```
+
+Each clause is `[entity.]stat op number`, ops `> >= < <= == !=`, separated by commas. The tag may be repeated. Without an entity the current speaker is used. The engine reads the stat from your `NarrativeStateProvider` and fills in `actual` and `met`. A missing stat (no provider, no entity, or `hasStat` false) gives `actual = null` and is not met, whatever the operator. A clause it can't read is logged and returned unmet, with `valid = false` and the text in `raw`. Tags placed after the brackets (`* [Lift] # requires: ...`) are not choice tags in Blade Ink 1.3.2: ink treats them as part of what happens after the choice is taken, so the engine can't see them in time. Keep the tag inside the brackets, or before them.
+
+**Styles.** Writers mark spans in ink, and the engine returns them as `TextSpan`s with the markers stripped from `text`:
+
+```ink
+"<color=red>Quiet!</color> He means <em>every</em> word, and <shake>it shows</shake>."
+```
+
+`<name>` or `<name=value>` opens, `</name>` closes, `</>` closes the latest. They nest (`styles` is outermost first). The engine gives names no meaning, so `em`, `color=red` and `shake` all pass through and the game maps them. This also works in choice text. `<<` is a literal `<`. Anything that is not a well-formed marker (`a < b`, `<3`) is plain text. Unclosed markers are closed at the end of the line, an unmatched closer is dropped, both are logged. Markers don't carry across lines. Why angle brackets: `[` `]` are choice syntax, `{` `}` are logic and `#` starts a tag in ink, so none of those can be used. `<tag>` passes through the Blade Ink compiler and runtime unchanged in lines, in choice text and inside the choice brackets (`<>` is glue, and is consumed by ink before the engine sees it). Hex colors (`<color=#ff0000>`) won't work, because ink reads `#` as a tag. Use names.
 
 ### Stat access and clean output
 
@@ -147,7 +182,11 @@ Everything about which stats exist is up to your game and your ink. Nothing is b
 
 `stat` and `stat_of` always give ink a float, whole or not, so ink math behaves the same for every value. The engine does not decide how numbers are shown. That is up to the game (see below) and the story. Printing a float directly (`{stat("strength")}`) uses ink's own float printing, so prefer the functions below for display. Ink integer division truncates, so use `/ 2.0` or the helpers when averaging.
 
-Library functions: `stat(name)`, `stat_of(entity, name)`, `has_stat(name)`, `stat_text(name)`, `stat_text_of(entity, name)`, `fmt(x, decimals, mode)`, `floor_text(x)`, `round_text(x, decimals)`, `chance(pct)`, `clamp(x, lo, hi)`, `avg2(a, b)`, `avg3(a, b, c)`, `blend(a, wa, b, wb)`, `invert(x)` (100 - x), `scale100(x, lo, hi)`. Don't declare your own knots with these names.
+Library functions: `speak(name)`, `stat(name)`, `stat_of(entity, name)`, `has_stat(name)`, `stat_text(name)`, `stat_text_of(entity, name)`, `fmt(x, decimals, mode)`, `floor_text(x)`, `round_text(x, decimals)`, `chance(pct)`, `clamp(x, lo, hi)`, `avg2(a, b)`, `avg3(a, b, c)`, `blend(a, wa, b, wb)`, `invert(x)` (100 - x), `scale100(x, lo, hi)`. Don't declare your own knots with these names. Parameters and temps inside the library start with `hdg_`, so your story is free to declare `VAR n`, `x`, `name` and so on. Keep your own names off `hdg_` and `hdgife_`.
+
+The stat functions are bound as not lookahead safe, because Blade Ink 1.3.2 refuses lookahead-safe functions inside choice text and `{...}` strings (so `{stat_text("mood")}` in a choice would fail). The price is that a stat call ends ink's glue lookahead, so `<>` on a line after a line that calls `stat()` may not join. Calls at the start of a line work as normal.
+
+`FLOOR`, `CEILING` and `INT` work on floats (see "Ink float functions" below). `FLOOR` and `CEILING` give a float, as in ink, so wrap them in `INT(...)` if you need a whole number.
 
 ### Number formatting
 
@@ -174,7 +213,7 @@ Ink side:
 - `fmt(x, decimals, mode)` formats any number. `mode` is `"floor"`, `"ceil"`, `"round"` or `"trunc"`. For example `{fmt(stat("strength"), 0, "floor")}` or `{fmt(avg3(a, b, c), 1, "round")}`. An unknown mode logs an error and uses round.
 - `floor_text(x)` and `round_text(x, decimals)` are shorthands for `fmt`.
 
-Without a `StoryManager`, ink fallbacks do the same rounding with ink math (`stat_text` is 0 decimals, round). Whole results are exact, but with decimals the last digit can be off because ink floats are binary, and decimals above 6 are not supported. The fallbacks print their text directly, so use them inline (`{fmt(...)}`) and not in `~ temp t = fmt(...)`.
+Without a `StoryManager`, ink fallbacks do the same rounding with `FLOOR`, `CEILING` and `INT` (`stat_text` is 0 decimals, round). Whole results are exact, but with decimals the last digit can be off because ink floats are binary, and decimals above 6 are not supported. The fallbacks print their text directly, so use them inline (`{fmt(...)}`) and not in `~ temp t = fmt(...)`.
 
 ```kotlin
 fun syncStatsToInk(entityId: String, statNames: List<String>)
@@ -187,6 +226,44 @@ StoryManager.defaultVariableName(entityId: String, statName: String): String
 ```
 
 Returns `entityId_statName` with anything outside `[A-Za-z0-9_]` replaced by `_`. So `("player", "hp")` gives `player_hp`.
+
+### Writing stat-driven ink
+
+```ink
+INCLUDE hdgife.ink
+
+=== gate ===
+~ speak("guard")
+"Halt." <em>He does not lower the spear.</em> {stat("mood") < 30: He scowls.|He watches you.}
+~ speak("merchant")
+"He's with me." Her smile is <color=gold>very</color> practiced. # speaker: merchant
+~ speak("guard")
+* [Lift the boulder # requires: strength >= 12]
+  -> END
+* [Stand your ground # requires: strength >= 5, sanity > 30]
+  -> END
+* [Call in a favor # requires: merchant.mood >= 50]
+  -> END
+* {stat("strength") >= 10} [Arm-wrestle <em>{stat_text("strength")}</em> vs. you]
+  -> END
+```
+
+Kotlin, with the game choosing to grey out unavailable choices:
+
+```kotlin
+val step = manager.next()
+for (line in step.lines) draw(line.speaker, line.spans) // map style names to your own rendering
+for (choice in step.choices) {
+    val unmet = choice.requirements.filter { !it.met } // entity, stat, op, target, actual (null if missing)
+    ui.addChoice(choice.spans, enabled = choice.available, hint = unmet)
+}
+```
+
+Plain `{cond}` choices are hidden by ink. `requires` ones are reported, and `manager.choose(i)` works on any of them.
+
+### Ink float functions
+
+Blade Ink 1.3.2 throws `ClassCastException` on `FLOOR`, `CEILING` and `INT` with a float argument, even `FLOOR(2.5)`. The cause is in its `NativeFunctionCall`: the float versions cast the boxed argument with `(double) val` and `(int) val`, but ink floats are boxed `Float`, so the cast fails. Fixed in `com.bladecoder.ink.runtime.InkNativePatch`, a small object in Blade Ink's own package. Ink looks these operations up in one shared table, and the table has a package-private registration method. The patch registers correct float versions there. No reflection, no copy of the Blade Ink class, and it applies to already compiled stories too. `InkCompilerService` and `StoryManager` apply it for you. If you build a `Story` yourself, call `InkNativePatch.apply()` first. The jar therefore has a few classes in the `com.bladecoder.ink.runtime` package, which is fine on the classpath but not in a Java module. `FLOOR(-2.5)` is -3.0, `CEILING(-2.5)` is -2.0, `INT(-2.7)` is -2.
 
 ### Example
 
@@ -224,7 +301,8 @@ val saved = manager.saveState() // later: manager.loadState(saved)
 ## Not done yet
 
 - Mods can add content but can't override existing knots. Ink rejects duplicate knot names.
-- Nothing reads ink variables back into the game yet, and there are no variable observers. The only EXTERNAL functions are the stat and number-format ones.
+- Style spans don't cross lines, and a tag speaker covers one line only.
+- Nothing reads ink variables back into the game yet, and there are no variable observers. The only EXTERNAL functions are the stat and number-format ones (`speak` is declared EXTERNAL but implemented in ink).
 - There's no reusable UI in the library. That's on purpose, though I might add some optional helpers later.
 - Web/TeaVM is untested.
 - No real unit tests yet.
@@ -269,7 +347,7 @@ The `lwjgl3` module is a small desktop app I use for poking at things. It isn't 
 ./gradlew lwjgl3:run
 ```
 
-It opens a dialog tester for `lwjgl3/assets/ink/main.ink`. The backtick key toggles the console. Commands:
+It opens a dialog tester for `lwjgl3/assets/ink/main.ink`. The hub has a gate scene with two speakers (guard and merchant), colored spans (`em` and `color=...` are mapped to libGDX color markup in the harness only) and choices with requirements. Unavailable choices follow the harness's own policy, set with `choicemode`. The backtick key toggles the console. Commands:
 
 | Command | What it does |
 | --- | --- |
@@ -279,7 +357,7 @@ It opens a dialog tester for `lwjgl3/assets/ink/main.ink`. The backtick key togg
 | `set <name> <value> <type>` | Same, with an explicit type: `int`, `float`, `bool` or `string`. If the value doesn't parse, nothing changes. |
 | `stat <entity> <stat> <value>` | Sets a stat on the test state provider and syncs it to ink. Value must be a number. Whole numbers go into the ink variable as ints, so they print without `.0`. |
 | `hp <value>` | Shortcut for `stat player hp <value>`. |
-| `npc <entity> <stat> <value>` | Sets a stat on the test provider. Ink reads it live through `stat()`, no sync. The `guard` NPC starts with sanity 80, tiredness 20, mood 60, strength 12. |
+| `npc <entity> <stat> <value>` | Sets a stat on the test provider. Ink reads it live through `stat()`, no sync. The `guard` NPC starts with sanity 80, tiredness 20, mood 60, strength 12, and `merchant` with mood 70, strength 4. The player has no stats until you set them (`hp 10`, `stat player rank 3`). |
 | `talk <knot> [speaker]` | `beginScene`: sets the speaker and jumps to the knot, for example `talk guard_chat guard`. |
 | `seed <n>` | Seeds ink's random. Use `restart` first if you want the same result twice. |
 | `numfmt <decimals> <mode>` | Changes the default number format used by `stat_text`. Mode is `floor`, `ceil`, `round` or `trunc`, for example `numfmt 1 floor`. |
@@ -287,4 +365,7 @@ It opens a dialog tester for `lwjgl3/assets/ink/main.ink`. The backtick key togg
 | `divert <path>` | Jumps to an ink path (`knot` or `knot.stitch`) and continues from there. Bad paths log an error. |
 | `reload` | Recompiles `main.ink` plus any mod `.ink` files in `lwjgl3/assets/mods/`, swaps in the new story and clears the log. Story state starts fresh. |
 | `restart` | Resets the current story's state and clears the log. Doesn't recompile. |
+| `choicemode <hide\|grey\|show>` | How choices with unmet requirements are shown. `grey` (default) disables them and lists what is missing, `show` keeps them clickable with the same note, `hide` removes them. `choose <n>` ignores the mode, the engine never blocks. |
+| `save` | Keeps the current story state (`saveState` JSON) in memory. Stat values are not part of it. |
+| `load` | Restores the last `save` and shows the pending choices again. Speaker comes back with it. |
 | `help` | Lists the commands. Comes from the console library. |

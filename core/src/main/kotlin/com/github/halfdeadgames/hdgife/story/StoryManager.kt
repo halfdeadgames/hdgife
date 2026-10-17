@@ -1,5 +1,6 @@
 package com.github.halfdeadgames.hdgife.story
 
+import com.bladecoder.ink.runtime.InkNativePatch
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.HdgifeLog
 import com.github.halfdeadgames.hdgife.state.NarrativeStateProvider
@@ -16,6 +17,16 @@ fun cleanLine(raw: String): String =
  * With `INCLUDE hdgife.ink` in the story, ink can call `stat(name)` (current speaker),
  * `stat_of(entity, name)` and `has_stat(name)`. They read [stateProvider] live and always give ink a float,
  * so ink math is the same for whole and fractional values. Without a provider they return 0 / false.
+ *
+ * Speakers: [speaker] is the persistent speaker. Ink changes it with `speak("guard")`, a line can name a speaker
+ * for itself with a tag (`# speaker: guard`, key set by [speakerTagKey]). A tag speaker applies to that line only.
+ * Each [DialogLine] reports the speaker it had. `stat(name)` always reads the persistent speaker.
+ *
+ * Choices can declare requirements in a tag inside the choice text, for example
+ * `* [Lift the boulder # requires: strength >= 12, guard.mood > 30]`. They are evaluated against [stateProvider]
+ * and reported on each [DialogChoice]. Nothing is hidden or blocked here, that is for the game to decide.
+ *
+ * Style markers (`<em>`, `<color=red>`) in lines and choices are returned as [TextSpan]s, see [parseStyles].
  *
  * Number display is up to the game and the story: `stat_text(name)` and `stat_text_of(entity, name)` print a
  * stat using [numberFormat] (or the [formatOverride] for that stat), and `fmt(x, decimals, mode)` formats any
@@ -46,6 +57,12 @@ class StoryManager(
     /** Gets warnings such as an unknown `fmt` mode. Null drops them. */
     var log: HdgifeLog? = null
 
+    /** Tag key that names the speaker of a single line. Compared case-sensitively. */
+    var speakerTagKey: String = "speaker"
+
+    /** Tag key that declares choice requirements. */
+    var requirementsTagKey: String = "requires"
+
     /** Cleans each line of output text. The default fixes spaces and punctuation spacing, see [cleanLine]. */
     var textCleaner: (String) -> String = ::cleanLine
 
@@ -72,6 +89,7 @@ class StoryManager(
     private fun hasSpeakerVariable() = story.variablesState.get(SPEAKER_VARIABLE) != null
 
     init {
+        InkNativePatch.apply()
         bind(story)
     }
 
@@ -85,9 +103,11 @@ class StoryManager(
         bindOnce(target, "has_stat") { args -> hasStatValue(speaker, args.getOrNull(0)) }
     }
 
+    // Not lookahead safe on purpose: Blade Ink 1.3.2 refuses lookahead-safe functions inside choice text and
+    // "{...}" strings. Unsafe ones work there, at the cost of ending glue lookahead (see README).
     private fun bindOnce(target: Story, name: String, block: (Array<out Any?>) -> Any) {
         if (target.getExternalFunction(name) != null) return
-        target.bindExternalFunction(name) { args -> block(args) }
+        target.bindExternalFunction(name, Story.ExternalFunction<Any> { args -> block(args) }, false)
     }
 
     /** Stats always reach ink as Float. */
@@ -195,27 +215,77 @@ class StoryManager(
 
     /**
      * Continues until the next choice or the end and returns the cleaned result.
-     * With choices pending it returns them again with empty text.
+     * With choices pending it returns them again with no lines.
      */
     fun next(): DialogStep {
         val s = story
-        val text = StringBuilder()
-        val tags = ArrayList<String>()
+        val lines = ArrayList<DialogLine>()
+        val stepTags = ArrayList<String>()
+        var carried: ArrayList<String>? = null
         while (s.canContinue()) {
-            val line = textCleaner(s.Continue())
-            if (line.isNotEmpty()) {
-                if (text.isNotEmpty()) text.append('\n')
-                text.append(line)
+            val cleaned = textCleaner(s.Continue())
+            val lineTags = s.currentTags
+            stepTags.addAll(lineTags)
+            val (plain, spans) = parseStyles(cleaned, log)
+            if (plain.isBlank()) {
+                // a line with no text hands its tags to the next line, as ink does
+                if (lineTags.isNotEmpty()) (carried ?: ArrayList<String>().also { carried = it }).addAll(lineTags)
+                continue
             }
-            tags.addAll(s.currentTags)
+            val tags = Tags.parse(carried?.let { it + lineTags } ?: lineTags)
+            carried = null
+            val tagSpeaker = tags[speakerTagKey]?.ifBlank { null }
+            lines += DialogLine(plain, tagSpeaker ?: speaker, tags, spans)
         }
         val raw = s.currentChoices
         val choices = ArrayList<DialogChoice>(raw.size)
         for (i in raw.indices) {
             val c = raw[i]
-            choices += DialogChoice(c.index, textCleaner(c.text), c.tags?.toList() ?: emptyList())
+            val (plain, spans) = parseStyles(textCleaner(c.text), log)
+            val tags = Tags.parse(c.tags ?: emptyList())
+            choices += DialogChoice(c.index, plain, spans, tags, requirementsOf(tags))
         }
-        return DialogStep(text.toString(), tags, choices, choices.isEmpty())
+        return DialogStep(lines, Tags.parse(stepTags), choices, choices.isEmpty())
+    }
+
+    /**
+     * Reads the requirement tags of a choice and checks them against [stateProvider]. Each clause is
+     * `[entity.]stat op number`, ops `> >= < <= == !=`, clauses separated by commas, and the tag may repeat.
+     * Without an entity the current [speaker] is used. Clauses that can't be read are logged and returned
+     * unmet with their raw text.
+     */
+    private fun requirementsOf(tags: Tags): List<ChoiceRequirement> {
+        val clauses = tags.all(requirementsTagKey)
+        if (clauses.isEmpty()) return emptyList()
+        val result = ArrayList<ChoiceRequirement>()
+        val current = speaker
+        for (value in clauses) {
+            for (part in value.split(',')) {
+                val raw = part.trim()
+                if (raw.isEmpty()) continue
+                result += evaluateRequirement(raw, current)
+            }
+        }
+        return result
+    }
+
+    private fun evaluateRequirement(raw: String, currentSpeaker: String?): ChoiceRequirement {
+        val match = REQUIREMENT.matchEntire(raw)
+        val target = match?.groupValues?.get(4)?.trim()?.toFloatOrNull()?.takeIf { it.isFinite() }
+        val op = match?.let { Comparison.parse(it.groupValues[3]) }
+        if (match == null || target == null || op == null) {
+            log?.log("Requirement: cannot read '$raw'")
+            return ChoiceRequirement(null, "", null, Float.NaN, null, false, raw)
+        }
+        val entity = match.groupValues[1].ifEmpty { null } ?: currentSpeaker
+        val stat = match.groupValues[2]
+        if (entity == null) {
+            log?.log("Requirement: '$raw' names no entity and there is no speaker")
+            return ChoiceRequirement(null, stat, op, target, null, false, raw)
+        }
+        val provider = stateProvider
+        val actual = if (provider != null && provider.hasStat(entity, stat)) provider.getStat(entity, stat) else null
+        return ChoiceRequirement(entity, stat, op, target, actual, actual != null && op.test(actual, target), raw)
     }
 
     /** Picks choice [index] (as in [DialogChoice.index]) and returns the following [DialogStep]. */
@@ -229,6 +299,7 @@ class StoryManager(
     companion object {
         private const val SEED_FUNCTION = "hdgife_seed"
         private const val SPEAKER_VARIABLE = "hdgife_speaker"
+        private val REQUIREMENT = Regex("""(?:([\w-]+)\.)?([\w-]+)\s*(>=|<=|==|!=|>|<)\s*(.+)""")
 
         /** Builds `entityId_statName`, replacing characters outside `[A-Za-z0-9_]` with `_`. */
         fun defaultVariableName(entityId: String, statName: String): String =

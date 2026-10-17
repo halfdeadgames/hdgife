@@ -43,11 +43,16 @@ class TestGame : KtxGame<KtxScreen>() {
             setStat("guard", "tiredness", 20f)
             setStat("guard", "mood", 60f)
             setStat("guard", "strength", 12f)
+            setStat("merchant", "mood", 70f)
+            setStat("merchant", "strength", 4f)
         }
         KtxAsync.launch {
             try {
                 val story = withContext(Dispatchers.IO) { compileHarnessStory(compiler) }
-                val manager = StoryManager(story, provider).apply { speaker = "guard" }
+                val manager = StoryManager(story, provider).apply {
+                    speaker = "guard"
+                    log = HdgifeLog { logger.info { it } }
+                }
                 addScreen(DialogScreen(manager, provider, compiler))
                 setScreen<DialogScreen>()
             } catch (e: Exception) {

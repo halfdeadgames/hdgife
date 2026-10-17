@@ -10,11 +10,13 @@ Player HP is {player_hp}. Name is {player_name}.
 -> hub
 
 === hub ===
+~ speak("")
 What now?
 + [Look around] You see a quiet room. #scene:room
   -> hub
 + [Check my health] -> status
 + [Talk to the guard] -> guard_chat
++ [Watch the gate exchange] -> gate_exchange
 * [Leave] -> farewell
 
 === status ===

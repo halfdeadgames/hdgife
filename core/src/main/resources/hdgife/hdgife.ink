@@ -7,23 +7,35 @@
 //
 // stat and stat_of always give a float, so ink math does not depend on whether a value is whole.
 
-// Current speaker, kept here so it is part of the saved ink state. Set it with StoryManager.speaker.
+// All parameters and temps in this file start with hdg_, so your story can declare VARs like n, x or name.
+// Don't declare your own knots or variables starting with hdg_ or hdgife_.
+//
+// Current speaker, kept here so it is part of the saved ink state. Set it with StoryManager.speaker or
+// speak() below.
 VAR hdgife_speaker = ""
 
-EXTERNAL stat(name)
-EXTERNAL stat_of(entity, name)
-EXTERNAL has_stat(name)
-EXTERNAL stat_text(name)
-EXTERNAL stat_text_of(entity, name)
-EXTERNAL fmt(x, decimals, mode)
+EXTERNAL stat(hdg_name)
+EXTERNAL stat_of(hdg_entity, hdg_name)
+EXTERNAL has_stat(hdg_name)
+EXTERNAL stat_text(hdg_name)
+EXTERNAL stat_text_of(hdg_entity, hdg_name)
+EXTERNAL fmt(hdg_x, hdg_decimals, hdg_mode)
+EXTERNAL speak(hdg_name)
 
 // Stat of the current speaker (see StoryManager.beginScene). 0 if missing.
-=== function stat(name) ===
+=== function stat(hdg_name) ===
 ~ return 0.0
 
 // Stat of any entity. 0 if missing.
-=== function stat_of(entity, name) ===
+=== function stat_of(hdg_entity, hdg_name) ===
 ~ return 0.0
+
+// Makes this entity the current speaker until changed: ~ speak("guard"). Use "" for no speaker.
+// StoryManager does not bind this one. The ink body is the implementation, so the speaker lives in
+// hdgife_speaker, is saved with the story and is safe during ink's lookahead. Change who `stat()`
+// reads, and the speaker reported on following lines. A `# speaker: name` tag only names one line.
+=== function speak(hdg_name) ===
+~ hdgife_speaker = hdg_name
 
 // Number display. Use these inline: {stat_text("strength")} or {fmt(avg3(a, b, c), 1, "round")}.
 //
@@ -35,124 +47,93 @@ EXTERNAL fmt(x, decimals, mode)
 // decimals the digits can be off in the last place because ink floats are binary. They print their text
 // directly, so call them inline and not as `~ temp t = fmt(...)`. Decimals above 6 are not supported.
 // stat_text falls back to 0 decimals, round.
-=== function stat_text(name) ===
-{fmt(stat(name), 0, "round")}
+=== function stat_text(hdg_name) ===
+{fmt(stat(hdg_name), 0, "round")}
 
-=== function stat_text_of(entity, name) ===
-{fmt(stat_of(entity, name), 0, "round")}
+=== function stat_text_of(hdg_entity, hdg_name) ===
+{fmt(stat_of(hdg_entity, hdg_name), 0, "round")}
 
-=== function fmt(x, decimals, mode) ===
-~ temp s = hdgife_pow10(decimals)
-~ temp v = x * s * 1.0
-~ temp n = 0
+// Uses FLOOR, CEILING and INT, which need the fix in InkNativePatch (applied by the compiler service and
+// StoryManager). Ties round away from zero.
+=== function fmt(hdg_x, hdg_decimals, hdg_mode) ===
+~ temp hdg_s = hdgife_pow10(hdg_decimals)
+~ temp hdg_v = hdg_x * hdg_s * 1.0
+~ temp hdg_n = 0
 {
-- mode == "floor": ~ n = hdgife_floor(v)
-- mode == "ceil" or mode == "ceiling": ~ n = (0 - hdgife_floor(0 - v))
-- mode == "trunc" or mode == "truncate": ~ n = hdgife_trunc(v)
-- v < 0: ~ n = 0 - hdgife_floor(0.5 - v)
-- else: ~ n = hdgife_floor(v + 0.5)
+- hdg_mode == "floor": ~ hdg_n = INT(FLOOR(hdg_v))
+- hdg_mode == "ceil" or hdg_mode == "ceiling": ~ hdg_n = INT(CEILING(hdg_v))
+- hdg_mode == "trunc" or hdg_mode == "truncate": ~ hdg_n = INT(hdg_v)
+- hdg_v < 0: ~ hdg_n = INT(CEILING(hdg_v - 0.5))
+- else: ~ hdg_n = INT(FLOOR(hdg_v + 0.5))
 }
 {
-- decimals <= 0: {n}
-- n < 0: {"-"}{hdgife_digits(0 - n, s, decimals)}
-- else: {hdgife_digits(n, s, decimals)}
+- hdg_decimals <= 0: {hdg_n}
+- hdg_n < 0: {"-"}{hdgife_digits(0 - hdg_n, hdg_s, hdg_decimals)}
+- else: {hdgife_digits(hdg_n, hdg_s, hdg_decimals)}
 }
 
 // Rounds down to a whole number and prints it.
-=== function floor_text(x) ===
-{fmt(x, 0, "floor")}
+=== function floor_text(hdg_x) ===
+{fmt(hdg_x, 0, "floor")}
 
 // Rounds to the nearest value with the given decimals and prints it.
-=== function round_text(x, decimals) ===
-{fmt(x, decimals, "round")}
+=== function round_text(hdg_x, hdg_decimals) ===
+{fmt(hdg_x, hdg_decimals, "round")}
 
-// Floor as an int, using only comparisons and arithmetic: FLOOR, CEILING and INT all crash on floats in
-// Blade Ink 1.3.2. Finds the largest power of two not above v, then adds smaller powers while they fit.
-=== function hdgife_floor(v) ===
+=== function hdgife_pow10(hdg_n) ===
 {
-- v >= 0: ~ return hdgife_floor_pos(v, hdgife_top_step(v, 1), 0)
-- else:
-    ~ temp whole = hdgife_floor_pos(0 - v, hdgife_top_step(0 - v, 1), 0)
-    { whole < 0 - v:
-        ~ return 0 - whole - 1
-    - else:
-        ~ return 0 - whole
-    }
+- hdg_n <= 0: ~ return 1
+- else: ~ return 10 * hdgife_pow10(hdg_n - 1)
 }
 
-=== function hdgife_trunc(v) ===
-{
-- v < 0: ~ return 0 - hdgife_floor(0 - v)
-- else: ~ return hdgife_floor(v)
-}
+// Prints a non-negative scaled integer as "whole.fraction" with zero padding.
+=== function hdgife_digits(hdg_n, hdg_s, hdg_decimals) ===
+{hdg_n / hdg_s}.{hdgife_zeros(hdg_decimals, hdg_n mod hdg_s)}{hdg_n mod hdg_s}
 
-=== function hdgife_top_step(v, p) ===
+// Zeros needed in front of hdg_frac so it has hdg_width digits.
+=== function hdgife_zeros(hdg_width, hdg_frac) ===
 {
-- p * 2 <= v: ~ return hdgife_top_step(v, p * 2)
-- else: ~ return p
-}
-
-=== function hdgife_floor_pos(v, step, acc) ===
-{
-- step < 1: ~ return acc
-- acc + step <= v: ~ return hdgife_floor_pos(v, step / 2, acc + step)
-- else: ~ return hdgife_floor_pos(v, step / 2, acc)
-}
-
-=== function hdgife_pow10(n) ===
-{
-- n <= 0: ~ return 1
-- else: ~ return 10 * hdgife_pow10(n - 1)
-}
-
-// Prints a non-negative scaled integer n as "whole.fraction" with zero padding.
-=== function hdgife_digits(n, s, decimals) ===
-{n / s}.{hdgife_zeros(decimals, n mod s)}{n mod s}
-
-// Zeros needed in front of frac so it has `width` digits.
-=== function hdgife_zeros(width, frac) ===
-{
-- width <= 1: ~ return ""
-- frac >= hdgife_pow10(width - 1): ~ return ""
-- else: ~ return "0" + hdgife_zeros(width - 1, frac)
+- hdg_width <= 1: ~ return ""
+- hdg_frac >= hdgife_pow10(hdg_width - 1): ~ return ""
+- else: ~ return "0" + hdgife_zeros(hdg_width - 1, hdg_frac)
 }
 
 // True if the current speaker has this stat.
-=== function has_stat(name) ===
+=== function has_stat(hdg_name) ===
 ~ return false
 
 // True with a pct percent chance (0 or less never, 100 or more always).
-=== function chance(pct) ===
-~ return RANDOM(1, 100) <= pct
+=== function chance(hdg_pct) ===
+~ return RANDOM(1, 100) <= hdg_pct
 
 // Limits x to the range lo..hi.
-=== function clamp(x, lo, hi) ===
+=== function clamp(hdg_x, hdg_lo, hdg_hi) ===
 {
-- x < lo: ~ return lo
-- x > hi: ~ return hi
-- else: ~ return x
+- hdg_x < hdg_lo: ~ return hdg_lo
+- hdg_x > hdg_hi: ~ return hdg_hi
+- else: ~ return hdg_x
 }
 
 // Plain averages. Values are floats, so no integer truncation.
-=== function avg2(a, b) ===
-~ return (a + b) / 2.0
+=== function avg2(hdg_a, hdg_b) ===
+~ return (hdg_a + hdg_b) / 2.0
 
-=== function avg3(a, b, c) ===
-~ return (a + b + c) / 3.0
+=== function avg3(hdg_a, hdg_b, hdg_c) ===
+~ return (hdg_a + hdg_b + hdg_c) / 3.0
 
 // Weighted blend of two values: (a*wa + b*wb) / (wa + wb).
-=== function blend(a, wa, b, wb) ===
-~ return (a * wa + b * wb) / (wa + wb + 0.0)
+=== function blend(hdg_a, hdg_wa, hdg_b, hdg_wb) ===
+~ return (hdg_a * hdg_wa + hdg_b * hdg_wb) / (hdg_wa + hdg_wb + 0.0)
 
 // Flips a 0..100 value, so low becomes high. Handy for "low mood" style checks.
-=== function invert(x) ===
-~ return 100 - x
+=== function invert(hdg_x) ===
+~ return 100 - hdg_x
 
 // Maps x from the range lo..hi onto 0..100, clamped.
-=== function scale100(x, lo, hi) ===
-~ return clamp((x - lo) * 100.0 / (hi - lo), 0, 100)
+=== function scale100(hdg_x, hdg_lo, hdg_hi) ===
+~ return clamp((hdg_x - hdg_lo) * 100.0 / (hdg_hi - hdg_lo), 0, 100)
 
 // Used by StoryManager.seedRandom. Seeds RANDOM and shuffles.
-=== function hdgife_seed(n) ===
-~ SEED_RANDOM(n)
+=== function hdgife_seed(hdg_n) ===
+~ SEED_RANDOM(hdg_n)
 ~ return 0
