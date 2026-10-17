@@ -156,9 +156,7 @@ class DialogScreen(
     }
 
     override fun setStat(entity: String, stat: String, value: Float) {
-        provider.setStat(entity, stat, value)
-        manager.syncStatsToInk(entity, listOf(stat))
-        val name = StoryManager.defaultVariableName(entity, stat)
+        val name = applyStat(manager, provider, entity, stat, value)
         console.log("$name = ${manager.story.variablesState.get(name)}")
     }
 

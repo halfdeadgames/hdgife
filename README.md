@@ -179,4 +179,4 @@ The `lwjgl3` module is a small desktop app I use for poking at things. It isn't 
 ./gradlew lwjgl3:run
 ```
 
-It opens a dialog tester for `assets/ink/main.ink`. Press the backtick key to open the console. Commands are `vars`, `get`, `set`, `stat`, `choose`, `divert`, `reload`, `restart` and `help`. Drop mod `.ink` files in `assets/mods/` and they get picked up on `reload`.
+It opens a dialog tester for `assets/ink/main.ink`. Press the backtick key to open the console. Commands are `vars`, `get`, `set`, `stat`, `hp`, `choose`, `divert`, `reload`, `restart` and `help`. Drop mod `.ink` files in `assets/mods/` and they get picked up on `reload`.

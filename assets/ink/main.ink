@@ -7,13 +7,13 @@ Player HP is {player_hp}.
 
 === hub ===
 What now?
-* [Look around] You see a quiet room. #scene:room
++ [Look around] You see a quiet room. #scene:room
   -> hub
-* [Check your health] -> status
++ [Check my health] -> status
 * [Leave] -> farewell
 
 === status ===
-HP right now: {player_hp}.
+You have {player_hp} hp.
 {player_hp <= 0: You feel awful.|You feel fine.}
 -> hub
 
