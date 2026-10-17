@@ -24,6 +24,114 @@ fun getStat(entityId: String, statName: String): Float
 
 `StoryManager.syncStatsToInk(entityId, statNames)` pulls those stats and pushes them into ink variables named `entity_stat`, so `player_hp` for example. The naming rule can be swapped out. If a variable isn't declared in the ink it gets skipped and logged.
 
+## API
+
+Everything lives under `com.github.halfdeadgames.hdgife`.
+
+### Hdgife
+
+```kotlin
+Hdgife.VERSION // const val String, currently "0.1.0"
+```
+
+### NarrativeStateProvider
+
+Package `state`. Implement this in your game.
+
+```kotlin
+interface NarrativeStateProvider {
+    fun getStat(entityId: String, statName: String): Float
+}
+```
+
+### InkCompilerService
+
+Package `compiler`.
+
+```kotlin
+class InkCompilerService(private val context: CoroutineContext = Dispatchers.IO)
+
+suspend fun compile(baseMain: FileHandle, modDirectory: FileHandle? = null): Story
+```
+
+`compile` switches to `context` with `withContext`, so call it from a coroutine, for example `KtxAsync.launch`. Pass a ktx-async `newAsyncContext(...)` as `context` if you'd rather not use `Dispatchers.IO`. The returned `Story` isn't thread-safe, so use it from one thread.
+
+It reads `baseMain` as UTF-8. If you pass `modDirectory`, it walks it recursively, picks up every file with the `ink` extension, sorts them by path relative to that folder and appends an `INCLUDE` for each one to the end of the base source. Those includes are named `__mod__/<relative path>`. `INCLUDE`s inside your base files resolve relative to the folder `baseMain` is in. Mod files can `INCLUDE` things relative to the mod folder.
+
+Only ink errors count as failures. Warnings and other messages are logged at info level.
+
+Throws `InkCompileException` if ink reports any error, or if the compiler returns no story. A missing `baseMain` isn't wrapped. You get whatever libGDX throws from `readString`.
+
+### InkCompileException
+
+```kotlin
+class InkCompileException(val errors: List<String>) : RuntimeException
+```
+
+`errors` is ink's own error messages, line numbers included. The exception message is `"Ink compilation failed:"` followed by those messages, one per line.
+
+### StoryManager
+
+Package `story`.
+
+```kotlin
+class StoryManager(
+    var story: Story,
+    stateProvider: NarrativeStateProvider,
+    variableNamer: (entityId: String, statName: String) -> String = ::defaultVariableName,
+)
+```
+
+`story` is a plain `var`, so you can swap in a freshly compiled one (after a reload, say). Not thread-safe. Keep it on one thread, like the render thread inside `KtxAsync.launch`.
+
+`stateProvider` and `variableNamer` are private.
+
+```kotlin
+fun syncStatsToInk(entityId: String, statNames: List<String>)
+```
+
+For each stat name it builds the ink variable name with `variableNamer`, calls `stateProvider.getStat(entityId, stat)` and sets the variable to that Float. If the story has no variable with that name (not declared with `VAR`), it skips it, logs at debug level, and doesn't call `getStat` for it.
+
+```kotlin
+StoryManager.defaultVariableName(entityId: String, statName: String): String
+```
+
+Returns `entityId_statName` with anything outside `[A-Za-z0-9_]` replaced by `_`. So `("player", "hp")` gives `player_hp`.
+
+### Example
+
+`main.ink`:
+
+```ink
+VAR player_hp = 0
+
+You have {player_hp} hp.
+-> END
+```
+
+Kotlin:
+
+```kotlin
+class MyState : NarrativeStateProvider {
+    override fun getStat(entityId: String, statName: String): Float = 10f
+}
+
+KtxAsync.launch {
+    val story = try {
+        InkCompilerService().compile(
+            Gdx.files.internal("ink/main.ink"),
+            Gdx.files.local("mods/"), // optional
+        )
+    } catch (e: InkCompileException) {
+        e.errors.forEach { println(it) }
+        return@launch
+    }
+    val manager = StoryManager(story, MyState())
+    manager.syncStatsToInk("player", listOf("hp"))
+    val text = manager.story.continueMaximally()
+}
+```
+
 ## Not done yet
 
 - Mods can add content but can't override existing base knots. Ink rejects duplicate knot names.
