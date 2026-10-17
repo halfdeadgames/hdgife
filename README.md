@@ -12,9 +12,7 @@ Drop it into any libKTX project from JitPack, write the whole narrative and all 
 
 ## What works right now
 
-`InkCompilerService` compiles raw `.ink` at runtime. Base files load from internal FileHandles. You can also give it a mod folder (local or external) and it scans it recursively and includes every `.ink` file it finds into the same Story. Includes inside your base files work too, and base and mod content can divert into each other.
-
-Compiling is a suspend function. It runs on `Dispatchers.IO` unless you pass in a different context, for example one from ktx-async. If the ink is broken you get an `InkCompileException` with ink's own error messages and line numbers.
+`InkCompilerService` compiles the ink sources you hand it, in the order you hand them. The game owns mod discovery and load order. Compiling is plain blocking, so you pick the thread. You can also load a precompiled story from JSON. Broken ink gives an `InkCompileException` with ink's own messages, which name the source and line.
 
 `NarrativeStateProvider` is the only interface your game has to implement:
 
@@ -25,7 +23,7 @@ fun hasStat(entityId: String, statName: String): Boolean = true // optional
 
 With `INCLUDE hdgife.ink` in your story, ink can read stats live: `stat("sanity")` for the current speaker, `stat_of("guard", "mood")` for anyone, `has_stat("luck")`. No `VAR` per stat needed. See "Stat access and clean output" below.
 
-`StoryManager.syncStatsToInk(entityId, statNames)` pulls those stats and pushes them into ink variables named `entity_stat`, so `player_hp` for example. The naming rule can be swapped out. If a variable isn't declared in the ink it gets skipped and logged.
+`StoryManager.syncStatsToInk(entityId, statNames)` pulls those stats and pushes them into ink variables named `entity_stat`, so `player_hp` for example. The naming rule can be swapped out. Variables that aren't declared in the ink are skipped and returned to you.
 
 ## API
 
@@ -34,7 +32,7 @@ Everything lives under `com.github.halfdeadgames.hdgife`.
 ### Hdgife
 
 ```kotlin
-Hdgife.VERSION // const val String, currently "0.1.0"
+Hdgife.VERSION // const val String, currently "0.2.0"
 ```
 
 ### NarrativeStateProvider
@@ -52,29 +50,32 @@ interface NarrativeStateProvider {
 
 ### InkCompilerService
 
-Package `compiler`.
+Package `compiler`. No coroutines inside, so run it wherever you like.
 
 ```kotlin
-class InkCompilerService(private val context: CoroutineContext = Dispatchers.IO)
+class InkSource(name: String, loader: () -> String, sibling: ((String) -> InkSource?)? = null)
+InkSource(name: String, text: String)
+InkSource.of(file: FileHandle): InkSource
 
-suspend fun compile(baseMain: FileHandle, modDirectory: FileHandle? = null): Story
+class InkCompilerService {
+    var log: HdgifeLog?
+    fun compile(sources: List<InkSource>): Story
+    fun compile(main: InkSource, extras: List<InkSource> = emptyList()): Story
+    fun compile(main: FileHandle, extras: List<FileHandle> = emptyList()): Story
+    fun compileFolder(folder: FileHandle, recursive: Boolean = true): Story
+    fun loadCompiled(json: String): Story
+}
 ```
 
-`compile` switches to `context` with `withContext`, so call it from a coroutine, for example `KtxAsync.launch`. Pass a ktx-async `newAsyncContext(...)` as `context` if you'd rather not use `Dispatchers.IO`. The returned `Story` isn't thread-safe, so use it from one thread.
+The first source is the root. Each extra is appended to it as an `INCLUDE`, in list order, so list order is load order. Ink can't override a knot defined earlier. A duplicate is an error. `name` is what shows up in errors and what other sources `INCLUDE`. The text is read lazily, so it can come from a file, the network or an archive.
 
-It reads `baseMain` as UTF-8. If you pass `modDirectory`, it walks it recursively, picks up every file with the `ink` extension, sorts them by path relative to that folder and appends an `INCLUDE` for each one to the end of the base source. Those includes are named `__mod__/<relative path>`. `INCLUDE`s inside your base files resolve relative to the folder `baseMain` is in. Mod files can `INCLUDE` things relative to the mod folder.
+`INCLUDE x.ink` inside a source is resolved relative to that source's name (`..` works). A listed source with that name wins, then `sibling` is asked. `InkSource.of(file)` sets `sibling` to look next to the file, with the same file type. A source loads at most once per compile, so listing a file that another source includes is fine. `INCLUDE hdgife.ink` gives the bundled helper library from the classpath. It is never added for you.
 
-Only ink errors count as failures. Warnings and other messages are logged at info level.
+`compileFolder` takes the `.ink` files of a folder, compares their paths as plain text, uses `main.ink` as root if present (else the first file) and includes the rest in that order. Order it with file names, like `000_base.ink` and `010_modA.ink`, or pass your own list to `compile`.
 
-Throws `InkCompileException` if ink reports any error, or if the compiler returns no story. A missing `baseMain` isn't wrapped. You get whatever libGDX throws from `readString`.
+Precompiled: `story.toJson()` is the compiled story. Store it and later call `loadCompiled(json)`, which skips the compiler. That's the way to go on Android and web. The JSON is of the story, not its state.
 
-### InkCompileException
-
-```kotlin
-class InkCompileException(val errors: List<String>) : RuntimeException
-```
-
-`errors` is ink's own error messages, line numbers included. The exception message is `"Ink compilation failed:"` followed by those messages, one per line.
+`log` gets ink warnings. Errors throw `InkCompileException(errors, source)`. Unreadable sources and missing includes are named in `errors`.
 
 ### StoryManager
 
@@ -90,18 +91,28 @@ var story: Story
 var speaker: String?
 var numberFormat: NumberFormat // default NumberFormat(decimals = 0, rounding = Rounding.ROUND)
 var formatOverride: ((entityId: String, statName: String) -> NumberFormat?)? // null by default
+var textCleaner: (String) -> String // default cleanLine
+var log: HdgifeLog? // null by default
+var seed: Int?
 ```
 
-`stateProvider` is optional. Without one, `stat`/`stat_of` return 0, `has_stat` returns false and `syncStatsToInk` does nothing. Assigning `story` binds the stat functions to the new story (after a reload, say). Not thread-safe. Keep it on one thread, like the render thread inside `KtxAsync.launch`. `variableNamer` is private.
+`stateProvider` is optional. Without one, `stat`/`stat_of` return 0, `has_stat` returns false and `syncStatsToInk` does nothing. Assigning `story` binds the stat functions to the new story (after a reload, say). Not thread-safe. Keep it on one thread. `variableNamer` is private.
 
 ```kotlin
 fun beginScene(knotPath: String, speakerId: String? = null)
 fun next(): DialogStep
 fun choose(index: Int): DialogStep
 fun seedRandom(seed: Int): Boolean
+fun saveState(): String
+fun loadState(json: String)
+fun syncStatsToInk(entityId: String, statNames: List<String>): List<String>
 ```
 
 `beginScene` sets `speaker` and diverts to the knot (`knot` or `knot.stitch`). `next` continues until a choice or the end. `choose` picks a choice and then does the same. `seedRandom` makes ink's RANDOM and shuffles repeatable. It needs `INCLUDE hdgife.ink` (returns false without it) and `resetState()` reseeds randomly, so call it again after that.
+
+`saveState()` and `loadState(json)` wrap ink's own state JSON. With `INCLUDE hdgife.ink` the speaker lives in the ink variable `hdgife_speaker` and the seed is in the ink state (ink's `SEED_RANDOM` plus the position in the random sequence), so one string is all the game stores. After `loadState`, ink continues with the same random results. Load it only into the same compiled story. Without the library, `speaker` is a plain field that you keep yourself. Your own stat values aren't included. blade-ink's seed setter is package-private, so `seed = n` (same as `seedRandom`) goes through ink and needs the library. The `seed` getter only returns the last value set through this manager.
+
+`textCleaner` is applied to every output line and choice text. The default collapses spaces and removes spaces before `, . ; : ! ?`. Replace it for other languages or styles.
 
 ```kotlin
 data class DialogStep(val text: String, val tags: List<String>, val choices: List<DialogChoice>, val ended: Boolean)
@@ -169,7 +180,7 @@ Without a `StoryManager`, ink fallbacks do the same rounding with ink math (`sta
 fun syncStatsToInk(entityId: String, statNames: List<String>)
 ```
 
-For each stat name it builds the ink variable name with `variableNamer`, calls `stateProvider.getStat(entityId, stat)` and sets the variable to that Float. If the story has no variable with that name (not declared with `VAR`), it skips it, logs at debug level, and doesn't call `getStat` for it.
+For each stat name it builds the ink variable name with `variableNamer`, calls `stateProvider.getStat(entityId, stat)` and sets the variable to that Float. If the story has no variable with that name (not declared with `VAR`), it skips it and doesn't call `getStat` for it. The skipped variable names are returned.
 
 ```kotlin
 StoryManager.defaultVariableName(entityId: String, statName: String): String
@@ -195,27 +206,25 @@ class MyState : NarrativeStateProvider {
     override fun getStat(entityId: String, statName: String): Float = 10f
 }
 
-KtxAsync.launch {
-    val story = try {
-        InkCompilerService().compile(
-            Gdx.files.internal("ink/main.ink"),
-            Gdx.files.local("mods/"), // optional
-        )
-    } catch (e: InkCompileException) {
-        e.errors.forEach { println(it) }
-        return@launch
-    }
-    val manager = StoryManager(story, MyState())
-    manager.syncStatsToInk("player", listOf("hp"))
-    val text = manager.story.continueMaximally()
+val story = try {
+    InkCompilerService().compile(
+        InkSource.of(Gdx.files.internal("ink/main.ink")),
+        modFiles.map { InkSource.of(it) }, // your own mod list and order
+    )
+} catch (e: InkCompileException) {
+    e.errors.forEach { println(it) }
+    return
 }
+val manager = StoryManager(story, MyState())
+manager.syncStatsToInk("player", listOf("hp"))
+val text = manager.next().text
+val saved = manager.saveState() // later: manager.loadState(saved)
 ```
 
 ## Not done yet
 
-- Mods can add content but can't override existing base knots. Ink rejects duplicate knot names.
+- Mods can add content but can't override existing knots. Ink rejects duplicate knot names.
 - Nothing reads ink variables back into the game yet, and there are no variable observers. The only EXTERNAL functions are the stat and number-format ones.
-- No save/load of story state.
 - There's no reusable UI in the library. That's on purpose, though I might add some optional helpers later.
 - Web/TeaVM is untested.
 - No real unit tests yet.
@@ -234,11 +243,13 @@ Then add the dependency to your core module. Use a release tag or a commit hash 
 
 ```groovy
 dependencies {
-  api "com.github.halfdeadgames:hdgife:0.1.0"
+  api "com.github.halfdeadgames:hdgife:0.2.0"
 }
 ```
 
-Dependencies are declared with `api`, so you get these transitively: KTX 1.14.2-rc1, libGDX 1.14.2, Blade Ink 1.3.2 (runtime and compiler), Fleks and sjInGameConsole. You don't need to add them yourself. If you do, keep the versions in line with these.
+The library depends only on libGDX (`gdx`, for `FileHandle`), Blade Ink (runtime and compiler) and the Kotlin stdlib. No KTX, no coroutines, no logging library. If you add these yourself, keep the versions in line: libGDX 1.14.2, Blade Ink 1.3.2.
+
+The jar contains only the engine and the generic `hdgife/hdgife.ink` helper library. Demo stories live in the test harness.
 
 ## Testing locally
 
@@ -248,17 +259,17 @@ To try changes before pushing, publish to your local Maven repo:
 ./gradlew :core:publishToMavenLocal
 ```
 
-In the consuming project, add `mavenLocal()` to your repositories and use version `0.1.0`.
+In the consuming project, add `mavenLocal()` to your repositories and use version `0.2.0`.
 
 ## Test harness
 
-The `lwjgl3` module is a small desktop app I use for poking at things. It isn't published. Run it with:
+The `lwjgl3` module is a small desktop app I use for poking at things. It isn't published. It owns the KTX, scene2d and console dependencies, its own `lwjgl3/assets/` folder (UI skin and the demo ink `ink/main.ink` and `ink/guard.ink`) and its own load policy: `main.ink` plus any `.ink` files in `lwjgl3/assets/mods/`, sorted by path. Run it with:
 
 ```
 ./gradlew lwjgl3:run
 ```
 
-It opens a dialog tester for `assets/ink/main.ink`. The backtick key toggles the console. Commands:
+It opens a dialog tester for `lwjgl3/assets/ink/main.ink`. The backtick key toggles the console. Commands:
 
 | Command | What it does |
 | --- | --- |
@@ -274,6 +285,6 @@ It opens a dialog tester for `assets/ink/main.ink`. The backtick key toggles the
 | `numfmt <decimals> <mode>` | Changes the default number format used by `stat_text`. Mode is `floor`, `ceil`, `round` or `trunc`, for example `numfmt 1 floor`. |
 | `choose <n>` | Picks a choice by index, starting at 0. |
 | `divert <path>` | Jumps to an ink path (`knot` or `knot.stitch`) and continues from there. Bad paths log an error. |
-| `reload` | Recompiles `main.ink` plus any mod `.ink` files in `assets/mods/`, swaps in the new story and clears the log. Story state starts fresh. |
+| `reload` | Recompiles `main.ink` plus any mod `.ink` files in `lwjgl3/assets/mods/`, swaps in the new story and clears the log. Story state starts fresh. |
 | `restart` | Resets the current story's state and clears the log. Doesn't recompile. |
 | `help` | Lists the commands. Comes from the console library. |

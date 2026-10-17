@@ -7,6 +7,9 @@
 //
 // stat and stat_of always give a float, so ink math does not depend on whether a value is whole.
 
+// Current speaker, kept here so it is part of the saved ink state. Set it with StoryManager.speaker.
+VAR hdgife_speaker = ""
+
 EXTERNAL stat(name)
 EXTERNAL stat_of(entity, name)
 EXTERNAL has_stat(name)

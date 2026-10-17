@@ -19,7 +19,28 @@ apply plugin: 'org.jetbrains.kotlin.jvm'
 
 import io.github.fourlastor.construo.Target
 
-sourceSets.main.resources.srcDirs += [ rootProject.file('assets').path ]
+sourceSets.main.resources.srcDirs += [ file('assets').path ]
+
+// From https://lyze.dev/2021/04/29/libGDX-Internal-Assets-List/
+// The article can be helpful when using assets.txt in your project.
+tasks.register('generateAssetList') {
+  inputs.dir("${project.projectDir}/assets/")
+  // projectFolder/assets
+  File assetsFolder = new File("${project.projectDir}/assets/")
+  // projectFolder/assets/assets.txt
+  File assetsFile = new File(assetsFolder, "assets.txt")
+  // delete that file in case we've already created it
+  assetsFile.delete()
+
+  // iterate through all files inside that folder
+  // convert it to a relative path
+  // and append it to the file assets.txt
+  fileTree(assetsFolder).collect { assetsFolder.relativePath(it) }.sort().each {
+    assetsFile.append(it + "\n")
+  }
+}
+processResources.dependsOn 'generateAssetList'
+
 application.mainClass = 'com.github.halfdeadgames.hdgife.lwjgl3.Lwjgl3Launcher'
 application.applicationName = appName
 eclipse.project.name = appName + '-lwjgl3'
@@ -32,9 +53,14 @@ kotlin.compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.J
 
 dependencies {
   implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
-  implementation "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
   implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
   implementation project(':core')
+  implementation "io.github.quillraven.libktx:ktx-app:$ktxVersion"
+  implementation "io.github.quillraven.libktx:ktx-async:$ktxVersion"
+  implementation "io.github.quillraven.libktx:ktx-log:$ktxVersion"
+  implementation "io.github.quillraven.libktx:ktx-scene2d:$ktxVersion"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinxCoroutinesVersion"
+  implementation "com.github.tommyettinger:sjInGameConsole:$inGameConsoleVersion"
 
   if(enableGraalNative == 'true') {
     implementation "io.github.berstanio:gdx-svmhelper-backend-lwjgl3:$graalHelperVersion"
@@ -54,7 +80,7 @@ dependencies {
 def os = System.properties['os.name'].toLowerCase(Locale.ROOT)
 
 run {
-  workingDir = rootProject.file('assets').path
+  workingDir = file('assets').path
 // You can uncomment the next line if your IDE claims a build failure even when the app closed properly.
   //setIgnoreExitValue(true)
 // The next two jvmArgs additions help LWJGL3 on JDK 24 and higher.

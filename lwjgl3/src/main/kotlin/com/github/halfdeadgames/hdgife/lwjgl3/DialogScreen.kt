@@ -20,7 +20,9 @@ import com.github.halfdeadgames.hdgife.story.NumberFormat
 import com.github.halfdeadgames.hdgife.story.Rounding
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.strongjoshua.console.GUIConsole
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import ktx.app.KtxScreen
 import ktx.app.clearScreen
 import ktx.async.KtxAsync
@@ -218,11 +220,7 @@ class DialogScreen(
     override fun reload() {
         KtxAsync.launch {
             try {
-                val mods = Gdx.files.local("mods/")
-                val story = compiler.compile(
-                    Gdx.files.internal("ink/main.ink"),
-                    if (mods.exists() && mods.isDirectory) mods else null,
-                )
+                val story = withContext(Dispatchers.IO) { compileHarnessStory(compiler) }
                 manager.story = story
                 resetLog()
                 console.log("Reloaded")
