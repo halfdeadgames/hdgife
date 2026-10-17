@@ -1,6 +1,7 @@
 package com.github.halfdeadgames.hdgife.lwjgl3
 
 import com.github.halfdeadgames.hdgife.state.NarrativeStateProvider
+import com.github.halfdeadgames.hdgife.story.Rounding
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.strongjoshua.console.CommandExecutor
 
@@ -37,6 +38,7 @@ interface DialogControl {
     fun setNpcStat(entity: String, stat: String, value: Float)
     fun talk(knot: String, speaker: String?)
     fun seed(value: Int)
+    fun setNumberFormat(decimals: Int, rounding: Rounding)
     fun choose(index: Int)
     fun divert(path: String)
     fun reload()
@@ -136,6 +138,17 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
     fun seed(n: String) {
         val value = n.toIntOrNull()
         if (value == null) control.log("Seed must be a whole number") else control.seed(value)
+    }
+
+    /** Changes the default number format used by `stat_text`. Mode is floor, ceil, round or trunc. */
+    fun numfmt(decimals: String, mode: String) {
+        val places = decimals.toIntOrNull()
+        val rounding = Rounding.parse(mode)
+        when {
+            places == null || places !in 0..9 -> control.log("Decimals must be 0 to 9")
+            rounding == null -> control.log("Mode must be floor, ceil, round or trunc")
+            else -> control.setNumberFormat(places, rounding)
+        }
     }
 
     fun choose(n: String) {

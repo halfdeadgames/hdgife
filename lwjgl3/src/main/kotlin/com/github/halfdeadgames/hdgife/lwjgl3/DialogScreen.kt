@@ -16,6 +16,8 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport
 import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
 import com.github.halfdeadgames.hdgife.story.DialogChoice
 import com.github.halfdeadgames.hdgife.story.DialogStep
+import com.github.halfdeadgames.hdgife.story.NumberFormat
+import com.github.halfdeadgames.hdgife.story.Rounding
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.strongjoshua.console.GUIConsole
 import kotlinx.coroutines.launch
@@ -181,6 +183,11 @@ class DialogScreen(
 
     override fun seed(value: Int) {
         console.log(if (manager.seedRandom(value)) "Seeded $value" else "Seed needs INCLUDE hdgife.ink")
+    }
+
+    override fun setNumberFormat(decimals: Int, rounding: Rounding) {
+        manager.numberFormat = NumberFormat(decimals, rounding)
+        console.log("Number format: $decimals decimals, $rounding")
     }
 
     override fun choose(index: Int) {

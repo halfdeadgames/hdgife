@@ -17,8 +17,12 @@ internal fun cleanLine(raw: String): String =
  * Wraps a [Story]: live stat access from ink, a current speaker, and clean [DialogStep] output.
  *
  * With `INCLUDE hdgife.ink` in the story, ink can call `stat(name)` (current speaker),
- * `stat_of(entity, name)` and `has_stat(name)`. They read [stateProvider] live. Whole values reach ink as ints, fractions as floats. Without a provider
- * they return 0 / false. Stories that don't use the library are not affected.
+ * `stat_of(entity, name)` and `has_stat(name)`. They read [stateProvider] live and always give ink a float,
+ * so ink math is the same for whole and fractional values. Without a provider they return 0 / false.
+ *
+ * Number display is up to the game and the story: `stat_text(name)` and `stat_text_of(entity, name)` print a
+ * stat using [numberFormat] (or the [formatOverride] for that stat), and `fmt(x, decimals, mode)` formats any
+ * number explicitly. Stories that don't use the library are not affected.
  *
  * Story is not thread-safe. Call this from one thread, for example the render thread
  * inside `KtxAsync.launch`.
@@ -35,6 +39,12 @@ class StoryManager(
             bind(value)
         }
 
+    /** Format used by ink's `stat_text` and `stat_text_of` when [formatOverride] has nothing for the stat. */
+    var numberFormat: NumberFormat = NumberFormat(decimals = 0, rounding = Rounding.ROUND)
+
+    /** Optional per-stat format. Return null to use [numberFormat]. Called each time ink prints a stat, so keep it cheap. */
+    var formatOverride: ((entityId: String, statName: String) -> NumberFormat?)? = null
+
     /** Entity that ink's `stat` and `has_stat` read from. Null means none, so they give 0 / false. */
     var speaker: String? = null
 
@@ -46,6 +56,9 @@ class StoryManager(
         target.setAllowExternalFunctionFallbacks(true)
         bindOnce(target, "stat") { args -> statValue(speaker, args.getOrNull(0)) }
         bindOnce(target, "stat_of") { args -> statValue(args.getOrNull(0)?.toString(), args.getOrNull(1)) }
+        bindOnce(target, "stat_text") { args -> statText(speaker, args.getOrNull(0)) }
+        bindOnce(target, "stat_text_of") { args -> statText(args.getOrNull(0)?.toString(), args.getOrNull(1)) }
+        bindOnce(target, "fmt") { args -> fmtValue(args) }
         bindOnce(target, "has_stat") { args -> hasStatValue(speaker, args.getOrNull(0)) }
     }
 
@@ -54,14 +67,31 @@ class StoryManager(
         target.bindExternalFunction(name) { args -> block(args) }
     }
 
-    /** Whole values go to ink as Int so they print as `7` and not `7.0`. Fractions stay Float. */
-    private fun statValue(entity: String?, stat: Any?): Any {
+    /** Stats always reach ink as Float. */
+    private fun statValue(entity: String?, stat: Any?): Any = statNumber(entity, stat)
+
+    private fun statNumber(entity: String?, stat: Any?): Float {
         val provider = stateProvider
-        if (provider == null || entity == null || stat == null) return 0
+        if (provider == null || entity == null || stat == null) return 0f
         val name = stat.toString()
-        if (!provider.hasStat(entity, name)) return 0
-        val value = provider.getStat(entity, name)
-        return if (value % 1f == 0f && value > -2.1e9f && value < 2.1e9f) value.toInt() else value
+        if (!provider.hasStat(entity, name)) return 0f
+        return provider.getStat(entity, name)
+    }
+
+    private fun statText(entity: String?, stat: Any?): Any {
+        val value = statNumber(entity, stat)
+        val format = if (entity != null && stat != null) formatOverride?.invoke(entity, stat.toString()) else null
+        return (format ?: numberFormat).format(value)
+    }
+
+    private fun fmtValue(args: Array<out Any?>): Any {
+        val value = (args.getOrNull(0) as? Number)?.toFloat() ?: 0f
+        val decimals = ((args.getOrNull(1) as? Number)?.toInt() ?: 0).coerceIn(0, 9)
+        val modeName = args.getOrNull(2)?.toString() ?: "round"
+        val rounding = Rounding.parse(modeName) ?: Rounding.ROUND.also {
+            log.error { "fmt: unknown mode '$modeName', using round" }
+        }
+        return NumberFormat(decimals, rounding).format(value)
     }
 
     private fun hasStatValue(entity: String?, stat: Any?): Boolean {

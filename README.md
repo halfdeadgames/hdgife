@@ -88,6 +88,8 @@ class StoryManager(
 )
 var story: Story
 var speaker: String?
+var numberFormat: NumberFormat // default NumberFormat(decimals = 0, rounding = Rounding.ROUND)
+var formatOverride: ((entityId: String, statName: String) -> NumberFormat?)? // null by default
 ```
 
 `stateProvider` is optional. Without one, `stat`/`stat_of` return 0, `has_stat` returns false and `syncStatsToInk` does nothing. Assigning `story` binds the stat functions to the new story (after a reload, say). Not thread-safe. Keep it on one thread, like the render thread inside `KtxAsync.launch`. `variableNamer` is private.
@@ -130,11 +132,38 @@ val step = manager.next()
 println(step.text)
 ```
 
-Everything about which stats exist is up to your game and your ink. Nothing is built into the engine. `hdgife.ink` is only included if you write the `INCLUDE`, so stories without it are untouched. The name is reserved and resolved from the classpath, so it works on desktop and Android. The EXTERNAL functions have ink fallbacks (0 / false), so a story using the library still runs without a `StoryManager`.
+Everything about which stats exist is up to your game and your ink. Nothing is built into the engine. `hdgife.ink` is only included if you write the `INCLUDE`, so stories without it are untouched. The name is reserved and resolved from the classpath, so it works on desktop and Android. The EXTERNAL functions have ink fallbacks (0 / false / plain ink rounding), so a story using the library still runs without a `StoryManager`.
 
-Whole stat values reach ink as ints (`7`), fractions as floats. Ink integer division truncates, so use `/ 2.0` or the helpers below when averaging.
+`stat` and `stat_of` always give ink a float, whole or not, so ink math behaves the same for every value. The engine does not decide how numbers are shown. That is up to the game (see below) and the story. Printing a float directly (`{stat("strength")}`) uses ink's own float printing, so prefer the functions below for display. Ink integer division truncates, so use `/ 2.0` or the helpers when averaging.
 
-Library functions: `stat(name)`, `stat_of(entity, name)`, `has_stat(name)`, `chance(pct)`, `clamp(x, lo, hi)`, `avg2(a, b)`, `avg3(a, b, c)`, `blend(a, wa, b, wb)`, `invert(x)` (100 - x), `scale100(x, lo, hi)`. Don't declare your own knots with these names.
+Library functions: `stat(name)`, `stat_of(entity, name)`, `has_stat(name)`, `stat_text(name)`, `stat_text_of(entity, name)`, `fmt(x, decimals, mode)`, `floor_text(x)`, `round_text(x, decimals)`, `chance(pct)`, `clamp(x, lo, hi)`, `avg2(a, b)`, `avg3(a, b, c)`, `blend(a, wa, b, wb)`, `invert(x)` (100 - x), `scale100(x, lo, hi)`. Don't declare your own knots with these names.
+
+### Number formatting
+
+Package `story`. Text output is locale-independent: always `.` as the decimal separator, no grouping.
+
+```kotlin
+enum class Rounding { FLOOR, CEIL, ROUND, TRUNCATE }
+data class NumberFormat(val decimals: Int = 0, val rounding: Rounding = Rounding.ROUND, val trimTrailingZeros: Boolean = false)
+fun NumberFormat.format(value: Float): String
+```
+
+`decimals` is 0 to 9. `FLOOR` goes toward negative infinity, `CEIL` toward positive infinity, `ROUND` to the nearest with ties away from zero (2.5 gives 3, -2.5 gives -3), `TRUNCATE` toward zero. Rounding works on the shortest decimal form of the float, so 7.65 at one decimal is 7.7. `trimTrailingZeros` turns `7.50` into `7.5` and `7.00` into `7`.
+
+The game sets the default with `manager.numberFormat`, and can vary it per stat with `manager.formatOverride`:
+
+```kotlin
+manager.numberFormat = NumberFormat(decimals = 0, rounding = Rounding.FLOOR)
+manager.formatOverride = { _, stat -> if (stat == "luck") NumberFormat(1, Rounding.ROUND) else null }
+```
+
+Ink side:
+
+- `stat_text(name)` and `stat_text_of(entity, name)` print the stat using the format for that stat.
+- `fmt(x, decimals, mode)` formats any number. `mode` is `"floor"`, `"ceil"`, `"round"` or `"trunc"`. For example `{fmt(stat("strength"), 0, "floor")}` or `{fmt(avg3(a, b, c), 1, "round")}`. An unknown mode logs an error and uses round.
+- `floor_text(x)` and `round_text(x, decimals)` are shorthands for `fmt`.
+
+Without a `StoryManager`, ink fallbacks do the same rounding with ink math (`stat_text` is 0 decimals, round). Whole results are exact, but with decimals the last digit can be off because ink floats are binary, and decimals above 6 are not supported. The fallbacks print their text directly, so use them inline (`{fmt(...)}`) and not in `~ temp t = fmt(...)`.
 
 ```kotlin
 fun syncStatsToInk(entityId: String, statNames: List<String>)
@@ -185,7 +214,7 @@ KtxAsync.launch {
 ## Not done yet
 
 - Mods can add content but can't override existing base knots. Ink rejects duplicate knot names.
-- Nothing reads ink variables back into the game yet, and there are no variable observers. The only EXTERNAL functions are the stat ones.
+- Nothing reads ink variables back into the game yet, and there are no variable observers. The only EXTERNAL functions are the stat and number-format ones.
 - No save/load of story state.
 - There's no reusable UI in the library. That's on purpose, though I might add some optional helpers later.
 - Web/TeaVM is untested.
@@ -237,11 +266,12 @@ It opens a dialog tester for `assets/ink/main.ink`. The backtick key toggles the
 | `get <name>` | Prints one variable, or says it isn't declared. |
 | `set <name> <value>` | Sets an ink variable, keeping its current type. `set player_hp 5` stays an int, `set player_name 5` gives the string "5". |
 | `set <name> <value> <type>` | Same, with an explicit type: `int`, `float`, `bool` or `string`. If the value doesn't parse, nothing changes. |
-| `stat <entity> <stat> <value>` | Sets a stat on the test state provider and syncs it to ink. Value must be a number. Whole numbers go into ink as ints, so they print without `.0`. |
+| `stat <entity> <stat> <value>` | Sets a stat on the test state provider and syncs it to ink. Value must be a number. Whole numbers go into the ink variable as ints, so they print without `.0`. |
 | `hp <value>` | Shortcut for `stat player hp <value>`. |
 | `npc <entity> <stat> <value>` | Sets a stat on the test provider. Ink reads it live through `stat()`, no sync. The `guard` NPC starts with sanity 80, tiredness 20, mood 60, strength 12. |
 | `talk <knot> [speaker]` | `beginScene`: sets the speaker and jumps to the knot, for example `talk guard_chat guard`. |
 | `seed <n>` | Seeds ink's random. Use `restart` first if you want the same result twice. |
+| `numfmt <decimals> <mode>` | Changes the default number format used by `stat_text`. Mode is `floor`, `ceil`, `round` or `trunc`, for example `numfmt 1 floor`. |
 | `choose <n>` | Picks a choice by index, starting at 0. |
 | `divert <path>` | Jumps to an ink path (`knot` or `knot.stitch`) and continues from there. Bad paths log an error. |
 | `reload` | Recompiles `main.ink` plus any mod `.ink` files in `assets/mods/`, swaps in the new story and clears the log. Story state starts fresh. |
