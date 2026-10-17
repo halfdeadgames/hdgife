@@ -1,6 +1,6 @@
 # HDGEIFE
 
-HDG Interactive Fiction Engine. It's an interactive fiction library for libKTX/libGDX games in Kotlin, built on [Blade Ink](https://github.com/bladecoder/blade-ink). It doesn't care what your UI looks like or whether you use an ECS.
+HDG Interactive Fiction Engine. It's an interactive fiction library for [libKTX](https://github.com/libktx/ktx)/[libGDX](https://libgdx.com) games in Kotlin, built on [Blade Ink](https://github.com/bladecoder/blade-ink-java). It doesn't care what your UI looks like or whether you use an ECS.
 
 The idea is that ink handles all the narrative. That means the branching story, and also the procedurally generated ad-lib flavor text, which you get out of ink variables, functions and alternatives. The Kotlin side is just a bridge to your game plus a runtime compiler.
 
@@ -12,7 +12,7 @@ Drop it into any libKTX project from JitPack, write the whole narrative and all 
 
 ## What works right now
 
-`InkCompilerService` compiles raw `.ink` at runtime. Base files load from internal FileHandles. You can also give it a mod folder (local or external) and it scans it recursively and INCLUDEs every `.ink` file it finds into the same Story. INCLUDEs inside your base files work too, and base and mod content can divert into each other.
+`InkCompilerService` compiles raw `.ink` at runtime. Base files load from internal FileHandles. You can also give it a mod folder (local or external) and it scans it recursively and includes every `.ink` file it finds into the same Story. Includes inside your base files work too, and base and mod content can divert into each other.
 
 Compiling is a suspend function. It runs on `Dispatchers.IO` unless you pass in a different context, for example one from ktx-async. If the ink is broken you get an `InkCompileException` with ink's own error messages and line numbers.
 
