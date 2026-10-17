@@ -16,7 +16,7 @@ Then add the dependency to your core module. Use a release tag or a commit hash 
 
 ```groovy
 dependencies {
-  api "com.github.halfdeadgames:hdgife:<tag>"
+  api "com.github.halfdeadgames:hdgife:0.1.0"
 }
 ```
 
@@ -30,7 +30,7 @@ To try changes before pushing, publish to your local Maven repo:
 ./gradlew :core:publishToMavenLocal
 ```
 
-In the consuming project, add `mavenLocal()` to your repositories and use version `1.0.0`.
+In the consuming project, add `mavenLocal()` to your repositories and use version `0.1.0`.
 
 ## Test harness
 

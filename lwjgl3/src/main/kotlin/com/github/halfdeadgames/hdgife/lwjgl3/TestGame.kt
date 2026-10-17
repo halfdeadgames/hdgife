@@ -8,12 +8,19 @@ import ktx.app.KtxScreen
 import ktx.app.clearScreen
 import ktx.assets.disposeSafely
 import ktx.assets.toInternalFile
+import kotlinx.coroutines.launch
 import ktx.async.KtxAsync
 import ktx.graphics.use
+import ktx.log.logger
+import com.badlogic.gdx.Gdx
+import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
+import com.github.halfdeadgames.hdgife.state.NarrativeStateProvider
+import com.github.halfdeadgames.hdgife.story.StoryManager
 
 class TestGame : KtxGame<KtxScreen>() {
     override fun create() {
         KtxAsync.initiate()
+        smokeTestInk()
 
         addScreen(FirstScreen())
         setScreen<FirstScreen>()
@@ -34,5 +41,22 @@ class FirstScreen : KtxScreen {
     override fun dispose() {
         image.disposeSafely()
         batch.disposeSafely()
+    }
+}
+
+private val log = logger<TestGame>()
+
+private fun smokeTestInk() {
+    val provider = object : NarrativeStateProvider {
+        override fun getStat(entityId: String, statName: String) = 42f
+    }
+    KtxAsync.launch {
+        try {
+            val story = InkCompilerService().compile(Gdx.files.internal("ink/main.ink"))
+            StoryManager(story, provider).syncStatsToInk("player", listOf("hp"))
+            log.info { "Ink output: " + story.continueMaximally().trim() }
+        } catch (e: Exception) {
+            log.error(e) { "Ink smoke test failed" }
+        }
     }
 }

@@ -5,6 +5,7 @@ dependencies {
   api "com.badlogicgames.gdx:gdx-freetype:$gdxVersion"
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
   api "com.bladecoder.ink:blade-ink:$bladeInkVersion"
+  api "com.bladecoder.ink:blade-ink-compiler:$bladeInkVersion"
   api "com.github.tommyettinger:sjInGameConsole:$inGameConsoleVersion"
   api "io.github.quillraven.fleks:Fleks:$fleksVersion"
   api "io.github.quillraven.libktx:ktx-app:$ktxVersion"
