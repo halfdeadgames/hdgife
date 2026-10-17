@@ -1,3 +1,6 @@
+INCLUDE hdgife.ink
+INCLUDE guard.ink
+
 VAR player_name = "Hero"
 VAR player_hp = 0
 
@@ -11,6 +14,7 @@ What now?
 + [Look around] You see a quiet room. #scene:room
   -> hub
 + [Check my health] -> status
++ [Talk to the guard] -> guard_chat
 * [Leave] -> farewell
 
 === status ===

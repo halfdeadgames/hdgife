@@ -17,6 +17,9 @@ private val log = logger<InkCompilerService>()
  * The compile runs on [context]. Pass a ktx-async `newAsyncContext(...)` if you prefer it over
  * the default [Dispatchers.IO]. Story is not thread-safe, so use the result from one thread.
  *
+ * Stories can `INCLUDE hdgife.ink` to get the bundled helper library (stat access and small math helpers).
+ * It is never added automatically, so stories that don't include it are untouched.
+ *
  * Mods add content such as new knots and stitches. Ink cannot override a knot the base already
  * defines, and a duplicate name is a compile error.
  */
@@ -58,6 +61,8 @@ class InkCompilerService(private val context: CoroutineContext = Dispatchers.IO)
             }
         }
         val story = Compiler(source.toString(), options).compile()
+        // lets the ink fallback bodies in hdgife.ink run when nothing is bound
+        story?.setAllowExternalFunctionFallbacks(true)
         if (errors.isNotEmpty() || story == null) {
             if (errors.isEmpty()) errors += "Compiler returned no story"
             throw InkCompileException(errors)

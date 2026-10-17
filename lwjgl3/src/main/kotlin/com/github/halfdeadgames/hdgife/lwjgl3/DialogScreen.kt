@@ -14,6 +14,8 @@ import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener
 import com.badlogic.gdx.utils.viewport.ScreenViewport
 import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
+import com.github.halfdeadgames.hdgife.story.DialogChoice
+import com.github.halfdeadgames.hdgife.story.DialogStep
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.strongjoshua.console.GUIConsole
 import kotlinx.coroutines.launch
@@ -54,6 +56,7 @@ class DialogScreen(
     private val restartButton: TextButton
     private val dim = Color(0.6f, 0.6f, 0.6f, 1f)
     private var scrollPending = false
+    private var lastChoices: List<DialogChoice> = emptyList()
 
     init {
         // ktx-scene2d builders read the default skin
@@ -119,30 +122,31 @@ class DialogScreen(
     }
 
     /** Continues the story, appends output and rebuilds the choice buttons. */
-    private fun advance() {
-        val story = manager.story
-        try {
-            while (story.canContinue()) {
-                val text = story.Continue().trim()
-                if (text.isNotEmpty()) addLine(text)
-                for (tag in story.currentTags) addLine("# $tag", dim)
-            }
+    private fun advance(first: DialogStep? = null) {
+        val step = try {
+            first ?: manager.next()
         } catch (e: Exception) {
             log.error(e) { "Story error" }
             addLine("Story error: ${e.message}", Color.SALMON)
             console.log("Story error: ${e.message}")
+            return
         }
+        showStep(step)
+    }
+
+    private fun showStep(step: DialogStep) {
+        if (step.text.isNotEmpty()) for (paragraph in step.text.lines()) addLine(paragraph)
+        for (tag in step.tags) addLine("# $tag", dim)
+        lastChoices = step.choices
         choiceTable.clearChildren()
-        val choices = story.currentChoices
-        for (i in 0 until choices.size) {
-            val button = scene2d.textButton(choices[i].text)
+        for (choice in step.choices) {
+            val button = scene2d.textButton(choice.text)
             button.label.wrap = true
-            button.onChange { choose(i) }
+            button.onChange { choose(choice.index) }
             choiceTable.add(button).growX().padBottom(4f).row()
         }
-        val ended = choices.isEmpty() && !story.canContinue()
-        statusLabel.setText(if (ended) "Story ended." else "")
-        restartButton.isVisible = ended
+        statusLabel.setText(if (step.ended) "Story ended." else "")
+        restartButton.isVisible = step.ended
     }
 
     override fun log(message: String) = console.log(message)
@@ -160,15 +164,38 @@ class DialogScreen(
         console.log("$name = ${manager.story.variablesState.get(name)}")
     }
 
+    override fun setNpcStat(entity: String, stat: String, value: Float) {
+        provider.setStat(entity, stat, value)
+        console.log("$entity.$stat = $value")
+    }
+
+    override fun talk(knot: String, speaker: String?) {
+        try {
+            manager.beginScene(knot, speaker)
+        } catch (e: Exception) {
+            console.log("Talk failed: ${e.message}")
+            return
+        }
+        advance()
+    }
+
+    override fun seed(value: Int) {
+        console.log(if (manager.seedRandom(value)) "Seeded $value" else "Seed needs INCLUDE hdgife.ink")
+    }
+
     override fun choose(index: Int) {
-        val story = manager.story
-        if (index !in 0 until story.currentChoices.size) {
+        val choice = lastChoices.firstOrNull { it.index == index }
+        if (choice == null) {
             console.log("No choice $index")
             return
         }
-        addLine("> " + story.currentChoices[index].text, dim)
-        story.chooseChoiceIndex(index)
-        advance()
+        addLine("> " + choice.text, dim)
+        try {
+            showStep(manager.choose(index))
+        } catch (e: Exception) {
+            log.error(e) { "Story error" }
+            console.log("Story error: ${e.message}")
+        }
     }
 
     override fun divert(path: String) {

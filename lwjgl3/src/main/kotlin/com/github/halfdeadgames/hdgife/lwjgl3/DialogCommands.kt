@@ -13,6 +13,8 @@ class MapStateProvider : NarrativeStateProvider {
     }
 
     override fun getStat(entityId: String, statName: String): Float = stats["$entityId.$statName"] ?: 0f
+
+    override fun hasStat(entityId: String, statName: String): Boolean = stats.containsKey("$entityId.$statName")
 }
 
 /** Sets the stat, syncs it to ink and returns the ink variable name. Whole numbers go in as Int so they print without ".0". */
@@ -32,6 +34,9 @@ interface DialogControl {
     fun getVariable(name: String): Any?
     fun setVariable(name: String, value: Any)
     fun setStat(entity: String, stat: String, value: Float)
+    fun setNpcStat(entity: String, stat: String, value: Float)
+    fun talk(knot: String, speaker: String?)
+    fun seed(value: Int)
     fun choose(index: Int)
     fun divert(path: String)
     fun reload()
@@ -116,6 +121,21 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
     fun hp(value: String) {
         val number = value.toFloatOrNull()
         if (number == null) control.log("HP must be a number") else control.setStat("player", "hp", number)
+    }
+
+    /** Sets a stat on the provider only. Ink reads it live, no sync needed. */
+    fun npc(entity: String, stat: String, value: String) {
+        val number = value.toFloatOrNull()
+        if (number == null) control.log("Stat value must be a number") else control.setNpcStat(entity, stat, number)
+    }
+
+    fun talk(knot: String) = control.talk(knot, null)
+
+    fun talk(knot: String, speaker: String) = control.talk(knot, speaker)
+
+    fun seed(n: String) {
+        val value = n.toIntOrNull()
+        if (value == null) control.log("Seed must be a whole number") else control.seed(value)
     }
 
     fun choose(n: String) {

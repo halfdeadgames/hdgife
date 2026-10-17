@@ -15,11 +15,17 @@ class TestGame : KtxGame<KtxScreen>() {
     override fun create() {
         KtxAsync.initiate()
         val compiler = InkCompilerService()
-        val provider = MapStateProvider()
+        val provider = MapStateProvider().apply {
+            setStat("guard", "sanity", 80f)
+            setStat("guard", "tiredness", 20f)
+            setStat("guard", "mood", 60f)
+            setStat("guard", "strength", 12f)
+        }
         KtxAsync.launch {
             try {
                 val story = compiler.compile(Gdx.files.internal("ink/main.ink"))
-                addScreen(DialogScreen(StoryManager(story, provider), provider, compiler))
+                val manager = StoryManager(story, provider).apply { speaker = "guard" }
+                addScreen(DialogScreen(manager, provider, compiler))
                 setScreen<DialogScreen>()
             } catch (e: Exception) {
                 log.error(e) { "Ink compile failed" }

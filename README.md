@@ -20,7 +20,10 @@ Compiling is a suspend function. It runs on `Dispatchers.IO` unless you pass in 
 
 ```kotlin
 fun getStat(entityId: String, statName: String): Float
+fun hasStat(entityId: String, statName: String): Boolean = true // optional
 ```
+
+With `INCLUDE hdgife.ink` in your story, ink can read stats live: `stat("sanity")` for the current speaker, `stat_of("guard", "mood")` for anyone, `has_stat("luck")`. No `VAR` per stat needed. See "Stat access and clean output" below.
 
 `StoryManager.syncStatsToInk(entityId, statNames)` pulls those stats and pushes them into ink variables named `entity_stat`, so `player_hp` for example. The naming rule can be swapped out. If a variable isn't declared in the ink it gets skipped and logged.
 
@@ -41,8 +44,11 @@ Package `state`. Implement this in your game.
 ```kotlin
 interface NarrativeStateProvider {
     fun getStat(entityId: String, statName: String): Float
+    fun hasStat(entityId: String, statName: String): Boolean = true
 }
 ```
+
+`hasStat` backs ink's `has_stat`. When it returns false, `stat`/`stat_of` give 0.
 
 ### InkCompilerService
 
@@ -76,15 +82,59 @@ Package `story`.
 
 ```kotlin
 class StoryManager(
-    var story: Story,
-    stateProvider: NarrativeStateProvider,
+    story: Story,
+    var stateProvider: NarrativeStateProvider? = null,
     variableNamer: (entityId: String, statName: String) -> String = ::defaultVariableName,
 )
+var story: Story
+var speaker: String?
 ```
 
-`story` is a plain `var`, so you can swap in a freshly compiled one (after a reload, say). Not thread-safe. Keep it on one thread, like the render thread inside `KtxAsync.launch`.
+`stateProvider` is optional. Without one, `stat`/`stat_of` return 0, `has_stat` returns false and `syncStatsToInk` does nothing. Assigning `story` binds the stat functions to the new story (after a reload, say). Not thread-safe. Keep it on one thread, like the render thread inside `KtxAsync.launch`. `variableNamer` is private.
 
-`stateProvider` and `variableNamer` are private.
+```kotlin
+fun beginScene(knotPath: String, speakerId: String? = null)
+fun next(): DialogStep
+fun choose(index: Int): DialogStep
+fun seedRandom(seed: Int): Boolean
+```
+
+`beginScene` sets `speaker` and diverts to the knot (`knot` or `knot.stitch`). `next` continues until a choice or the end. `choose` picks a choice and then does the same. `seedRandom` makes ink's RANDOM and shuffles repeatable. It needs `INCLUDE hdgife.ink` (returns false without it) and `resetState()` reseeds randomly, so call it again after that.
+
+```kotlin
+data class DialogStep(val text: String, val tags: List<String>, val choices: List<DialogChoice>, val ended: Boolean)
+data class DialogChoice(val index: Int, val text: String, val tags: List<String>)
+```
+
+`text` has repeated spaces collapsed and spaces before `, . ; : ! ?` removed. Each ink line is one paragraph, joined with `\n`. Empty lines are dropped. `tags` collects every tag seen in the step. `ended` means no choices and nothing left to continue.
+
+### Stat access and clean output
+
+`main.ink`:
+
+```ink
+INCLUDE hdgife.ink
+
+=== guard_chat ===
+~ temp mood_gap = avg2(invert(stat("mood")), stat("tiredness"))
+"Halt." {mood_gap > 60: He looks wrecked.|He looks fine.} {chance(100 - stat("sanity")): His eye twitches.}
+-> END
+```
+
+Kotlin:
+
+```kotlin
+val manager = StoryManager(story, MyState())
+manager.beginScene("guard_chat", speakerId = "guard")
+val step = manager.next()
+println(step.text)
+```
+
+Everything about which stats exist is up to your game and your ink. Nothing is built into the engine. `hdgife.ink` is only included if you write the `INCLUDE`, so stories without it are untouched. The name is reserved and resolved from the classpath, so it works on desktop and Android. The EXTERNAL functions have ink fallbacks (0 / false), so a story using the library still runs without a `StoryManager`.
+
+Whole stat values reach ink as ints (`7`), fractions as floats. Ink integer division truncates, so use `/ 2.0` or the helpers below when averaging.
+
+Library functions: `stat(name)`, `stat_of(entity, name)`, `has_stat(name)`, `chance(pct)`, `clamp(x, lo, hi)`, `avg2(a, b)`, `avg3(a, b, c)`, `blend(a, wa, b, wb)`, `invert(x)` (100 - x), `scale100(x, lo, hi)`. Don't declare your own knots with these names.
 
 ```kotlin
 fun syncStatsToInk(entityId: String, statNames: List<String>)
@@ -135,7 +185,7 @@ KtxAsync.launch {
 ## Not done yet
 
 - Mods can add content but can't override existing base knots. Ink rejects duplicate knot names.
-- Nothing reads ink variables back into the game yet. No bindings for external functions or variable observers either.
+- Nothing reads ink variables back into the game yet, and there are no variable observers. The only EXTERNAL functions are the stat ones.
 - No save/load of story state.
 - There's no reusable UI in the library. That's on purpose, though I might add some optional helpers later.
 - Web/TeaVM is untested.
@@ -189,6 +239,9 @@ It opens a dialog tester for `assets/ink/main.ink`. The backtick key toggles the
 | `set <name> <value> <type>` | Same, with an explicit type: `int`, `float`, `bool` or `string`. If the value doesn't parse, nothing changes. |
 | `stat <entity> <stat> <value>` | Sets a stat on the test state provider and syncs it to ink. Value must be a number. Whole numbers go into ink as ints, so they print without `.0`. |
 | `hp <value>` | Shortcut for `stat player hp <value>`. |
+| `npc <entity> <stat> <value>` | Sets a stat on the test provider. Ink reads it live through `stat()`, no sync. The `guard` NPC starts with sanity 80, tiredness 20, mood 60, strength 12. |
+| `talk <knot> [speaker]` | `beginScene`: sets the speaker and jumps to the knot, for example `talk guard_chat guard`. |
+| `seed <n>` | Seeds ink's random. Use `restart` first if you want the same result twice. |
 | `choose <n>` | Picks a choice by index, starting at 0. |
 | `divert <path>` | Jumps to an ink path (`knot` or `knot.stitch`) and continues from there. Bad paths log an error. |
 | `reload` | Recompiles `main.ink` plus any mod `.ink` files in `assets/mods/`, swaps in the new story and clears the log. Story state starts fresh. |
