@@ -273,7 +273,7 @@ class StyleTest {
         val m = managerOf("<b>Never closed\n-> END")
         m.log = sink
         val step = m.next()
-        assertTrue(step.ended)
+        assertTrue(step.isEnded)
         assertTrue(step.openStyles.isEmpty())
         assertContains(sink.messages.joinToString(), "never closed")
     }

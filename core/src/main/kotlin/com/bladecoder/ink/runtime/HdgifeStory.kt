@@ -22,15 +22,15 @@ package com.bladecoder.ink.runtime
  * No reflection. A story built any other way is a plain [Story] and keeps the old behavior, so use
  * [from] to get one (the compiler service already does).
  */
-class HdgifeStory(json: String) : Story(json) {
+public class HdgifeStory internal constructor(json: String) : Story(json) {
     private val safeFunctions = mutableMapOf<String, ExternalFunction<*>>()
 
     /**
-     * Binds [function] for the ink EXTERNAL [name], safe to call during lookahead and inside strings.
+     * Binds [function] for the ink EXTERNAL [name], safe to call during lookahead and inside strings (internal: the manager does it).
      * Only do this for functions that read and have no side effects. Throws if [name] is already bound.
      * Same as `bindExternalFunction(name, function, true)`.
      */
-    fun bindLookaheadSafe(name: String, function: ExternalFunction<*>) = bindExternalFunction(name, function, true)
+    internal fun bindLookaheadSafe(name: String, function: ExternalFunction<*>) = bindExternalFunction(name, function, true)
 
     override fun bindExternalFunction(funcName: String, func: ExternalFunction<*>, lookaheadSafe: Boolean) {
         super.bindExternalFunction(funcName, func, lookaheadSafe)
@@ -38,7 +38,7 @@ class HdgifeStory(json: String) : Story(json) {
     }
 
     /** The text ink has in its output stream right now, newline included. For a lookahead safe function that is asking where it was called. */
-    fun outputText(): String = state.currentText
+    internal fun outputText(): String = state.currentText
 
     override fun unbindExternalFunction(funcName: String) {
         super.unbindExternalFunction(funcName)
@@ -70,12 +70,12 @@ class HdgifeStory(json: String) : Story(json) {
             ?: throw StoryException("Could not create an ink value from ${result.javaClass.name} returned by $funcName"))
     }
 
-    companion object {
+    public companion object {
         /**
          * [story] as an [HdgifeStory]. A plain story is rebuilt from its compiled JSON, which gives a fresh
          * state (same as `resetState()`). An [HdgifeStory] is returned as it is.
          */
         @JvmStatic
-        fun from(story: Story): HdgifeStory = story as? HdgifeStory ?: HdgifeStory(story.toJson())
+        public fun from(story: Story): HdgifeStory = story as? HdgifeStory ?: HdgifeStory(story.toJson())
     }
 }

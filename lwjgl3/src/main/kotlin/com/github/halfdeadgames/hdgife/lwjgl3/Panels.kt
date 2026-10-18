@@ -168,11 +168,11 @@ class RenderedPanel(private val skin: Skin, private val onChoose: (Int) -> Unit)
     fun showChoices(step: DialogStep, mode: ChoiceMode) {
         choiceTable.clearChildren()
         for (choice in step.choices) {
-            if (!choice.available && mode == ChoiceMode.HIDE) continue
+            if (!choice.isAvailable && mode == ChoiceMode.HIDE) continue
             val button = scene2d.textButton("", CHOICE_STYLE)
             button.label.setText(choiceMarkup(choice))
             button.label.wrap = true
-            if (!choice.available && mode == ChoiceMode.GREY) button.isDisabled = true
+            if (!choice.isAvailable && mode == ChoiceMode.GREY) button.isDisabled = true
             button.onChange { onChoose(choice.index) }
             choiceTable.add(button).growX().padBottom(4f).row()
         }

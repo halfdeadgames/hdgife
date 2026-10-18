@@ -79,7 +79,7 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
             "STEP TAGS", "door_opened()  lineIndex=3  id=1",
             "OPEN STYLES (0)", "CHOICES (6)",
             // the requirements of the "Pay the toll" choice: an Int against an Int, a String against an enum name
-            "target=3 (Int) actual=12 (Int)", "target=HOSTILE (String) actual=WARY (String)", "met=true mismatch=false valid=true",
+            "target=3 (Int) actual=12 (Int)", "target=HOSTILE (String) actual=WARY (String)", "result=Met isMet=true",
         )
         expectInfo("suspicion=0")
         expectInfo("door_open=false")
@@ -129,10 +129,10 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         // raw: string, numeric with a float actual, explicit entity, bool, missing stat
         expectRaw(
             "target=drifter (String) actual=drifter (String)",
-            "target=7 (Int) actual=6 (Int)", "met=false mismatch=false valid=true",
+            "target=7 (Int) actual=6 (Int)", "result=Unmet isMet=false",
             "target=20 (Int) actual=25.5 (Float)",
             "target=false (Boolean) actual=false (Boolean)",
-            "entity=player stat=luck op=>=", "target=1 (Int) actual=null",
+            "entity=player stat=luck op=>=", "target=1 (Int)", "result=MissingStat isMet=false",
             "available : false", "available : true",
         )
         shot("04-varga-choices-grey")
@@ -497,9 +497,9 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         }
         expect(!button("Two tags in one choice").isDisabled) { "Two requires tags are both read and both met" }
         expectRaw(
-            "target=high (String) actual=12.0 (Float)", "met=false mismatch=true valid=true",
+            "target=high (String) actual=12.0 (Float)", "result=Mismatch isMet=false",
             "target=3 (Int) actual=crown (String)", "target=4 (Int) actual=false (Boolean)",
-            "entity=null stat=- op=null", "met=false mismatch=false valid=false",
+            "result=Unreadable isMet=false",
             "entity=guard stat=luck op=>", "entity=null stat=mood op=>", "requires  : 2",
         )
         shot("21-debug-requirements")

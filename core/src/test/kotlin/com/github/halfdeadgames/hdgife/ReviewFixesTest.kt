@@ -4,6 +4,7 @@ import com.bladecoder.ink.runtime.HdgifeStory
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.compiler.InkSource
 import com.github.halfdeadgames.hdgife.story.IncompatibleLibraryException
+import com.github.halfdeadgames.hdgife.story.RequirementResult
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.github.halfdeadgames.hdgife.story.StoryStepException
 import kotlin.test.Test
@@ -11,6 +12,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -90,12 +92,12 @@ class ReviewFixesTest {
         val m = managerOf(boomInk)
         m.bindFunction("boom") { error("bang") }
         val heard = ArrayList<String>()
-        m.onEvent = { heard += it.name }
+        m.onEvent { heard += it.name }
         val ex = assertFailsWith<StoryStepException> { m.next() }
         assertEquals(listOf("Line one"), ex.step.texts())
         assertEquals(listOf("b"), ex.step.openStyles.map { it.name })
         assertEquals(listOf("early"), ex.step.events.map { it.name })
-        assertFalse(ex.step.ended)
+        assertFalse(ex.step.isEnded)
         assertTrue(ex.step.choices.isEmpty())
         assertTrue(causes(ex).any { it.message == "bang" })
         assertEquals(listOf("early"), heard)
@@ -133,7 +135,7 @@ class ReviewFixesTest {
     fun `a throwing state provider comes out of syncStatsToInk as it is`() {
         val story = compileLib("VAR p_hp = 0\nHi")
         val m = StoryManager(story, NarrativeStateProviderThatThrows)
-        val ex = assertFailsWith<IllegalStateException> { m.syncStatsToInk("p", listOf("hp")) }
+        val ex = assertFailsWith<IllegalStateException> { m.syncStats("p", listOf("hp")) }
         assertEquals("provider down", ex.message)
     }
 
@@ -144,24 +146,24 @@ class ReviewFixesTest {
 
     @Test
     fun `a quoted entity name may hold spaces`() {
-        val r = requirements("\"Old Man\".mood > 3", stats("Old Man", "mood", 5)).single()
+        val r = assertIs<RequirementResult.Met>(requirements("\"Old Man\".mood > 3", stats("Old Man", "mood", 5)).single())
         assertEquals("Old Man", r.entity)
         assertEquals("mood", r.stat)
-        assertTrue(r.met)
+        assertTrue(r.isMet)
     }
 
     @Test
     fun `a quoted entity name may hold a dot`() {
-        val r = requirements("'Mr. X'.mood == 1", stats("Mr. X", "mood", 1)).single()
+        val r = assertIs<RequirementResult.Met>(requirements("'Mr. X'.mood == 1", stats("Mr. X", "mood", 1)).single())
         assertEquals("Mr. X", r.entity)
-        assertTrue(r.met)
+        assertTrue(r.isMet)
     }
 
     @Test
     fun `a quoted stat name may hold spaces`() {
-        val r = requirements("\"hit points\" >= 10", stats("p", "hit points", 12)).single()
+        val r = assertIs<RequirementResult.Met>(requirements("\"hit points\" >= 10", stats("p", "hit points", 12)).single())
         assertEquals("hit points", r.stat)
-        assertTrue(r.met)
+        assertTrue(r.isMet)
     }
 
     @Test
@@ -171,8 +173,8 @@ class ReviewFixesTest {
             it["p", "strength"] = 3
         })
         assertEquals(2, list.size)
-        assertEquals("Sir, the Bold", list[0].target)
-        assertTrue(list.all { it.met })
+        assertEquals("Sir, the Bold", assertIs<RequirementResult.Met>(list[0]).target)
+        assertTrue(list.all { it.isMet })
     }
 
     @Test
@@ -182,14 +184,14 @@ class ReviewFixesTest {
             it["p", "hp"] = 5
         })
         assertEquals(2, list.size)
-        assertTrue(list.all { it.met })
+        assertTrue(list.all { it.isMet })
     }
 
     @Test
     fun `an unterminated quote does not crash and is not met`() {
         val list = requirements("title == \"Sir, the Bold", stats("p", "title", "Sir, the Bold"))
         assertEquals(1, list.size)
-        assertFalse(list.single().met)
+        assertFalse(list.single().isMet)
     }
 
     @Test
@@ -203,17 +205,16 @@ class ReviewFixesTest {
     // ---- seed ----
 
     @Test
-    fun `seed rejects null and keeps working for numbers`() {
+    fun `seedRandom sets lastSeed`() {
         val m = managerOf("Hi")
-        assertFailsWith<IllegalArgumentException> { m.seed = null }
-        m.seed = 5
-        assertEquals(5, m.seed)
+        m.seedRandom(5)
+        assertEquals(5, m.lastSeed)
     }
 
     @Test
     fun `seed without the library throws`() {
         val m = managerOf("Hi", lib = false)
-        assertFailsWith<IncompatibleLibraryException> { m.seed = 1 }
+        assertFailsWith<IncompatibleLibraryException> { m.seedRandom(1) }
     }
 
     // ---- INCLUDE handling ----
@@ -240,17 +241,17 @@ class ReviewFixesTest {
 
     @Test
     fun `an INCLUDE after a block comment still works`() {
-        val main = InkSource("main.ink", { "/* note\nINCLUDE gone.ink\n*/\nINCLUDE b.ink\n{bv}" }) { rel ->
+        val main = InkSource.lazy("main.ink", sibling = { rel ->
             if (rel == "b.ink") InkSource("b.ink", bSource) else null
-        }
+        }) { "/* note\nINCLUDE gone.ink\n*/\nINCLUDE b.ink\n{bv}" }
         assertEquals("7", compiler.compile(main).Continue().trim())
     }
 
     @Test
     fun `a block opener inside a line comment does not hide the next INCLUDE`() {
-        val main = InkSource("main.ink", { "// see /* later\nINCLUDE b.ink\n{bv}" }) { rel ->
+        val main = InkSource.lazy("main.ink", sibling = { rel ->
             if (rel == "b.ink") InkSource("b.ink", bSource) else null
-        }
+        }) { "// see /* later\nINCLUDE b.ink\n{bv}" }
         assertEquals("7", compiler.compile(main).Continue().trim())
     }
 
@@ -357,7 +358,7 @@ class ReviewFixesTest {
     fun `a custom variableNamer decides where stats are written`() {
         val m = managerOf("VAR v_hp = 0\nHi", stats("hero", "hp", 9))
         m.variableNamer = { _, stat -> "v_$stat" }
-        val skipped = m.syncStatsToInk("hero", listOf("hp", "mp"))
+        val skipped = m.syncStats("hero", listOf("hp", "mp"))
         assertEquals(9, m.getVariable("v_hp"))
         assertEquals(listOf("v_mp"), skipped)
     }

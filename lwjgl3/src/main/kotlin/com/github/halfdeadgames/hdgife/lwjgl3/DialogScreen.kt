@@ -129,9 +129,9 @@ class DialogScreen(
             engineLog?.log(message)
             say("engine: $message")
         }
-        manager.formatOverride = ::harnessFormatOverride
+        manager.formatOverride(::harnessFormatOverride)
         // The engine reports events and never acts on them. This is the harness acting on them.
-        manager.onEvent = { event ->
+        manager.onEvent { event ->
             say("event #${event.id} ${event.name}(${event.args.joinToString { show(it) }}) before line ${event.lineIndex}")
             val first = event.args.firstOrNull()?.toString()
             when (event.name) {
@@ -253,8 +253,8 @@ class DialogScreen(
         lastStep = step
         raw.show(step, number, note, linesFrom)
         rendered.show(step, choiceMode, linesFrom)
-        statusLabel.setText(if (step.ended) "Story ended." else "")
-        restartButton.isVisible = step.ended
+        statusLabel.setText(if (step.isEnded) "Story ended." else "")
+        restartButton.isVisible = step.isEnded
     }
 
     private fun applyViewMode() {
@@ -285,7 +285,7 @@ class DialogScreen(
     }
 
     private fun syncPlayer() {
-        manager.syncStatsToInk("player", PLAYER_SYNCED_STATS)
+        manager.syncStats("player", PLAYER_SYNCED_STATS)
     }
 
     // ---- DialogControl -----------------------------------------------------------------------------------------
@@ -385,7 +385,7 @@ class DialogScreen(
         try {
             val step = manager.choose(index)
             showStep(step)
-            if (!step.ended) statusLabel.setText("> " + choice.text)
+            if (!step.isEnded) statusLabel.setText("> " + choice.text)
         } catch (e: StoryStepException) {
             showFailure(e)
         } catch (e: Exception) {

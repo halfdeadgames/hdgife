@@ -30,7 +30,7 @@ class ValidationTest {
     @Test
     fun `a clean story has no issues`() {
         val report = managerOf("Hello\n-> END").validateStory()
-        assertTrue(report.ok)
+        assertTrue(report.isOk)
         assertEquals(emptyList(), report.issues)
     }
 
@@ -40,14 +40,14 @@ class ValidationTest {
         val issue = report.of(IssueKind.UNBOUND_EXTERNAL).single()
         assertEquals(Severity.ERROR, issue.severity)
         assertEquals("give", issue.subject)
-        assertFalse(report.ok)
+        assertFalse(report.isOk)
     }
 
     @Test
     fun `an external that relies on its ink fallback is info`() {
         val report = managerOf(withFallback).validateStory()
         assertEquals(Severity.INFO, report.of(IssueKind.EXTERNAL_USES_FALLBACK).single().severity)
-        assertTrue(report.ok)
+        assertTrue(report.isOk)
     }
 
     @Test
@@ -68,7 +68,7 @@ class ValidationTest {
     fun `the standalone function takes the names that will be bound`() {
         val story = compileInk(noFallback)
         assertEquals(Severity.ERROR, validateStory(story).of(IssueKind.UNBOUND_EXTERNAL).single().severity)
-        assertTrue(validateStory(story, boundFunctions = setOf("give")).ok)
+        assertTrue(validateStory(story, boundFunctions = setOf("give")).isOk)
     }
 
     @Test
@@ -166,7 +166,7 @@ class ValidationTest {
     fun `the manager passes its own observers`() {
         val m = managerOf("VAR hp = 1\nHi\n-> END")
         m.observe("hp") { _, _ -> }
-        assertTrue(m.validateStory().ok)
+        assertTrue(m.validateStory().isOk)
     }
 
     @Test

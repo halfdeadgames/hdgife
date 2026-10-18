@@ -29,7 +29,7 @@ fun parseValue(text: String): Any =
 /** Sets the stat, syncs it to ink and returns the ink variable name. */
 fun applyStat(manager: StoryManager, provider: MapStateProvider, entity: String, stat: String, value: Any): String {
     provider.setStat(entity, stat, value)
-    manager.syncStatsToInk(entity, listOf(stat))
+    manager.syncStats(entity, listOf(stat))
     return manager.variableNamer(entity, stat)
 }
 

@@ -87,7 +87,7 @@ class StatsTest {
     fun `an unmapped value goes through the valueConverter`() {
         val stats = MapStats().also { it["p", "s"] = Money(5) }
         val m = managerOf("{stat_of(\"p\", \"s\") + 1}", stats)
-        m.valueConverter = { (it as? Money)?.amount }
+        m.valueConverter { (it as? Money)?.amount }
         assertEquals("6", m.next().texts().single())
     }
 
@@ -95,23 +95,23 @@ class StatsTest {
     fun `a valueConverter returning null falls back to toString`() {
         val stats = MapStats().also { it["p", "s"] = Money(5) }
         val m = managerOf("{stat_of(\"p\", \"s\")}", stats)
-        m.valueConverter = { null }
+        m.valueConverter { null }
         assertEquals("Money(amount=5)", m.next().texts().single())
     }
 
     @Test
     fun `a valueConverter result is mapped once more without the hook`() {
         val m = managerOf("Hi")
-        m.valueConverter = { 7L }
+        m.valueConverter { 7L }
         assertEquals(7, m.toInk(Money(1)))
-        m.valueConverter = { Money(2) }
+        m.valueConverter { Money(2) }
         assertEquals("Money(amount=2)", m.toInk(Money(1)))
     }
 
     @Test
     fun `valueConverter is used for setVariable`() {
         val m = managerOf("VAR gold = 0\n{gold}")
-        m.valueConverter = { (it as Money).amount }
+        m.valueConverter { (it as Money).amount }
         m.setVariable("gold", Money(9))
         assertEquals(9, m.getVariable("gold"))
     }
@@ -119,7 +119,7 @@ class StatsTest {
     @Test
     fun `valueConverter is used for bound function results`() {
         val m = managerOf("{purse() + 1}\n-> END\nEXTERNAL purse()\n=== function purse() ===\n~ return 0")
-        m.valueConverter = { (it as Money).amount }
+        m.valueConverter { (it as Money).amount }
         m.bindFunction("purse") { Money(4) }
         assertEquals("5", m.next().texts().single())
     }
@@ -183,7 +183,7 @@ class StatsTest {
     fun `syncStatsToInk copies only declared variables and returns the skipped names`() {
         val stats = MapStats().also { it["player", "hp"] = 12; it["player", "mp"] = 3 }
         val m = managerOf("VAR player_hp = 0\n{player_hp}", stats)
-        assertEquals(listOf("player_mp", "player_xp"), m.syncStatsToInk("player", listOf("hp", "mp", "xp")))
+        assertEquals(listOf("player_mp", "player_xp"), m.syncStats("player", listOf("hp", "mp", "xp")))
         assertEquals(12, m.getVariable("player_hp"))
     }
 
@@ -305,7 +305,7 @@ class StatsTest {
     fun `formatOverride wins for the stats it names`() {
         val stats = MapStats().also { it["p", "a"] = 1.234f; it["p", "b"] = 1.234f }
         val m = managerOf("{stat_text_of(\"p\", \"a\")} {stat_text_of(\"p\", \"b\")}", stats)
-        m.formatOverride = { _, stat -> if (stat == "a") NumberFormat(2) else null }
+        m.formatOverride { _, stat -> if (stat == "a") NumberFormat(2) else null }
         assertEquals("1.23 1", m.next().texts().single())
     }
 

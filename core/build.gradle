@@ -13,6 +13,26 @@ dependencies {
   testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
 
+// Binary compatibility: Kotlin's built-in ABI validation keeps the public API of core in core/api/core.api, which is
+// committed. `./gradlew :core:check` (and so `build`) runs checkKotlinAbi and fails when the code no longer matches the
+// dump. After an intended API change, rewrite the dump and commit it with the change:
+//   ./gradlew :core:updateKotlinAbi    writes core/api/core.api
+//   ./gradlew :core:checkKotlinAbi     compares the code with the dump (also part of :core:check)
+// jitpack.yml runs :core:test and :core:publishToMavenLocal only, and excludes checkKotlinAbi, so a stale dump never
+// fails a JitPack build.
+//
+// Every public declaration says so (`public`) and names its type, so nothing becomes API by accident.
+// The experimental marker is opted into for this module's own code and tests; consumers choose for themselves.
+kotlin {
+  explicitApi()
+  abiValidation {
+    enabled = true
+  }
+  compilerOptions {
+    optIn.add('com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi')
+  }
+}
+
 test {
   useJUnitPlatform()
   systemProperty 'hdgife.projectVersion', project.version.toString()
@@ -31,8 +51,8 @@ def generateVersion = tasks.register('generateVersion') {
     dir.resolve('Hdgife.kt').toFile().text = """package com.github.halfdeadgames.hdgife
 
 /** Library version. Generated from projectVersion in gradle.properties. */
-object Hdgife {
-    const val VERSION = "${versionText}"
+public object Hdgife {
+    public const val VERSION: String = "${versionText}"
 }
 """
   }
@@ -74,12 +94,12 @@ def generateInkLibrary = tasks.register('generateInkLibrary') {
     dir.resolve('HdgifeInk.kt').toFile().text = """package com.github.halfdeadgames.hdgife
 
 /** Facts about the bundled ink libraries. Generated from hdgife.ink and hdgife_util.ink, do not edit. */
-object HdgifeInk {
+public object HdgifeInk {
     /**
      * The version of hdgife.ink this engine expects (`CONST hdgife_version`). A story that includes another version,
      * or an old one with no version (counted as 0), is refused with an IncompatibleLibraryException.
      */
-    const val VERSION = ${version}
+    public const val VERSION: Int = ${version}
 
     /** The functions of hdgife.ink. */
     internal val CORE_FUNCTIONS: List<String> = listOf(${list(core)})
@@ -91,7 +111,7 @@ object HdgifeInk {
      * Every function name the libraries reserve, from hdgife.ink and hdgife_util.ink (the names are not prefixed, so a
      * story must not define its own with these names). validateStory warns about one defined without its library.
      */
-    val LIBRARY_FUNCTIONS: List<String> = CORE_FUNCTIONS + UTIL_FUNCTIONS
+    public val LIBRARY_FUNCTIONS: List<String> = CORE_FUNCTIONS + UTIL_FUNCTIONS
 }
 """
   }

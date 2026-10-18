@@ -1,11 +1,13 @@
 package com.github.halfdeadgames.hdgife
 
+import com.github.halfdeadgames.hdgife.story.RequirementResult
 import com.github.halfdeadgames.hdgife.story.StoryEvent
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.github.halfdeadgames.hdgife.story.StoryStepException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /** Events reach onEvent before the choices are read, and carry ids that survive a save. */
@@ -20,7 +22,7 @@ class EventOrderTest {
     private fun spendingManager(coin: Int): StoryManager {
         val stats = MapStats().also { it["player", "coin"] = coin }
         val m = managerOf(shop, stats)
-        m.onEvent = { event ->
+        m.onEvent { event ->
             if (event.name == "spend") stats["player", "coin"] = (stats.getStat("player", "coin") as Int) - (event.args[1] as Int)
         }
         return m
@@ -29,13 +31,13 @@ class EventOrderTest {
     @Test
     fun `choice requirements see what onEvent changed`() {
         val step = spendingManager(5).next()
-        assertEquals(listOf(false, true), step.choices.map { it.available })
-        assertEquals(2, step.choices[0].requirements.single().actual)
+        assertEquals(listOf(false, true), step.choices.map { it.isAvailable })
+        assertEquals(2, assertIs<RequirementResult.Unmet>(step.choices[0].requirements.single()).actual)
     }
 
     @Test
     fun `with enough coin left the choice stays available`() {
-        assertTrue(spendingManager(6).next().choices[0].available)
+        assertTrue(spendingManager(6).next().choices[0].isAvailable)
     }
 
     @Test
@@ -45,16 +47,16 @@ class EventOrderTest {
             "* [Go] Went\n~ emit1(\"grant\", 5)\n* * [Buy # requires: player.coin >= 5] Bought -> END\n* * [Leave] Left -> END",
             stats,
         )
-        m.onEvent = { stats["player", "coin"] = (stats.getStat("player", "coin") as Int) + (it.args[0] as Int) }
+        m.onEvent { stats["player", "coin"] = (stats.getStat("player", "coin") as Int) + (it.args[0] as Int) }
         m.next()
-        assertTrue(m.choose(0).choices[0].available)
+        assertTrue(m.choose(0).choices[0].isAvailable)
     }
 
     @Test
     fun `onEvent runs once per event, in order, and the step lists the same events`() {
         val m = managerOf("A <>\n~ emit(\"x\")\nB\n~ emit1(\"y\", 1)\nC\n~ emit(\"z\")\n* [Go] -> END")
         val seen = ArrayList<StoryEvent>()
-        m.onEvent = { seen += it }
+        m.onEvent { seen += it }
         val step = m.next()
         assertEquals(listOf("x", "y", "z"), seen.map { it.name })
         assertEquals(seen, step.events)
@@ -64,15 +66,15 @@ class EventOrderTest {
     fun `an event is delivered when the story ends too`() {
         val m = managerOf("Hi\n~ emit(\"bye\")\n-> END")
         val seen = ArrayList<String>()
-        m.onEvent = { seen += it.name }
-        assertTrue(m.next().ended)
+        m.onEvent { seen += it.name }
+        assertTrue(m.next().isEnded)
         assertEquals(listOf("bye"), seen)
     }
 
     @Test
     fun `an exception in onEvent comes out as a StoryStepException that keeps the step`() {
         val m = managerOf("Hi\n~ emit(\"a\")\n* [Go] -> END")
-        m.onEvent = { error("nope") }
+        m.onEvent { error("nope") }
         val ex = assertFailsWith<StoryStepException> { m.next() }
         assertEquals(listOf("a"), ex.step.events.map { it.name })
         assertEquals(listOf("Hi"), ex.step.texts())

@@ -4,6 +4,7 @@ import com.badlogic.gdx.files.FileHandle
 import com.bladecoder.ink.runtime.HdgifeStory
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.compiler.InkSource
+import com.github.halfdeadgames.hdgife.compiler.of
 import com.github.halfdeadgames.hdgife.story.Comparison
 import com.github.halfdeadgames.hdgife.story.Style
 import com.github.halfdeadgames.hdgife.story.parseStyles

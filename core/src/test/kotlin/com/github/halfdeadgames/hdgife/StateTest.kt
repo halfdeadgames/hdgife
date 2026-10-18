@@ -106,21 +106,20 @@ class StateTest {
     }
 
     @Test
-    fun `seed property reports the last seed and loadState clears it`() {
+    fun `lastSeed reports the last seed and loadState clears it`() {
         val m = managerOf(loopInk)
-        assertNull(m.seed)
-        m.seed = 5
-        assertEquals(5, m.seed)
+        assertNull(m.lastSeed)
+        m.seedRandom(5)
+        assertEquals(5, m.lastSeed)
         m.loadState(m.saveState())
-        assertNull(m.seed)
+        assertNull(m.lastSeed)
     }
 
     @Test
     fun `seedRandom throws without the library`() {
         val m = managerOf("Hi", lib = false)
         assertFailsWith<IncompatibleLibraryException> { m.seedRandom(1) }
-        assertFailsWith<IncompatibleLibraryException> { m.seed = 1 }
-        assertNull(m.seed)
+        assertNull(m.lastSeed)
     }
 
     @Test
@@ -160,7 +159,7 @@ class StateTest {
         val m = managerOf(loopInk)
         m.seedRandom(3)
         m.reset()
-        assertNull(m.seed)
+        assertNull(m.lastSeed)
     }
 
     @Test

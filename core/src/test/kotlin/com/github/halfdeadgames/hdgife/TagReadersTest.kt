@@ -39,11 +39,11 @@ class TagReadersTest {
     }
 
     @Test
-    fun `string gives the value, empty for a bare tag, null when missing`() {
+    fun `get gives the value, empty for a bare tag, null when missing`() {
         val t = tags("mood: warm", "shout")
-        assertEquals("warm", t.string("mood"))
-        assertEquals("", t.string("shout"))
-        assertNull(t.string("nope"))
+        assertEquals("warm", t["mood"])
+        assertEquals("", t["shout"])
+        assertNull(t["nope"])
     }
 
     @Test
@@ -56,8 +56,6 @@ class TagReadersTest {
         assertEquals(1f, t.float("bad", 1f))
         assertEquals(true, t.bool("b", false))
         assertEquals(false, t.bool("bad", false))
-        assertEquals("hi", t.string("s", "d"))
-        assertEquals("d", t.string("missing", "d"))
     }
 
     @Test

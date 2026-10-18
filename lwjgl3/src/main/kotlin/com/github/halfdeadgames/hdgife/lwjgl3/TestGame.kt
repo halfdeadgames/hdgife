@@ -3,6 +3,7 @@ package com.github.halfdeadgames.hdgife.lwjgl3
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.files.FileHandle
 import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
+import com.github.halfdeadgames.hdgife.compiler.compile
 import com.bladecoder.ink.runtime.HdgifeStory
 import com.github.halfdeadgames.hdgife.HdgifeLog
 import com.github.halfdeadgames.hdgife.story.StoryManager
@@ -54,7 +55,7 @@ class TestGame(
         KtxAsync.launch {
             try {
                 val story = withContext(Dispatchers.IO) { compileHarnessStory(compiler) }
-                val manager = StoryManager(story, provider).apply {
+                val manager = StoryManager(story, provider) {
                     log = HdgifeLog { logger.info { it } }
                 }
                 val screen = DialogScreen(manager, provider, compiler)

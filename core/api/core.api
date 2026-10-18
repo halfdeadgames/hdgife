@@ -1,0 +1,483 @@
+public final class com/bladecoder/ink/runtime/HdgifeStory : com/bladecoder/ink/runtime/Story {
+	public static final field Companion Lcom/bladecoder/ink/runtime/HdgifeStory$Companion;
+	public fun bindExternalFunction (Ljava/lang/String;Lcom/bladecoder/ink/runtime/Story$ExternalFunction;Z)V
+	public static final fun from (Lcom/bladecoder/ink/runtime/Story;)Lcom/bladecoder/ink/runtime/HdgifeStory;
+	public fun unbindExternalFunction (Ljava/lang/String;)V
+}
+
+public final class com/bladecoder/ink/runtime/HdgifeStory$Companion {
+	public final fun from (Lcom/bladecoder/ink/runtime/Story;)Lcom/bladecoder/ink/runtime/HdgifeStory;
+}
+
+public abstract interface annotation class com/github/halfdeadgames/hdgife/ExperimentalHdgifeApi : java/lang/annotation/Annotation {
+}
+
+public final class com/github/halfdeadgames/hdgife/Hdgife {
+	public static final field INSTANCE Lcom/github/halfdeadgames/hdgife/Hdgife;
+	public static final field VERSION Ljava/lang/String;
+}
+
+public abstract class com/github/halfdeadgames/hdgife/HdgifeException : java/lang/RuntimeException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/github/halfdeadgames/hdgife/HdgifeInk {
+	public static final field INSTANCE Lcom/github/halfdeadgames/hdgife/HdgifeInk;
+	public static final field VERSION I
+	public final fun getLIBRARY_FUNCTIONS ()Ljava/util/List;
+}
+
+public abstract interface class com/github/halfdeadgames/hdgife/HdgifeLog {
+	public abstract fun log (Ljava/lang/String;)V
+}
+
+public final class com/github/halfdeadgames/hdgife/compiler/GdxSourcesKt {
+	public static final fun compile (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Lcom/badlogic/gdx/files/FileHandle;Ljava/util/List;)Lcom/bladecoder/ink/runtime/HdgifeStory;
+	public static synthetic fun compile$default (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Lcom/badlogic/gdx/files/FileHandle;Ljava/util/List;ILjava/lang/Object;)Lcom/bladecoder/ink/runtime/HdgifeStory;
+	public static final fun compileFolder (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Lcom/badlogic/gdx/files/FileHandle;Z)Lcom/bladecoder/ink/runtime/HdgifeStory;
+	public static synthetic fun compileFolder$default (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Lcom/badlogic/gdx/files/FileHandle;ZILjava/lang/Object;)Lcom/bladecoder/ink/runtime/HdgifeStory;
+	public static final fun of (Lcom/github/halfdeadgames/hdgife/compiler/InkSource$Companion;Lcom/badlogic/gdx/files/FileHandle;)Lcom/github/halfdeadgames/hdgife/compiler/InkSource;
+}
+
+public final class com/github/halfdeadgames/hdgife/compiler/InkCompileException : com/github/halfdeadgames/hdgife/HdgifeException {
+	public final fun getErrors ()Ljava/util/List;
+	public final fun getSource ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/compiler/InkCompilerService {
+	public fun <init> ()V
+	public final fun compile (Lcom/github/halfdeadgames/hdgife/compiler/InkSource;)Lcom/bladecoder/ink/runtime/HdgifeStory;
+	public final fun compile (Lcom/github/halfdeadgames/hdgife/compiler/InkSource;Ljava/util/List;)Lcom/bladecoder/ink/runtime/HdgifeStory;
+	public final fun compile (Ljava/util/List;)Lcom/bladecoder/ink/runtime/HdgifeStory;
+	public static synthetic fun compile$default (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Lcom/github/halfdeadgames/hdgife/compiler/InkSource;Ljava/util/List;ILjava/lang/Object;)Lcom/bladecoder/ink/runtime/HdgifeStory;
+	public final fun getLog ()Lcom/github/halfdeadgames/hdgife/HdgifeLog;
+	public final fun loadCompiled (Ljava/lang/String;)Lcom/bladecoder/ink/runtime/HdgifeStory;
+	public final fun setLog (Lcom/github/halfdeadgames/hdgife/HdgifeLog;)V
+}
+
+public final class com/github/halfdeadgames/hdgife/compiler/InkSource {
+	public static final field Companion Lcom/github/halfdeadgames/hdgife/compiler/InkSource$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun getName ()Ljava/lang/String;
+	public static final fun lazy (Ljava/lang/String;Lkotlin/jvm/functions/Function0;)Lcom/github/halfdeadgames/hdgife/compiler/InkSource;
+	public static final fun lazy (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;)Lcom/github/halfdeadgames/hdgife/compiler/InkSource;
+	public final fun read ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/compiler/InkSource$Companion {
+	public final fun lazy (Ljava/lang/String;Lkotlin/jvm/functions/Function0;)Lcom/github/halfdeadgames/hdgife/compiler/InkSource;
+	public final fun lazy (Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;)Lcom/github/halfdeadgames/hdgife/compiler/InkSource;
+	public static synthetic fun lazy$default (Lcom/github/halfdeadgames/hdgife/compiler/InkSource$Companion;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;ILjava/lang/Object;)Lcom/github/halfdeadgames/hdgife/compiler/InkSource;
+}
+
+public abstract interface class com/github/halfdeadgames/hdgife/state/NarrativeStateProvider {
+	public abstract fun getStat (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/Comparison : java/lang/Enum {
+	public static final field Companion Lcom/github/halfdeadgames/hdgife/story/Comparison$Companion;
+	public static final field EQUAL Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static final field GREATER Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static final field GREATER_EQUAL Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static final field LESS Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static final field LESS_EQUAL Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static final field NOT_EQUAL Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getSymbol ()Ljava/lang/String;
+	public final fun isEquality ()Z
+	public static final fun parse (Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static fun valueOf (Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static fun values ()[Lcom/github/halfdeadgames/hdgife/story/Comparison;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/Comparison$Companion {
+	public final fun parse (Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/Comparison;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/DialogChoice {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIndex ()I
+	public final fun getMarkers ()Ljava/util/List;
+	public final fun getRequirements ()Ljava/util/List;
+	public final fun getSpans ()Ljava/util/List;
+	public final fun getTags ()Lcom/github/halfdeadgames/hdgife/story/Tags;
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public final fun isAvailable ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/DialogLine {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMarkers ()Ljava/util/List;
+	public final fun getSpans ()Ljava/util/List;
+	public final fun getSpeaker ()Ljava/lang/String;
+	public final fun getTags ()Lcom/github/halfdeadgames/hdgife/story/Tags;
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/DialogStep {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getChoices ()Ljava/util/List;
+	public final fun getEvents ()Ljava/util/List;
+	public final fun getLines ()Ljava/util/List;
+	public final fun getOpenStyles ()Ljava/util/List;
+	public final fun getTags ()Lcom/github/halfdeadgames/hdgife/story/Tags;
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public final fun isEnded ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/FunctionArgs {
+	public final fun bool (I)Z
+	public final fun float (I)F
+	public final fun get (I)Ljava/lang/Object;
+	public final fun getFunction ()Ljava/lang/String;
+	public final fun getSize ()I
+	public final fun getValues ()Ljava/util/List;
+	public final fun int (I)I
+	public final fun string (I)Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/IncompatibleLibraryException : com/github/halfdeadgames/hdgife/HdgifeException {
+	public final fun getExpected ()I
+	public final fun getFound ()I
+}
+
+public final class com/github/halfdeadgames/hdgife/story/IssueKind : java/lang/Enum {
+	public static final field EXTERNAL_USES_FALLBACK Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static final field LIBRARY_WITHOUT_INCLUDE Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static final field OLD_LIBRARY Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static final field UNBOUND_EXTERNAL Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static final field UNDECLARED_OBSERVED_VARIABLE Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static final field UNREADABLE_REQUIREMENT Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static fun values ()[Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/NumberFormat {
+	public fun <init> ()V
+	public fun <init> (I)V
+	public fun <init> (ILcom/github/halfdeadgames/hdgife/story/Rounding;)V
+	public fun <init> (ILcom/github/halfdeadgames/hdgife/story/Rounding;Z)V
+	public synthetic fun <init> (ILcom/github/halfdeadgames/hdgife/story/Rounding;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun format (D)Ljava/lang/String;
+	public final fun format (F)Ljava/lang/String;
+	public final fun format (J)Ljava/lang/String;
+	public final fun format (Ljava/lang/Number;)Ljava/lang/String;
+	public final fun getDecimals ()I
+	public final fun getRounding ()Lcom/github/halfdeadgames/hdgife/story/Rounding;
+	public final fun getTrimTrailingZeros ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+	public final fun withDecimals (I)Lcom/github/halfdeadgames/hdgife/story/NumberFormat;
+	public final fun withRounding (Lcom/github/halfdeadgames/hdgife/story/Rounding;)Lcom/github/halfdeadgames/hdgife/story/NumberFormat;
+	public final fun withTrimTrailingZeros (Z)Lcom/github/halfdeadgames/hdgife/story/NumberFormat;
+}
+
+public abstract interface class com/github/halfdeadgames/hdgife/story/NumberFormatOverride {
+	public abstract fun formatFor (Ljava/lang/String;Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/NumberFormat;
+}
+
+public abstract interface class com/github/halfdeadgames/hdgife/story/RequirementResult {
+	public abstract fun getRaw ()Ljava/lang/String;
+	public abstract fun isMet ()Z
+}
+
+public final class com/github/halfdeadgames/hdgife/story/RequirementResult$Met : com/github/halfdeadgames/hdgife/story/RequirementResult {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getActual ()Ljava/lang/Object;
+	public final fun getEntity ()Ljava/lang/String;
+	public final fun getOp ()Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public fun getRaw ()Ljava/lang/String;
+	public final fun getStat ()Ljava/lang/String;
+	public final fun getTarget ()Ljava/lang/Object;
+	public fun hashCode ()I
+	public fun isMet ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/RequirementResult$Mismatch : com/github/halfdeadgames/hdgife/story/RequirementResult {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getActual ()Ljava/lang/Object;
+	public final fun getEntity ()Ljava/lang/String;
+	public final fun getOp ()Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public fun getRaw ()Ljava/lang/String;
+	public final fun getStat ()Ljava/lang/String;
+	public final fun getTarget ()Ljava/lang/Object;
+	public fun hashCode ()I
+	public fun isMet ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/RequirementResult$MissingStat : com/github/halfdeadgames/hdgife/story/RequirementResult {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEntity ()Ljava/lang/String;
+	public final fun getOp ()Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public fun getRaw ()Ljava/lang/String;
+	public final fun getStat ()Ljava/lang/String;
+	public final fun getTarget ()Ljava/lang/Object;
+	public fun hashCode ()I
+	public fun isMet ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/RequirementResult$Unmet : com/github/halfdeadgames/hdgife/story/RequirementResult {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getActual ()Ljava/lang/Object;
+	public final fun getEntity ()Ljava/lang/String;
+	public final fun getOp ()Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public fun getRaw ()Ljava/lang/String;
+	public final fun getStat ()Ljava/lang/String;
+	public final fun getTarget ()Ljava/lang/Object;
+	public fun hashCode ()I
+	public fun isMet ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/RequirementResult$Unreadable : com/github/halfdeadgames/hdgife/story/RequirementResult {
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getRaw ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun isMet ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/Rounding : java/lang/Enum {
+	public static final field CEIL Lcom/github/halfdeadgames/hdgife/story/Rounding;
+	public static final field Companion Lcom/github/halfdeadgames/hdgife/story/Rounding$Companion;
+	public static final field FLOOR Lcom/github/halfdeadgames/hdgife/story/Rounding;
+	public static final field ROUND Lcom/github/halfdeadgames/hdgife/story/Rounding;
+	public static final field TRUNCATE Lcom/github/halfdeadgames/hdgife/story/Rounding;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static final fun parse (Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/Rounding;
+	public static fun valueOf (Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/Rounding;
+	public static fun values ()[Lcom/github/halfdeadgames/hdgife/story/Rounding;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/Rounding$Companion {
+	public final fun parse (Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/Rounding;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/SaveStateException : com/github/halfdeadgames/hdgife/HdgifeException {
+}
+
+public final class com/github/halfdeadgames/hdgife/story/Severity : java/lang/Enum {
+	public static final field ERROR Lcom/github/halfdeadgames/hdgife/story/Severity;
+	public static final field INFO Lcom/github/halfdeadgames/hdgife/story/Severity;
+	public static final field WARNING Lcom/github/halfdeadgames/hdgife/story/Severity;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/Severity;
+	public static fun values ()[Lcom/github/halfdeadgames/hdgife/story/Severity;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/StoryEvent {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getArgs ()Ljava/util/List;
+	public final fun getId ()I
+	public final fun getLineIndex ()I
+	public final fun getName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/github/halfdeadgames/hdgife/story/StoryEventListener {
+	public abstract fun onEvent (Lcom/github/halfdeadgames/hdgife/story/StoryEvent;)V
+}
+
+public final class com/github/halfdeadgames/hdgife/story/StoryManager {
+	public static final field Companion Lcom/github/halfdeadgames/hdgife/story/StoryManager$Companion;
+	public fun <init> (Lcom/bladecoder/ink/runtime/HdgifeStory;)V
+	public fun <init> (Lcom/bladecoder/ink/runtime/HdgifeStory;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;)V
+	public fun <init> (Lcom/bladecoder/ink/runtime/HdgifeStory;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Lcom/bladecoder/ink/runtime/HdgifeStory;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun beginScene (Ljava/lang/String;)V
+	public final fun beginScene (Ljava/lang/String;Ljava/lang/String;)V
+	public static synthetic fun beginScene$default (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)V
+	public final fun bindFunction (Ljava/lang/String;Lkotlin/jvm/functions/Function1;)V
+	public final fun bindFunction (Ljava/lang/String;ZLkotlin/jvm/functions/Function1;)V
+	public static synthetic fun bindFunction$default (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Ljava/lang/String;ZLkotlin/jvm/functions/Function1;ILjava/lang/Object;)V
+	public final fun choose (I)Lcom/github/halfdeadgames/hdgife/story/DialogStep;
+	public static final fun defaultVariableName (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+	public static final fun forPlainStory (Lcom/bladecoder/ink/runtime/Story;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
+	public static final fun forPlainStory (Lcom/bladecoder/ink/runtime/Story;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
+	public static final fun forPlainStory (Lcom/bladecoder/ink/runtime/Story;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;Lkotlin/jvm/functions/Function1;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
+	public final fun formatOverride (Lcom/github/halfdeadgames/hdgife/story/NumberFormatOverride;)V
+	public final fun getAllowExternalFunctionFallbacks ()Z
+	public final fun getEventCount ()I
+	public final fun getFormatOverride ()Lcom/github/halfdeadgames/hdgife/story/NumberFormatOverride;
+	public final fun getLastSeed ()Ljava/lang/Integer;
+	public final fun getLog ()Lcom/github/halfdeadgames/hdgife/HdgifeLog;
+	public final fun getNumberFormat ()Lcom/github/halfdeadgames/hdgife/story/NumberFormat;
+	public final fun getOnEvent ()Lcom/github/halfdeadgames/hdgife/story/StoryEventListener;
+	public final fun getRequirementsTagKey ()Ljava/lang/String;
+	public final fun getSpeaker ()Ljava/lang/String;
+	public final fun getSpeakerTagKey ()Ljava/lang/String;
+	public final fun getStateProvider ()Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;
+	public final fun getStory ()Lcom/bladecoder/ink/runtime/Story;
+	public final fun getTextCleaner ()Lkotlin/jvm/functions/Function1;
+	public final fun getValueConverter ()Lcom/github/halfdeadgames/hdgife/story/ValueConverter;
+	public final fun getVariable (Ljava/lang/String;)Ljava/lang/Object;
+	public final fun getVariable (Ljava/lang/String;Lkotlin/reflect/KClass;)Ljava/lang/Object;
+	public final fun getVariableNamer ()Lkotlin/jvm/functions/Function2;
+	public final fun getVariableNames ()Ljava/util/List;
+	public final fun isLookaheadSafe ()Z
+	public final fun loadState (Ljava/lang/String;)V
+	public final fun next ()Lcom/github/halfdeadgames/hdgife/story/DialogStep;
+	public final fun observe (Ljava/lang/String;Lkotlin/jvm/functions/Function2;)Lcom/github/halfdeadgames/hdgife/story/VariableObservation;
+	public final fun onEvent (Lcom/github/halfdeadgames/hdgife/story/StoryEventListener;)V
+	public final fun replacePlainStory (Lcom/bladecoder/ink/runtime/Story;)V
+	public final fun replaceStory (Lcom/bladecoder/ink/runtime/HdgifeStory;)V
+	public final fun reset ()V
+	public final fun saveState ()Ljava/lang/String;
+	public final fun seedRandom (I)V
+	public final fun setAllowExternalFunctionFallbacks (Z)V
+	public final fun setFormatOverride (Lcom/github/halfdeadgames/hdgife/story/NumberFormatOverride;)V
+	public final fun setLog (Lcom/github/halfdeadgames/hdgife/HdgifeLog;)V
+	public final fun setNumberFormat (Lcom/github/halfdeadgames/hdgife/story/NumberFormat;)V
+	public final fun setOnEvent (Lcom/github/halfdeadgames/hdgife/story/StoryEventListener;)V
+	public final fun setRequirementsTagKey (Ljava/lang/String;)V
+	public final fun setSpeaker (Ljava/lang/String;)V
+	public final fun setSpeakerTagKey (Ljava/lang/String;)V
+	public final fun setStateProvider (Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;)V
+	public final fun setTextCleaner (Lkotlin/jvm/functions/Function1;)V
+	public final fun setValueConverter (Lcom/github/halfdeadgames/hdgife/story/ValueConverter;)V
+	public final fun setVariable (Ljava/lang/String;Ljava/lang/Object;)V
+	public final fun setVariableNamer (Lkotlin/jvm/functions/Function2;)V
+	public final fun syncStats (Ljava/lang/String;Ljava/util/List;)Ljava/util/List;
+	public final fun unbindFunction (Ljava/lang/String;)V
+	public final fun unobserve (Lcom/github/halfdeadgames/hdgife/story/VariableObservation;)V
+	public final fun unobserve (Ljava/lang/String;)V
+	public final fun validateStory ()Lcom/github/halfdeadgames/hdgife/story/StoryReport;
+	public final fun valueConverter (Lcom/github/halfdeadgames/hdgife/story/ValueConverter;)V
+}
+
+public final class com/github/halfdeadgames/hdgife/story/StoryManager$Companion {
+	public final fun defaultVariableName (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+	public final fun forPlainStory (Lcom/bladecoder/ink/runtime/Story;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
+	public final fun forPlainStory (Lcom/bladecoder/ink/runtime/Story;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
+	public final fun forPlainStory (Lcom/bladecoder/ink/runtime/Story;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;Lkotlin/jvm/functions/Function1;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
+	public static synthetic fun forPlainStory$default (Lcom/github/halfdeadgames/hdgife/story/StoryManager$Companion;Lcom/bladecoder/ink/runtime/Story;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/StoryManagerKt {
+	public static final fun cleanLine (Ljava/lang/String;)Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/StoryPathException : com/github/halfdeadgames/hdgife/HdgifeException {
+	public final fun getPath ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/StoryReport {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getErrors ()Ljava/util/List;
+	public final fun getInfos ()Ljava/util/List;
+	public final fun getIssues ()Ljava/util/List;
+	public final fun getWarnings ()Ljava/util/List;
+	public fun hashCode ()I
+	public final fun isOk ()Z
+	public final fun of (Lcom/github/halfdeadgames/hdgife/story/IssueKind;)Ljava/util/List;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/StoryStepException : com/github/halfdeadgames/hdgife/HdgifeException {
+	public final fun getStep ()Lcom/github/halfdeadgames/hdgife/story/DialogStep;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/StoryValidator {
+	public static final field INSTANCE Lcom/github/halfdeadgames/hdgife/story/StoryValidator;
+	public static final fun validate (Lcom/bladecoder/ink/runtime/Story;)Lcom/github/halfdeadgames/hdgife/story/StoryReport;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/Style {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getName ()Ljava/lang/String;
+	public final fun getParams ()Ljava/util/Map;
+	public final fun getValue ()Ljava/lang/String;
+	public final fun getValues ()Ljava/util/List;
+	public fun hashCode ()I
+	public final fun hexColor (Ljava/lang/String;)Ljava/lang/Integer;
+	public static synthetic fun hexColor$default (Lcom/github/halfdeadgames/hdgife/story/Style;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/Integer;
+	public final fun param (Ljava/lang/String;)Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/StylingKt {
+	public static final fun parseHexColor (Ljava/lang/String;)Ljava/lang/Integer;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/Tags {
+	public static final field Companion Lcom/github/halfdeadgames/hdgife/story/Tags$Companion;
+	public static final field EMPTY Lcom/github/halfdeadgames/hdgife/story/Tags;
+	public final fun all (Ljava/lang/String;)Ljava/util/List;
+	public final fun bool (Ljava/lang/String;)Ljava/lang/Boolean;
+	public final fun bool (Ljava/lang/String;Z)Z
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun float (Ljava/lang/String;)Ljava/lang/Float;
+	public final fun float (Ljava/lang/String;F)F
+	public final fun get (Ljava/lang/String;)Ljava/lang/String;
+	public final fun getMap ()Ljava/util/Map;
+	public final fun getRaw ()Ljava/util/List;
+	public final fun has (Ljava/lang/String;)Z
+	public fun hashCode ()I
+	public final fun int (Ljava/lang/String;)Ljava/lang/Integer;
+	public final fun int (Ljava/lang/String;I)I
+	public final fun isEmpty ()Z
+	public static final fun parse (Ljava/util/List;)Lcom/github/halfdeadgames/hdgife/story/Tags;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/Tags$Companion {
+	public final fun parse (Ljava/util/List;)Lcom/github/halfdeadgames/hdgife/story/Tags;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/TextMarker {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getName ()Ljava/lang/String;
+	public final fun getOffset ()I
+	public final fun getParams ()Ljava/util/Map;
+	public final fun getValue ()Ljava/lang/String;
+	public final fun getValues ()Ljava/util/List;
+	public fun hashCode ()I
+	public final fun hexColor (Ljava/lang/String;)Ljava/lang/Integer;
+	public static synthetic fun hexColor$default (Lcom/github/halfdeadgames/hdgife/story/TextMarker;Ljava/lang/String;ILjava/lang/Object;)Ljava/lang/Integer;
+	public final fun param (Ljava/lang/String;)Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/TextSpan {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getStyles ()Ljava/util/List;
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/ValidationIssue {
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getKind ()Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public final fun getMessage ()Ljava/lang/String;
+	public final fun getSeverity ()Lcom/github/halfdeadgames/hdgife/story/Severity;
+	public final fun getSubject ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/github/halfdeadgames/hdgife/story/ValueConverter {
+	public abstract fun convert (Ljava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/VariableObservation : java/lang/AutoCloseable {
+	public fun close ()V
+	public final fun getName ()Ljava/lang/String;
+	public final fun isActive ()Z
+}
+

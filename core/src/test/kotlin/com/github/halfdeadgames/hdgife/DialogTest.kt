@@ -1,12 +1,14 @@
 package com.github.halfdeadgames.hdgife
 
 import com.github.halfdeadgames.hdgife.story.Comparison
+import com.github.halfdeadgames.hdgife.story.RequirementResult
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.github.halfdeadgames.hdgife.story.Tags
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -63,18 +65,18 @@ class DialogTest {
 
     @Test
     fun `stat functions are lookahead safe on a compiled story`() {
-        assertTrue(managerOf("Hi").lookaheadSafe)
+        assertTrue(managerOf("Hi").isLookaheadSafe)
     }
 
     @Test
     fun `lookaheadSafe is a mode decided by the entry point`() {
         val plain = com.bladecoder.ink.runtime.Story(compileLib("Hi").toJson())
         val m = StoryManager.forPlainStory(plain)
-        assertFalse(m.lookaheadSafe)
+        assertFalse(m.isLookaheadSafe)
         m.replaceStory(compileLib("Hi"))
-        assertTrue(m.lookaheadSafe)
+        assertTrue(m.isLookaheadSafe)
         m.replacePlainStory(plain)
-        assertFalse(m.lookaheadSafe)
+        assertFalse(m.isLookaheadSafe)
     }
 
     // ---- speakers ----
@@ -236,8 +238,8 @@ class DialogTest {
     @Test
     fun `a numeric requirement is met`() {
         val c = requirement("strength >= 12", statsOf("p.strength" to 12))
-        assertTrue(c.available)
-        val r = c.requirements.single()
+        assertTrue(c.isAvailable)
+        val r = assertIs<RequirementResult.Met>(c.requirements.single())
         assertEquals(Comparison.GREATER_EQUAL, r.op)
         assertEquals(12, r.target)
         assertEquals(12, r.actual)
@@ -247,14 +249,14 @@ class DialogTest {
     @Test
     fun `a numeric requirement is unmet`() {
         val c = requirement("strength >= 12", statsOf("p.strength" to 11))
-        assertFalse(c.available)
-        assertFalse(c.requirements.single().mismatch)
+        assertFalse(c.isAvailable)
+        assertIs<RequirementResult.Unmet>(c.requirements.single())
     }
 
     @Test
     fun `every comparison works on numbers`() {
         val stats = statsOf("p.x" to 5)
-        fun met(clause: String) = requirement(clause, stats).available
+        fun met(clause: String) = requirement(clause, stats).isAvailable
         assertTrue(met("x > 4"))
         assertFalse(met("x > 5"))
         assertTrue(met("x >= 5"))
@@ -268,57 +270,56 @@ class DialogTest {
 
     @Test
     fun `a float stat compares with a decimal target`() {
-        assertTrue(requirement("mood > 30.5", statsOf("p.mood" to 30.6f)).available)
-        assertFalse(requirement("mood > 30.5", statsOf("p.mood" to 30.4f)).available)
-        assertTrue(requirement("mood == 0.1", statsOf("p.mood" to 0.1f)).available)
+        assertTrue(requirement("mood > 30.5", statsOf("p.mood" to 30.6f)).isAvailable)
+        assertFalse(requirement("mood > 30.5", statsOf("p.mood" to 30.4f)).isAvailable)
+        assertTrue(requirement("mood == 0.1", statsOf("p.mood" to 0.1f)).isAvailable)
     }
 
     @Test
     fun `a string requirement compares bare or quoted values`() {
         val stats = statsOf("p.faction" to "rebels")
-        assertTrue(requirement("faction == rebels", stats).available)
-        assertTrue(requirement("faction == \"rebels\"", stats).available)
-        assertTrue(requirement("faction == 'rebels'", stats).available)
-        assertFalse(requirement("faction == crown", stats).available)
-        assertTrue(requirement("faction != crown", stats).available)
+        assertTrue(requirement("faction == rebels", stats).isAvailable)
+        assertTrue(requirement("faction == \"rebels\"", stats).isAvailable)
+        assertTrue(requirement("faction == 'rebels'", stats).isAvailable)
+        assertFalse(requirement("faction == crown", stats).isAvailable)
+        assertTrue(requirement("faction != crown", stats).isAvailable)
     }
 
     @Test
     fun `an enum stat compares as its name`() {
-        assertTrue(requirement("mood == ANGRY", statsOf("p.mood" to Mood.ANGRY)).available)
+        assertTrue(requirement("mood == ANGRY", statsOf("p.mood" to Mood.ANGRY)).isAvailable)
     }
 
     @Test
     fun `a boolean requirement works with equality`() {
         val stats = statsOf("p.is_injured" to false)
-        assertTrue(requirement("is_injured == false", stats).available)
-        assertFalse(requirement("is_injured == true", stats).available)
-        assertTrue(requirement("is_injured != true", stats).available)
+        assertTrue(requirement("is_injured == false", stats).isAvailable)
+        assertFalse(requirement("is_injured == true", stats).isAvailable)
+        assertTrue(requirement("is_injured != true", stats).isAvailable)
     }
 
     @Test
     fun `an explicit entity overrides the speaker`() {
         val stats = statsOf("guard.mood" to 50, "p.mood" to 5)
         val c = requirement("guard.mood > 30", stats)
-        assertTrue(c.available)
-        assertEquals("guard", c.requirements.single().entity)
+        assertTrue(c.isAvailable)
+        assertEquals("guard", assertIs<RequirementResult.Met>(c.requirements.single()).entity)
     }
 
     @Test
     fun `a requirement without entity or speaker is unmet`() {
         val c = requirement("mood > 30", statsOf("p.mood" to 50), speaker = null)
-        assertFalse(c.available)
-        assertNull(c.requirements.single().entity)
+        assertFalse(c.isAvailable)
+        assertNull(assertIs<RequirementResult.MissingStat>(c.requirements.single()).entity)
     }
 
     @Test
-    fun `a missing stat is unmet and has no actual value`() {
+    fun `a missing stat is unmet and reported as missing`() {
         val c = requirement("strength >= 1", MapStats())
-        assertFalse(c.available)
-        val r = c.requirements.single()
-        assertNull(r.actual)
-        assertFalse(r.mismatch)
-        assertTrue(r.valid)
+        assertFalse(c.isAvailable)
+        val r = assertIs<RequirementResult.MissingStat>(c.requirements.single())
+        assertEquals("strength", r.stat)
+        assertEquals(1, r.target)
     }
 
     @Test
@@ -327,51 +328,44 @@ class DialogTest {
         val m = managerOf("* [Go # requires: strength >= high] -> END", statsOf("p.strength" to 5))
         m.speaker = "p"
         m.log = sink
-        val r = m.next().choices.single().requirements.single()
-        assertTrue(r.mismatch)
-        assertFalse(r.met)
+        val r = assertIs<RequirementResult.Mismatch>(m.next().choices.single().requirements.single())
+        assertFalse(r.isMet)
         assertContains(sink.messages.joinToString(), "strength >= high")
     }
 
     @Test
     fun `an ordering operator on a string is a mismatch`() {
-        val r = requirement("faction > 3", statsOf("p.faction" to "rebels")).requirements.single()
-        assertTrue(r.mismatch)
-        assertFalse(r.met)
+        val r = assertIs<RequirementResult.Mismatch>(requirement("faction > 3", statsOf("p.faction" to "rebels")).requirements.single())
+        assertFalse(r.isMet)
     }
 
     @Test
     fun `a boolean compared to a number is a mismatch`() {
-        val r = requirement("is_injured == 4", statsOf("p.is_injured" to true)).requirements.single()
-        assertTrue(r.mismatch)
+        assertIs<RequirementResult.Mismatch>(requirement("is_injured == 4", statsOf("p.is_injured" to true)).requirements.single())
     }
 
     @Test
     fun `an ordering operator on a boolean is a mismatch`() {
-        val r = requirement("is_injured > true", statsOf("p.is_injured" to true)).requirements.single()
-        assertTrue(r.mismatch)
+        assertIs<RequirementResult.Mismatch>(requirement("is_injured > true", statsOf("p.is_injured" to true)).requirements.single())
     }
 
     @Test
-    fun `an unreadable requirement is reported as invalid and unmet`() {
+    fun `an unreadable requirement is reported as unreadable and unmet`() {
         val sink = LogSink()
         val m = managerOf("* [Go # requires: strength] -> END", statsOf("p.strength" to 5))
         m.speaker = "p"
         m.log = sink
         val choice = m.next().choices.single()
-        val r = choice.requirements.single()
-        assertFalse(r.valid)
-        assertFalse(r.met)
-        assertNull(r.op)
+        val r = assertIs<RequirementResult.Unreadable>(choice.requirements.single())
+        assertFalse(r.isMet)
         assertEquals("strength", r.raw)
-        assertFalse(choice.available)
+        assertFalse(choice.isAvailable)
         assertContains(sink.messages.joinToString(), "cannot read 'strength'")
     }
 
     @Test
     fun `a clause with an unknown operator is invalid`() {
-        val r = requirement("strength => 3", statsOf("p.strength" to 5)).requirements.single()
-        assertFalse(r.valid)
+        assertIs<RequirementResult.Unreadable>(requirement("strength => 3", statsOf("p.strength" to 5)).requirements.single())
     }
 
     @Test
@@ -379,15 +373,15 @@ class DialogTest {
         val stats = statsOf("p.a" to 1, "p.b" to 1)
         val c = requirement("a >= 1, b >= 2", stats)
         assertEquals(2, c.requirements.size)
-        assertFalse(c.available)
-        assertTrue(requirement("a >= 1, b >= 1", stats).available)
+        assertFalse(c.isAvailable)
+        assertTrue(requirement("a >= 1, b >= 1", stats).isAvailable)
     }
 
     @Test
     fun `a choice with no requirement is available`() {
         val c = managerOf("* [Go] -> END").next().choices.single()
         assertTrue(c.requirements.isEmpty())
-        assertTrue(c.available)
+        assertTrue(c.isAvailable)
     }
 
     @Test
@@ -395,7 +389,7 @@ class DialogTest {
         val m = managerOf("* [Go # requires: strength >= 99] Went -> END", statsOf("p.strength" to 1))
         m.speaker = "p"
         val step = m.next()
-        assertFalse(step.choices.single().available)
+        assertFalse(step.choices.single().isAvailable)
         assertEquals(listOf("Went"), m.choose(0).texts())
     }
 
@@ -404,7 +398,7 @@ class DialogTest {
         val m = managerOf("* [Go # needs: strength >= 5] -> END", statsOf("p.strength" to 1))
         m.speaker = "p"
         m.requirementsTagKey = "needs"
-        assertFalse(m.next().choices.single().available)
+        assertFalse(m.next().choices.single().isAvailable)
     }
 
     @Test

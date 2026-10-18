@@ -1,10 +1,11 @@
 package com.github.halfdeadgames.hdgife.lwjgl3
 
 import com.badlogic.gdx.graphics.Colors
-import com.github.halfdeadgames.hdgife.story.ChoiceRequirement
+import com.github.halfdeadgames.hdgife.story.Comparison
 import com.github.halfdeadgames.hdgife.story.DialogChoice
 import com.github.halfdeadgames.hdgife.story.DialogLine
 import com.github.halfdeadgames.hdgife.story.DialogStep
+import com.github.halfdeadgames.hdgife.story.RequirementResult
 import com.github.halfdeadgames.hdgife.story.Style
 import com.github.halfdeadgames.hdgife.story.Tags
 import com.github.halfdeadgames.hdgife.story.TextMarker
@@ -122,18 +123,19 @@ internal fun lineMarkup(line: DialogLine, colors: SpeakerColors): String {
 }
 
 /** What a requirement says, in a short form: `player.wits >= 7 (have 6)`. */
-internal fun describe(r: ChoiceRequirement): String {
-    if (!r.valid) return "bad requirement '${r.raw}'"
-    val have = r.actual?.let { "have ${show(it)}" } ?: "stat missing"
-    val why = if (r.mismatch) ", type mismatch" else ""
-    return "${r.entity ?: "?"}.${r.stat} ${r.op?.symbol} ${show(r.target)} ($have$why)"
+internal fun describe(r: RequirementResult): String = when (r) {
+    is RequirementResult.Unreadable -> "bad requirement '${r.raw}'"
+    is RequirementResult.MissingStat -> "${r.entity ?: "?"}.${r.stat} ${r.op.symbol} ${show(r.target)} (stat missing)"
+    is RequirementResult.Met -> "${r.entity}.${r.stat} ${r.op.symbol} ${show(r.target)} (have ${show(r.actual)})"
+    is RequirementResult.Unmet -> "${r.entity}.${r.stat} ${r.op.symbol} ${show(r.target)} (have ${show(r.actual)})"
+    is RequirementResult.Mismatch -> "${r.entity}.${r.stat} ${r.op.symbol} ${show(r.target)} (have ${show(r.actual)}, type mismatch)"
 }
 
 /** Markup of a choice button: its text, and for an unavailable one what it needs. */
 internal fun choiceMarkup(choice: DialogChoice): String = buildString {
     append(toMarkup(choice.spans, choice.markers))
-    if (!choice.available) {
-        val needs = choice.requirements.filterNot { it.met }.joinToString("; ", transform = ::describe)
+    if (!choice.isAvailable) {
+        val needs = choice.requirements.filterNot { it.isMet }.joinToString("; ", transform = ::describe)
         append("  [#ff8a80](needs ").append(esc(needs)).append(")[]")
     }
 }
@@ -167,6 +169,17 @@ private fun StringBuilder.field(indent: Int, key: String, value: String) {
     append(key.padEnd(10)).append(": ").append(value).append('\n')
 }
 
+/** The fields a requirement result has: who and what was asked, and the target. The actual value only when it was found. */
+private fun StringBuilder.requirementFields(
+    entity: String?, stat: String, op: Comparison, target: Any, actual: Any?, hasActual: Boolean = true,
+) {
+    append("      entity=").append(entity?.let { esc(it) } ?: "null")
+    append(" stat=").append(esc(stat)).append(" op=").append(op.symbol).append('\n')
+    append("      target=").append(typed(target))
+    if (hasActual) append(" actual=").append(typed(actual))
+    append('\n')
+}
+
 private fun StringBuilder.tags(indent: Int, tags: Tags) {
     field(indent, "tags.raw", tags.raw.joinToString(", ", "[[", "]") { quote(it) })
     field(indent, "tags.map", esc(tags.map.toString()))
@@ -193,7 +206,7 @@ private fun StringBuilder.spansAndMarkers(indent: Int, spans: List<TextSpan>, ma
  */
 fun formatRaw(step: DialogStep, number: Int, note: String? = null, linesFrom: DialogStep = step): String = buildString {
     title("STEP $number")
-    field(0, "ended", step.ended.toString())
+    field(0, "ended", step.isEnded.toString())
     note?.let { field(0, "note", esc(it)) }
     append('\n')
     title("LINES (${linesFrom.lines.size})")
@@ -212,17 +225,20 @@ fun formatRaw(step: DialogStep, number: Int, note: String? = null, linesFrom: Di
     for (choice in step.choices) {
         append(DIM).append("[[").append(choice.index).append("][]\n")
         field(2, "text", quote(choice.text))
-        field(2, "available", choice.available.toString())
+        field(2, "available", choice.isAvailable.toString())
         tags(2, choice.tags)
         spansAndMarkers(2, choice.spans, choice.markers)
         field(2, "requires", choice.requirements.size.toString())
         for (r in choice.requirements) {
             append("    - ").append(quote(r.raw)).append('\n')
-            append("      entity=").append(r.entity?.let { esc(it) } ?: "null")
-            append(" stat=").append(esc(r.stat.ifEmpty { "-" }))
-            append(" op=").append(r.op?.symbol ?: "null").append('\n')
-            append("      target=").append(typed(r.target)).append(" actual=").append(typed(r.actual)).append('\n')
-            append("      met=").append(r.met).append(" mismatch=").append(r.mismatch).append(" valid=").append(r.valid).append('\n')
+            when (r) {
+                is RequirementResult.Met -> requirementFields(r.entity, r.stat, r.op, r.target, r.actual)
+                is RequirementResult.Unmet -> requirementFields(r.entity, r.stat, r.op, r.target, r.actual)
+                is RequirementResult.Mismatch -> requirementFields(r.entity, r.stat, r.op, r.target, r.actual)
+                is RequirementResult.MissingStat -> requirementFields(r.entity, r.stat, r.op, r.target, null, hasActual = false)
+                is RequirementResult.Unreadable -> {}
+            }
+            append("      result=").append(r::class.simpleName).append(" isMet=").append(r.isMet).append('\n')
         }
     }
     append('\n')

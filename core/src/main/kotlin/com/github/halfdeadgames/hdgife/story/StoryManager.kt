@@ -6,6 +6,7 @@ import com.bladecoder.ink.runtime.InkNativePatch
 import com.bladecoder.ink.runtime.SimpleJson
 import com.bladecoder.ink.runtime.Story
 import com.bladecoder.ink.runtime.StoryException
+import com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi
 import com.github.halfdeadgames.hdgife.HdgifeInk
 import com.github.halfdeadgames.hdgife.HdgifeLog
 import com.github.halfdeadgames.hdgife.state.NarrativeStateProvider
@@ -19,7 +20,7 @@ private val SPACE_BEFORE_PUNCT = Regex(" +([,.;:!?])")
  * trims the ends. It is English punctuation. It gets one line of plain text with the style markers already
  * removed, and without the line break.
  */
-fun cleanLine(raw: String): String =
+public fun cleanLine(raw: String): String =
     raw.replace(SPACES, " ").replace(SPACE_BEFORE_PUNCT, "$1").trim()
 
 /**
@@ -65,7 +66,8 @@ fun cleanLine(raw: String): String =
  * [getVariable], [variableAs], [setVariable], [observe], [variableNames].
  *
  * ### Checking a story
- * [validateStory] lists what is wrong or risky in the story and its bindings, without throwing.
+ * [validateStory] lists what is wrong or risky in the story and its bindings, without throwing. For a story that has
+ * no manager use `StoryValidator.validate(story)`.
  *
  * ### Glue and lookahead
  * Ink runs ahead past a line break to see if glue (`<>`) joins the next line. A function that is not lookahead
@@ -73,7 +75,7 @@ fun cleanLine(raw: String): String =
  * fail inside choice text and `"{...}"` strings. [HdgifeStory] fixes it. The constructor and [replaceStory] take an
  * [HdgifeStory] (what `InkCompilerService` returns) and bind the stat functions lookahead safe. A plain [Story]
  * (built another way) goes through [forPlainStory] and [replacePlainStory]: the stat functions are bound as not
- * lookahead safe, which works everywhere except that they end glue lookahead. [lookaheadSafe] tells which mode the
+ * lookahead safe, which works everywhere except that they end glue lookahead. [isLookaheadSafe] tells which mode the
  * manager is in; the entry point decides it.
  * Events are the exception: they may run in lookahead either way. Ink counts them in `hdgife_event_seq`, which ink
  * undoes together with the lookahead, and [next] only keeps events that the count still includes.
@@ -87,6 +89,19 @@ fun cleanLine(raw: String): String =
  * (styles are then closed). [reset]
  * restarts the story. To run different sources, compile a new story and make a new manager (or call [replaceStory]).
  *
+ * ### Configuring
+ * Settings are properties. Set them in the optional trailing lambda of the constructor, so the manager is ready to use
+ * when it is returned, or any time later:
+ *
+ * ```kotlin
+ * val manager = StoryManager(story) {
+ *     stateProvider = myProvider
+ *     log = HdgifeLog { println(it) }
+ *     numberFormat = NumberFormat(decimals = 1)
+ *     onEvent { event -> handle(event) }
+ * }
+ * ```
+ *
  * ### Defaults
  * Every default below is a game decision and can be replaced: [numberFormat], [formatOverride], [variableNamer],
  * [textCleaner], [speakerTagKey], [requirementsTagKey], [allowExternalFunctionFallbacks], [log], [valueConverter],
@@ -94,27 +109,32 @@ fun cleanLine(raw: String): String =
  *
  * Story is not thread-safe. Call this from one thread.
  */
-class StoryManager private constructor(
+public class StoryManager private constructor(
     story: Story,
     lookaheadSafeMode: Boolean,
-    /** Source of stat values. Null means no stats: `stat` gives 0, `has_stat` false, requirements unmet. */
-    var stateProvider: NarrativeStateProvider?,
-    /**
-     * Builds the ink variable name that [syncStatsToInk] writes a stat to. Default [defaultVariableName]:
-     * `entityId_statName` with anything outside `[A-Za-z0-9_]` replaced by `_` (`player_hp`).
-     */
-    var variableNamer: (entityId: String, statName: String) -> String,
+    stateProvider: NarrativeStateProvider?,
+    configure: StoryManager.() -> Unit,
 ) {
     /**
      * Wraps [story], which stat functions bound lookahead safe (see "Glue and lookahead"). Throws
      * [IncompatibleLibraryException] if the story includes a hdgife.ink of another version. Use [forPlainStory] for
-     * a story that is not an [HdgifeStory].
+     * a story that is not an [HdgifeStory]. [configure] runs last and sets properties (see "Configuring").
      */
-    constructor(
+    @JvmOverloads
+    public constructor(
         story: HdgifeStory,
         stateProvider: NarrativeStateProvider? = null,
-        variableNamer: (entityId: String, statName: String) -> String = ::defaultVariableName,
-    ) : this(story, true, stateProvider, variableNamer)
+        configure: StoryManager.() -> Unit = {},
+    ) : this(story, true, stateProvider, configure)
+
+    /** Source of stat values. Null means no stats: `stat` gives 0, `has_stat` false, requirements unmet. */
+    public var stateProvider: NarrativeStateProvider? = stateProvider
+
+    /**
+     * Builds the ink variable name that [syncStats] writes a stat to. Default [defaultVariableName]:
+     * `entityId_statName` with anything outside `[A-Za-z0-9_]` replaced by `_` (`player_hp`).
+     */
+    public var variableNamer: (entityId: String, statName: String) -> String = ::defaultVariableName
 
     private var current: Story = story
 
@@ -122,14 +142,14 @@ class StoryManager private constructor(
      * The wrapped story. It is fixed for the life of the manager; [replaceStory] swaps it. Everything ink-side you
      * do through the story itself (`choosePathString`, `variablesState`) is allowed, but prefer the manager's API.
      */
-    val story: Story get() = current
+    public val story: Story get() = current
 
     /**
      * Swaps in [story] (after a reload, say). It is checked first, and a refused story leaves the manager exactly as
      * it was. Then it binds the stat functions, your [bindFunction]s and your [observe]rs to it, and resets what the
      * manager holds (open styles, pending events; [speaker] is kept). The old story is unbound from this manager.
      * Giving it the story it already has is allowed and rebinds it. Observers whose variable the new story does not
-     * declare are dropped (and logged). Sets [lookaheadSafe] to true.
+     * declare are dropped (and logged). Sets [isLookaheadSafe] to true.
      *
      * Throws [IncompatibleLibraryException] if the story includes a hdgife.ink of another version.
      *
@@ -137,10 +157,10 @@ class StoryManager private constructor(
      * and its own [bindFunction] names on the story it gets, replacing any earlier binding, such as the one of a
      * previous manager. Functions another manager bound under other names stay with that manager.
      */
-    fun replaceStory(story: HdgifeStory) = swapStory(story, true)
+    public fun replaceStory(story: HdgifeStory): Unit = swapStory(story, true)
 
-    /** Same as [replaceStory] for a plain [Story]: [lookaheadSafe] becomes false. */
-    fun replacePlainStory(story: Story) = swapStory(story, false)
+    /** Same as [replaceStory] for a plain [Story]: [isLookaheadSafe] becomes false. */
+    public fun replacePlainStory(story: Story): Unit = swapStory(story, false)
 
     private fun swapStory(value: Story, safeMode: Boolean) {
         // Validate first: a refused story leaves the manager exactly as it was.
@@ -151,7 +171,7 @@ class StoryManager private constructor(
         detachObservations()
         unbindOwn(old)
         current = value
-        lookaheadSafe = safeMode
+        isLookaheadSafe = safeMode
         value.setAllowExternalFunctionFallbacks(allowExternalFunctionFallbacks)
         bind(value)
         lastSeed = null
@@ -162,13 +182,14 @@ class StoryManager private constructor(
     }
 
     /** Gets warnings such as an unknown `fmt` mode or an unbalanced style marker. Default null: the engine logs nothing. */
-    var log: HdgifeLog? = null
+    public var log: HdgifeLog? = null
 
     /** Tag key that names the speaker of a single line. Compared case-sensitively. Default `"speaker"`. */
-    var speakerTagKey: String = "speaker"
+    public var speakerTagKey: String = "speaker"
 
     /** Tag key that declares choice requirements. Default `"requires"`. */
-    var requirementsTagKey: String = "requires"
+    @ExperimentalHdgifeApi
+    public var requirementsTagKey: String = "requires"
 
     /**
      * Cleans the plain text of each output line and choice, after style markers are removed. Default [cleanLine]
@@ -176,13 +197,22 @@ class StoryManager private constructor(
      * or styles. Return the text unchanged to turn cleaning off. Spans and markers follow the cleaned text; a
      * cleaner that only removes characters keeps them exact (see `parseStyles`).
      */
-    var textCleaner: (String) -> String = ::cleanLine
+    public var textCleaner: (String) -> String = ::cleanLine
 
     /** Format used by ink's `stat_text` and `stat_text_of` when [formatOverride] has nothing for the stat. Default 0 decimals, round half away from zero. */
-    var numberFormat: NumberFormat = NumberFormat(decimals = 0, rounding = Rounding.ROUND)
+    public var numberFormat: NumberFormat = NumberFormat(decimals = 0, rounding = Rounding.ROUND)
 
-    /** Optional per-stat format. Return null to use [numberFormat]. Default null. Called each time ink prints a stat, so keep it cheap. */
-    var formatOverride: ((entityId: String, statName: String) -> NumberFormat?)? = null
+    /**
+     * Per-stat format. Its `formatFor` returns null to use [numberFormat]. Default: always null. Called each time ink
+     * prints a stat, so keep it cheap. Assign `NumberFormatOverride { entity, stat -> ... }` or use the helper
+     * `formatOverride { entity, stat -> ... }`.
+     */
+    public var formatOverride: NumberFormatOverride = NumberFormatOverride { _, _ -> null }
+
+    /** Sets [formatOverride] from a lambda. */
+    public fun formatOverride(override: NumberFormatOverride) {
+        formatOverride = override
+    }
 
     /**
      * Whether ink functions declared `EXTERNAL` may fall back to the ink function of the same name when
@@ -190,7 +220,7 @@ class StoryManager private constructor(
      * fallbacks). If you set it to false, every `EXTERNAL` in the story needs a Kotlin binding. Applied to [story] now
      * and to any story assigned later.
      */
-    var allowExternalFunctionFallbacks: Boolean = true
+    public var allowExternalFunctionFallbacks: Boolean = true
         set(value) {
             field = value
             story.setAllowExternalFunctionFallbacks(value)
@@ -200,23 +230,38 @@ class StoryManager private constructor(
      * Turns a value of a type the engine doesn't map itself (anything but numbers, booleans, strings, chars and
      * enums) into something ink can hold: an `Int`, `Float`, `Boolean` or `String` (other results go through the
      * normal mapping once more, without this hook). Used for stats, [setVariable] and the results of
-     * [bindFunction] functions. Default null: such values become `toString()`. Returning null also means
-     * `toString()`.
+     * [bindFunction] functions. Default: converts nothing, so such values become `toString()`. Returning null also
+     * means `toString()`. Assign `ValueConverter { value -> ... }` or use the helper `valueConverter { value -> ... }`.
      */
-    var valueConverter: ((value: Any) -> Any?)? = null
+    public var valueConverter: ValueConverter = ValueConverter { null }
+
+    /** Sets [valueConverter] from a lambda. */
+    public fun valueConverter(converter: ValueConverter) {
+        valueConverter = converter
+    }
 
     /**
      * Called for each `emit` event, in order, while [next] builds a step: after the story has run to the next choice
      * or the end, and before the choices are read. A requirement on a choice therefore sees what the game changed
      * here. (A condition that ink itself evaluates, like `{coin >= 3} [Buy]`, is decided inside the story before the
      * event arrives, so keep such state in ink variables or use `# requires:`.) The same events are on
-     * [DialogStep.events]. Default null. The engine does nothing with events itself. An exception thrown here comes
+     * [DialogStep.events]. Default: does nothing. The engine does nothing with events itself. An exception thrown here comes
      * out of [next] as a [StoryStepException] whose step holds the lines and events so far.
      */
-    var onEvent: ((StoryEvent) -> Unit)? = null
+    public var onEvent: StoryEventListener = StoryEventListener { }
+
+    /** Sets [onEvent] from a lambda: `onEvent { event -> ... }`. */
+    public fun onEvent(listener: StoryEventListener) {
+        onEvent = listener
+    }
 
     private var fallbackSpeaker: String? = null
-    private var lastSeed: Int? = null
+    /**
+     * The last seed set through [seedRandom], or null if none since the story was assigned, [loadState] or [reset]
+     * (the seed itself still lives in the loaded state). There is no way to unseed: call [reset] and don't seed.
+     */
+    public var lastSeed: Int? = null
+        private set
     private var openStyles: List<Style> = emptyList()
     private var eventLine = 0
     private val pendingEvents = ArrayList<PendingEvent>()
@@ -238,7 +283,7 @@ class StoryManager private constructor(
      * a mode, set by the entry point: true for the constructor and [replaceStory], false for [forPlainStory] and
      * [replacePlainStory].
      */
-    var lookaheadSafe: Boolean = lookaheadSafeMode
+    public var isLookaheadSafe: Boolean = lookaheadSafeMode
         private set
 
     /**
@@ -246,7 +291,7 @@ class StoryManager private constructor(
      * Stored in the ink variable `hdgife_speaker` when the story includes hdgife.ink, so it is part of
      * [saveState]. Otherwise it is a plain field and not saved.
      */
-    var speaker: String?
+    public var speaker: String?
         get() = if (hasSpeakerVariable()) (story.variablesState.get(SPEAKER_VARIABLE) as? String)?.ifEmpty { null } else fallbackSpeaker
         set(value) {
             if (hasSpeakerVariable()) story.variablesState.set(SPEAKER_VARIABLE, value ?: "") else fallbackSpeaker = value
@@ -259,6 +304,10 @@ class StoryManager private constructor(
         checkLibrary(story)
         story.setAllowExternalFunctionFallbacks(allowExternalFunctionFallbacks)
         bind(story)
+    }
+
+    init {
+        configure()
     }
 
     // ---- ink binding -------------------------------------------------------------------------------------------
@@ -307,7 +356,7 @@ class StoryManager private constructor(
     }
 
     private fun attach(target: Story, name: String, safe: Boolean, function: Story.ExternalFunction<Any?>) {
-        if (safe && lookaheadSafe) (target as HdgifeStory).bindLookaheadSafe(name, function)
+        if (safe && isLookaheadSafe) (target as HdgifeStory).bindLookaheadSafe(name, function)
         else target.bindExternalFunction(name, function, false)
         attached[name] = function
     }
@@ -336,10 +385,11 @@ class StoryManager private constructor(
      *
      * [lookaheadSafe] says the function may be called early or twice because ink runs ahead for glue. Leave it false
      * (default) for anything with a side effect, and know it then ends glue lookahead. Make it true only for
-     * pure reads. Safe functions only work inside strings in [lookaheadSafe] mode. Bindings
+     * pure reads. Safe functions only work inside strings in [isLookaheadSafe] mode. Bindings
      * survive [replaceStory]. Throws [IllegalArgumentException] if [name] is already bound by something else.
      */
-    fun bindFunction(name: String, lookaheadSafe: Boolean = false, function: (FunctionArgs) -> Any?) {
+    @JvmOverloads
+    public fun bindFunction(name: String, lookaheadSafe: Boolean = false, function: (FunctionArgs) -> Any?) {
         if (name in userFunctions) unbindFunction(name)
         require(story.getExternalFunction(name) == null) { "'$name' is already bound" }
         val def = UserFunction(lookaheadSafe, function)
@@ -348,7 +398,7 @@ class StoryManager private constructor(
     }
 
     /** Removes a function bound with [bindFunction]. Does nothing if there is none. */
-    fun unbindFunction(name: String) {
+    public fun unbindFunction(name: String) {
         if (userFunctions.remove(name) == null) return
         val own = attached.remove(name)
         if (own != null && story.getExternalFunction(name) === own) story.unbindExternalFunction(name)
@@ -399,7 +449,7 @@ class StoryManager private constructor(
      * Maps [value] to the ink type the engine would use: `Int`, `Float`, `Boolean` or `String`, or null for null.
      * Rules are in [NarrativeStateProvider]. Anything unmapped goes through [valueConverter], then `toString()`.
      */
-    fun toInk(value: Any?): Any? = when (value) {
+    internal fun toInk(value: Any?): Any? = when (value) {
         null -> null
         is Int -> value
         is Short, is Byte -> (value as Number).toInt()
@@ -411,7 +461,7 @@ class StoryManager private constructor(
         is CharSequence, is Char -> value.toString()
         is Enum<*> -> value.name
         else -> {
-            val converted = valueConverter?.invoke(value)
+            val converted = valueConverter.convert(value)
             if (converted != null && converted !== value) toInkBasic(converted) else value.toString()
         }
     }
@@ -437,7 +487,7 @@ class StoryManager private constructor(
 
     private fun statText(entity: String?, stat: Any?): Any {
         val raw = rawStat(entity, stat)
-        val format = if (entity != null && stat != null) formatOverride?.invoke(entity, stat.toString()) else null
+        val format = if (entity != null && stat != null) formatOverride.formatFor(entity, stat.toString()) else null
         val formatter = format ?: numberFormat
         return when (raw) {
             null -> formatter.format(0)
@@ -461,7 +511,7 @@ class StoryManager private constructor(
      * declared with `VAR` in the ink source are skipped without asking the provider, and so are stats the provider
      * returns null for. Does nothing without a [stateProvider]. Returns the names of the variables that were skipped.
      */
-    fun syncStatsToInk(entityId: String, statNames: List<String>): List<String> {
+    public fun syncStats(entityId: String, statNames: List<String>): List<String> {
         val provider = stateProvider ?: return emptyList()
         val variables = story.variablesState
         var skipped: ArrayList<String>? = null
@@ -480,17 +530,18 @@ class StoryManager private constructor(
     // ---- scenes, seed, save ------------------------------------------------------------------------------------
 
     /**
-     * Sets the current [speaker] and jumps to [knotPath] (`knot` or `knot.stitch`).
+     * Sets the current [speaker] and jumps to [path] (`knot` or `knot.stitch`).
      * Call [next] afterwards to read the output. Throws [StoryPathException] if ink cannot find the path (ink's
      * `StoryException` is its cause); the speaker is then left as it was.
      */
-    fun beginScene(knotPath: String, speakerId: String? = null) {
+    @JvmOverloads
+    public fun beginScene(path: String, speaker: String? = null) {
         try {
-            story.choosePathString(knotPath)
+            story.choosePathString(path)
         } catch (e: StoryException) {
-            throw StoryPathException(knotPath, e)
+            throw StoryPathException(path, e)
         }
-        speaker = speakerId
+        this.speaker = speaker
     }
 
     /**
@@ -501,7 +552,7 @@ class StoryManager private constructor(
      * sequence), so [saveState] and [loadState] carry it and the sequence continues exactly. The engine
      * can't set the seed directly: blade-ink keeps that setter package-private.
      */
-    fun seedRandom(seed: Int) {
+    public fun seedRandom(seed: Int) {
         if (!story.hasFunction(SEED_FUNCTION)) {
             throw IncompatibleLibraryException("Seeding needs INCLUDE hdgife.ink in the story", 0)
         }
@@ -510,26 +561,13 @@ class StoryManager private constructor(
     }
 
     /**
-     * The last seed set through this manager, or null if none since the story was assigned or [loadState]
-     * was called (the seed itself still lives in the loaded state). Setting calls [seedRandom] and throws
-     * [IncompatibleLibraryException] if the story doesn't include hdgife.ink, and [IllegalArgumentException] for null
-     * (there is no way to unseed; call [reset] and don't seed).
-     */
-    var seed: Int?
-        get() = lastSeed
-        set(value) {
-            requireNotNull(value) { "The seed can't be set to null" }
-            seedRandom(value)
-        }
-
-    /**
      * The whole story state as one JSON string: variables, position, visit counts, the random seed, [speaker]
      * (with hdgife.ink) and the styles that are open. Store it as is and only load it into the same compiled
      * story. It is a small versioned envelope around ink's own state JSON:
      * `{"v":1,"ink":"<ink state>","styles":[{"name":"color","value":"red","params":{}}]}`, plus `"speaker"` when the
      * speaker is kept outside ink (no hdgife.ink). Treat the format as opaque.
      */
-    fun saveState(): String {
+    public fun saveState(): String {
         val writer = SimpleJson.Writer()
         writer.writeObjectStart()
         writer.writeProperty("v", SAVE_VERSION)
@@ -563,7 +601,7 @@ class StoryManager private constructor(
      * a state that ink refuses (the story doesn't match; ink's exception is the cause). Stat values are not part of
      * it. Pending events are dropped.
      */
-    fun loadState(json: String) {
+    public fun loadState(json: String) {
         var inkJson = json
         var styles = emptyList<Style>()
         var savedSpeaker: String? = null
@@ -623,7 +661,7 @@ class StoryManager private constructor(
      * recompile. To run different sources, let your game choose and order them, compile with `InkCompilerService`,
      * and build a new `StoryManager` (or assign [story]) and optionally [loadState] a saved state.
      */
-    fun reset() {
+    public fun reset() {
         story.resetState()
         lastSeed = null
         fallbackSpeaker = null
@@ -652,7 +690,7 @@ class StoryManager private constructor(
      * styles and events cover exactly what the partial step holds, and the events of the failed Continue are dropped.
      * The ink story itself is in whatever state ink left it in, so after a failure the usual move is [loadState] or [reset].
      */
-    fun next(): DialogStep {
+    public fun next(): DialogStep {
         val s = story
         val lines = ArrayList<DialogLine>()
         val stepTags = ArrayList<String>()
@@ -722,12 +760,12 @@ class StoryManager private constructor(
     }
 
     private fun notifyEvents(events: List<StoryEvent>) {
-        val listener = onEvent ?: return
-        for (event in events) listener(event)
+        val listener = onEvent
+        for (event in events) listener.onEvent(event)
     }
 
     /** Picks choice [index] (as in [DialogChoice.index]) and returns the following [DialogStep]. Open styles carry over. */
-    fun choose(index: Int): DialogStep {
+    public fun choose(index: Int): DialogStep {
         val count = story.currentChoices.size
         require(index in 0 until count) { "No choice $index, there are $count" }
         story.chooseChoiceIndex(index)
@@ -744,10 +782,10 @@ class StoryManager private constructor(
      * A value or operator that doesn't fit the stat's type is a mismatch: unmet, and logged.
      * Clauses that can't be read are logged and returned unmet with their raw text.
      */
-    private fun requirementsOf(tags: Tags): List<ChoiceRequirement> {
+    private fun requirementsOf(tags: Tags): List<RequirementResult> {
         val clauses = tags.all(requirementsTagKey)
         if (clauses.isEmpty()) return emptyList()
-        val result = ArrayList<ChoiceRequirement>()
+        val result = ArrayList<RequirementResult>()
         val current = speaker
         for (value in clauses) {
             for (part in splitClauses(value)) {
@@ -759,13 +797,13 @@ class StoryManager private constructor(
         return result
     }
 
-    private fun evaluateRequirement(raw: String, currentSpeaker: String?): ChoiceRequirement {
+    private fun evaluateRequirement(raw: String, currentSpeaker: String?): RequirementResult {
         val match = REQUIREMENT.matchEntire(raw)
         val op = match?.let { Comparison.parse(it.groupValues[3]) }
         val text = match?.groupValues?.get(4)?.trim()?.let(::unquote)
         if (match == null || op == null || text.isNullOrEmpty()) {
             log?.log("Requirement: cannot read '$raw'")
-            return ChoiceRequirement(null, "", null, null, null, false, raw)
+            return RequirementResult.Unreadable(raw)
         }
         val entity = match.groupValues[1].ifEmpty { null }?.let(::unquote) ?: currentSpeaker
         val stat = unquote(match.groupValues[2])
@@ -773,21 +811,24 @@ class StoryManager private constructor(
         val numberTarget: Any? = number?.let { text.toIntOrNull() ?: it.toFloat() }
         if (entity == null) {
             log?.log("Requirement: '$raw' names no entity and there is no speaker")
-            return ChoiceRequirement(null, stat, op, numberTarget ?: text, null, false, raw)
+            return RequirementResult.MissingStat(raw, null, stat, op, numberTarget ?: text)
         }
         val actual = statInk(entity, stat)
-            ?: return ChoiceRequirement(entity, stat, op, numberTarget ?: text, null, false, raw)
+            ?: return RequirementResult.MissingStat(raw, entity, stat, op, numberTarget ?: text)
 
-        fun mismatch(why: String): ChoiceRequirement {
+        fun mismatch(why: String): RequirementResult {
             log?.log("Requirement: '$raw' $why")
-            return ChoiceRequirement(entity, stat, op, numberTarget ?: text, actual, false, raw, mismatch = true)
+            return RequirementResult.Mismatch(raw, entity, stat, op, numberTarget ?: text, actual)
         }
+        fun outcome(met: Boolean, target: Any): RequirementResult =
+            if (met) RequirementResult.Met(raw, entity, stat, op, target, actual)
+            else RequirementResult.Unmet(raw, entity, stat, op, target, actual)
         return when (actual) {
             is Int, is Float -> {
-                if (number == null) return mismatch("compares a number to '$text'")
+                if (number == null || numberTarget == null) return mismatch("compares a number to '$text'")
                 val have = (actual as Number).let { if (it is Float) it.toString().toDouble() else it.toDouble() }
                 val want = if (numberTarget is Float) numberTarget.toString().toDouble() else number
-                ChoiceRequirement(entity, stat, op, numberTarget, actual, op.test(have, want), raw)
+                outcome(op.test(have, want), numberTarget)
             }
             is Boolean -> {
                 val want = when (text.lowercase()) {
@@ -796,11 +837,11 @@ class StoryManager private constructor(
                     else -> return mismatch("compares a boolean to '$text'")
                 }
                 if (!op.isEquality) return mismatch("uses ${op.symbol} on a boolean")
-                ChoiceRequirement(entity, stat, op, want, actual, (actual == want) == (op == Comparison.EQUAL), raw)
+                outcome((actual == want) == (op == Comparison.EQUAL), want)
             }
             else -> {
                 if (!op.isEquality) return mismatch("uses ${op.symbol} on a string")
-                ChoiceRequirement(entity, stat, op, text, actual, (actual == text) == (op == Comparison.EQUAL), raw)
+                outcome((actual == text) == (op == Comparison.EQUAL), text)
             }
         }
     }
@@ -811,7 +852,7 @@ class StoryManager private constructor(
      * How many `emit` calls the story has made so far: the [StoryEvent.id] of the latest event, 0 before the first.
      * Part of the ink state, so [loadState] sets it back. Save it next to your own handled-events mark if you dedupe by id.
      */
-    val eventCount: Int get() = getVariable(EVENT_SEQ_VARIABLE) as? Int ?: 0
+    public val eventCount: Int get() = getVariable(EVENT_SEQ_VARIABLE) as? Int ?: 0
 
     /**
      * Checks the story and this manager's bindings and returns what it found, without throwing (see [StoryReport]).
@@ -819,7 +860,8 @@ class StoryManager private constructor(
      * `EXTERNAL`s it reports are only those the story calls. The report also covers [observe]d variable names and
      * the `requires` tags of [requirementsTagKey].
      */
-    fun validateStory(): StoryReport = validateStory(
+    @ExperimentalHdgifeApi
+    public fun validateStory(): StoryReport = validateStory(
         story,
         boundFunctions = attached.keys + userFunctions.keys,
         observedVariables = observations.map { it.name },
@@ -830,20 +872,20 @@ class StoryManager private constructor(
      * Names of all global variables declared in the story (`VAR` and `CONST` are not distinguished), sorted.
      * Includes the library's own, which start with `hdgife_`.
      */
-    val variableNames: List<String> get() = story.variablesState.toList().sorted()
+    public val variableNames: List<String> get() = story.variablesState.toList().sorted()
 
     /**
      * The current value of ink variable [name]: an `Int`, `Float`, `Boolean` or `String` (an `InkList` for lists),
      * or null if the story declares no such variable.
      */
-    fun getVariable(name: String): Any? = story.variablesState.get(name)
+    public fun getVariable(name: String): Any? = story.variablesState.get(name)
 
     /**
      * Typed read: `getVariable("player_hp", Int::class)`, or `variableAs<Int>("player_hp")` from Kotlin. Null when
      * [name] is not declared. An ink int is accepted as a `Float`, `Double` or `Long`, a float as a `Double`. Any
      * other mismatch throws [IllegalArgumentException].
      */
-    fun <T : Any> getVariable(name: String, type: KClass<T>): T? {
+    public fun <T : Any> getVariable(name: String, type: KClass<T>): T? {
         val value = getVariable(name) ?: return null
         val converted: Any? = when {
             type.isInstance(value) -> value
@@ -860,13 +902,13 @@ class StoryManager private constructor(
     }
 
     /** Typed read with the type as a type argument: `variableAs<Int>("player_hp")`. Same rules as [getVariable]. */
-    inline fun <reified T : Any> variableAs(name: String): T? = getVariable(name, T::class)
+    public inline fun <reified T : Any> variableAs(name: String): T? = getVariable(name, T::class)
 
     /**
      * Sets ink variable [name] to [value], mapped like stats (see [NarrativeStateProvider]; an `InkList` is kept).
      * Throws [IllegalArgumentException] if the variable isn't declared. Observers fire as for any change.
      */
-    fun setVariable(name: String, value: Any) {
+    public fun setVariable(name: String, value: Any) {
         require(getVariable(name) != null) { "'$name' is not a variable declared in the story" }
         story.variablesState.set(name, if (value is InkList) value else toInk(value) ?: value)
     }
@@ -877,7 +919,7 @@ class StoryManager private constructor(
      * the one at the last report, not each step in between. [old] starts as the value at the time of this call.
      * Throws [IllegalArgumentException] if the variable isn't declared. Stop it with [unobserve].
      */
-    fun observe(name: String, observer: (old: Any?, new: Any?) -> Unit): VariableObservation {
+    public fun observe(name: String, observer: (old: Any?, new: Any?) -> Unit): VariableObservation {
         require(getVariable(name) != null) { "'$name' is not a variable declared in the story" }
         val observation = VariableObservation(name, observer, this)
         observation.last = getVariable(name)
@@ -896,15 +938,15 @@ class StoryManager private constructor(
     }
 
     /** Stops [observation]. Does nothing if it already stopped. */
-    fun unobserve(observation: VariableObservation) {
-        if (!observation.active) return
-        observation.active = false
+    public fun unobserve(observation: VariableObservation) {
+        if (!observation.isActive) return
+        observation.isActive = false
         observations.remove(observation)
         story.removeVariableObserver(observation.observer, observation.name)
     }
 
     /** Stops every observation of ink variable [name]. */
-    fun unobserve(name: String) {
+    public fun unobserve(name: String) {
         for (observation in observations.filter { it.name == name }) unobserve(observation)
     }
 
@@ -917,7 +959,7 @@ class StoryManager private constructor(
         for (observation in observations.toList()) {
             if (getVariable(observation.name) == null) {
                 log?.log("Observer on '${observation.name}' dropped: the new story doesn't declare it")
-                observation.active = false
+                observation.isActive = false
                 observations.remove(observation)
                 continue
             }
@@ -930,7 +972,7 @@ class StoryManager private constructor(
         for (observation in observations) observation.last = getVariable(observation.name)
     }
 
-    companion object {
+    public companion object {
         private const val SEED_FUNCTION = "hdgife_seed"
         private const val SPEAKER_VARIABLE = "hdgife_speaker"
         private const val EVENT_SEQ_VARIABLE = "hdgife_event_seq"
@@ -939,14 +981,17 @@ class StoryManager private constructor(
 
         /**
          * A manager for a plain [Story] that is not an [HdgifeStory]: the stat functions are bound as not lookahead
-         * safe, so they end glue lookahead (see "Glue and lookahead"). [lookaheadSafe] is false. Prefer an
-         * [HdgifeStory] from `InkCompilerService` and the public constructor.
+         * safe, so they end glue lookahead (see "Glue and lookahead"). [isLookaheadSafe] is false. Prefer an
+         * [HdgifeStory] from `InkCompilerService` and the public constructor. [configure] runs last and sets properties.
          */
-        fun forPlainStory(
+        @JvmStatic
+        @JvmOverloads
+        public fun forPlainStory(
             story: Story,
             stateProvider: NarrativeStateProvider? = null,
-            variableNamer: (entityId: String, statName: String) -> String = ::defaultVariableName,
-        ): StoryManager = StoryManager(story, false, stateProvider, variableNamer)
+            configure: StoryManager.() -> Unit = {},
+        ): StoryManager = StoryManager(story, false, stateProvider, configure)
+
         // A name is a plain word (letters, digits, _ and -) or quoted ('...' or "..."), so it can hold spaces, dots and commas.
         private const val NAME = """\x22[^\x22]+\x22|'[^']+'|[\w-]+"""
         private val REQUIREMENT = Regex("""(?:($NAME)\.)?($NAME)\s*(>=|<=|==|!=|>|<)\s*(.+)""")
@@ -988,7 +1033,8 @@ class StoryManager private constructor(
         private const val NO_CHAR = '\u0000'
 
         /** Builds `entityId_statName`, replacing characters outside `[A-Za-z0-9_]` with `_`. */
-        fun defaultVariableName(entityId: String, statName: String): String =
+        @JvmStatic
+        public fun defaultVariableName(entityId: String, statName: String): String =
             "${entityId}_$statName".replace(NOT_NAME, "_")
     }
 }

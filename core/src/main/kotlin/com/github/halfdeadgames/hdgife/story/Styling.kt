@@ -1,5 +1,6 @@
 package com.github.halfdeadgames.hdgife.story
 
+import com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi
 import com.github.halfdeadgames.hdgife.HdgifeLog
 
 /**
@@ -9,29 +10,30 @@ import com.github.halfdeadgames.hdgife.HdgifeLog
  * [value] is the text after the first `=`, as written (quotes removed). [params] are the `key=value` pairs
  * that follow. Both are raw strings, the game reads them as it likes.
  */
-class Style internal constructor(
-    val name: String,
-    val value: String? = null,
-    val params: Map<String, String> = emptyMap(),
+@ExperimentalHdgifeApi
+public class Style internal constructor(
+    public val name: String,
+    public val value: String? = null,
+    public val params: Map<String, String> = emptyMap(),
 ) {
     /** [value] split at commas and trimmed: `shake=2,0.5` gives `["2", "0.5"]`. Empty if there is no value. */
-    val values: List<String> get() = splitValues(value)
+    public val values: List<String> get() = splitValues(value)
 
     /** The named parameter [key], or null. */
-    fun param(key: String): String? = params[key]
+    public fun param(key: String): String? = params[key]
 
     /**
      * The color of this style as RGBA8888 if it is written as hex, else null (a name like `red`, which the
      * game resolves itself). Reads [value], or the parameter [key] when one is given. See [parseHexColor].
      */
-    fun hexColor(key: String? = null): Int? = (if (key == null) value else params[key])?.let(::parseHexColor)
+    public fun hexColor(key: String? = null): Int? = (if (key == null) value else params[key])?.let(::parseHexColor)
 
     override fun equals(other: Any?): Boolean =
         this === other || other is Style && name == other.name && value == other.value && params == other.params
 
     override fun hashCode(): Int = listOf(name, value, params).hashCode()
 
-    override fun toString() = "Style(name=$name, value=$value, params=$params)"
+    override fun toString(): String = "Style(name=$name, value=$value, params=$params)"
 }
 
 /**
@@ -39,20 +41,21 @@ class Style internal constructor(
  * index in the line's plain text where it sits (the marker comes before the character at [offset], and
  * `offset == text.length` means after the last one). The engine doesn't interpret it.
  */
-class TextMarker internal constructor(
-    val name: String,
-    val offset: Int,
-    val value: String? = null,
-    val params: Map<String, String> = emptyMap(),
+@ExperimentalHdgifeApi
+public class TextMarker internal constructor(
+    public val name: String,
+    public val offset: Int,
+    public val value: String? = null,
+    public val params: Map<String, String> = emptyMap(),
 ) {
     /** [value] split at commas and trimmed. */
-    val values: List<String> get() = splitValues(value)
+    public val values: List<String> get() = splitValues(value)
 
     /** The named parameter [key], or null. */
-    fun param(key: String): String? = params[key]
+    public fun param(key: String): String? = params[key]
 
     /** Same as [Style.hexColor]. */
-    fun hexColor(key: String? = null): Int? = (if (key == null) value else params[key])?.let(::parseHexColor)
+    public fun hexColor(key: String? = null): Int? = (if (key == null) value else params[key])?.let(::parseHexColor)
 
     internal fun atOffset(offset: Int) = TextMarker(name, offset, value, params)
 
@@ -61,18 +64,19 @@ class TextMarker internal constructor(
 
     override fun hashCode(): Int = listOf(name, offset, value, params).hashCode()
 
-    override fun toString() = "TextMarker(name=$name, offset=$offset, value=$value, params=$params)"
+    override fun toString(): String = "TextMarker(name=$name, offset=$offset, value=$value, params=$params)"
 }
 
 private fun splitValues(value: String?): List<String> = value?.split(',')?.map(String::trim).orEmpty()
 
 /** A run of plain [text] with the [styles] active over it, outermost first. Empty list means unstyled. */
-class TextSpan internal constructor(val text: String, val styles: List<Style> = emptyList()) {
+@ExperimentalHdgifeApi
+public class TextSpan internal constructor(public val text: String, public val styles: List<Style> = emptyList()) {
     override fun equals(other: Any?): Boolean = this === other || other is TextSpan && text == other.text && styles == other.styles
 
     override fun hashCode(): Int = listOf(text, styles).hashCode()
 
-    override fun toString() = "TextSpan(text=$text, styles=$styles)"
+    override fun toString(): String = "TextSpan(text=$text, styles=$styles)"
 }
 
 /**
@@ -84,7 +88,7 @@ class TextSpan internal constructor(val text: String, val styles: List<Style> = 
  * front of real hex if you also use such names. A bare `#` in ink text starts a tag, so the form without it
  * is the normal one (`<color=ff0000>`). `\#` is ink's escape for a literal `#` and is accepted too.
  */
-fun parseHexColor(text: String): Int? {
+public fun parseHexColor(text: String): Int? {
     val trimmed = text.trim()
     val digits = if (trimmed.startsWith("0x", ignoreCase = true)) trimmed.substring(2) else trimmed.removePrefix("#")
     if (digits.isEmpty() || !digits.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null

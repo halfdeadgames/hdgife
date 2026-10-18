@@ -160,7 +160,7 @@ class EventsTest {
             """.trimIndent(),
         )
         val seen = ArrayList<String>()
-        m.onEvent = { seen += it.name }
+        m.onEvent { seen += it.name }
         val first = m.next()
         assertEquals(listOf("Start here"), first.texts())
         assertEquals(listOf("s"), first.events.map { it.name })
@@ -174,7 +174,7 @@ class EventsTest {
     fun `a plain story reports events once but its emit ends glue lookahead`() {
         val plain = Story(compileLib("A\n~ emit(\"x\")\n<> B\n~ emit(\"y\")\nC").toJson())
         val manager = StoryManager.forPlainStory(plain)
-        assertFalse(manager.lookaheadSafe)
+        assertFalse(manager.isLookaheadSafe)
         val step = manager.next()
         assertEquals(listOf("A", "B", "C"), step.texts())
         assertEquals(listOf("x" to 1, "y" to 2), step.events.map { it.name to it.lineIndex })
@@ -210,7 +210,7 @@ class EventsTest {
     fun `onEvent receives each event in order after the step is built`() {
         val m = managerOf(eventInk)
         val seen = ArrayList<StoryEvent>()
-        m.onEvent = { seen += it }
+        m.onEvent { seen += it }
         val step = m.next()
         assertEquals(step.events, seen)
     }
@@ -409,7 +409,7 @@ class EventsTest {
         m.unobserve(observation)
         m.setVariable("hp", 2)
         assertEquals(1, calls)
-        assertFalse(observation.active)
+        assertFalse(observation.isActive)
         m.unobserve(observation)
     }
 

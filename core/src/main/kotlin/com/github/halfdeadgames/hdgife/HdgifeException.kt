@@ -14,4 +14,4 @@ package com.github.halfdeadgames.hdgife
  * Mistakes in how the API is called (a bad argument, an unknown choice index, an undeclared variable) are not
  * [HdgifeException]s. Those are `IllegalArgumentException` or `IllegalStateException`, as usual in Kotlin.
  */
-abstract class HdgifeException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+public abstract class HdgifeException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)

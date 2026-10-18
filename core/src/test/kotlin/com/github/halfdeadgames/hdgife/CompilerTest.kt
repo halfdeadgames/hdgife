@@ -5,6 +5,8 @@ import com.bladecoder.ink.runtime.HdgifeStory
 import com.github.halfdeadgames.hdgife.compiler.InkCompileException
 import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
 import com.github.halfdeadgames.hdgife.compiler.InkSource
+import com.github.halfdeadgames.hdgife.compiler.compile
+import com.github.halfdeadgames.hdgife.compiler.compileFolder
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import java.io.File
 import java.nio.file.Files
@@ -125,7 +127,7 @@ class CompilerTest {
 
     @Test
     fun `a source that cannot be read is reported with its name`() {
-        val unreadable = InkSource("main.ink", { error("disk gone") })
+        val unreadable = InkSource.lazy("main.ink") { error("disk gone") }
         val e = assertFailsWith<InkCompileException> { compiler.compile(listOf(unreadable)) }
         assertEquals("main.ink", e.source)
         assertContains(e.message!!, "disk gone")
@@ -133,7 +135,7 @@ class CompilerTest {
 
     @Test
     fun `an include that cannot be read is reported with its name`() {
-        val bad = InkSource("bad.ink", { error("no access") })
+        val bad = InkSource.lazy("bad.ink") { error("no access") }
         val e = assertFailsWith<InkCompileException> {
             compiler.compile(listOf(InkSource("main.ink", "INCLUDE bad.ink\nHi"), bad))
         }

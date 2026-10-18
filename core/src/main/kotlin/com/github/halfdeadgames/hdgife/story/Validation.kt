@@ -6,10 +6,12 @@ import com.bladecoder.ink.runtime.Divert
 import com.bladecoder.ink.runtime.Story
 import com.bladecoder.ink.runtime.StringValue
 import com.bladecoder.ink.runtime.Tag
+import com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi
 import com.github.halfdeadgames.hdgife.HdgifeInk
 
-/** How serious a [ValidationIssue] is. */
-enum class Severity {
+/** How serious a [ValidationIssue] is. More levels may be added in a later version, so a `when` over it should have an `else`. */
+@ExperimentalHdgifeApi
+public enum class Severity {
     /** Worth knowing, nothing is wrong. */
     INFO,
 
@@ -20,8 +22,12 @@ enum class Severity {
     ERROR,
 }
 
-/** What a [ValidationIssue] is about, so a game can react to one kind without reading messages. */
-enum class IssueKind {
+/**
+ * What a [ValidationIssue] is about, so a game can react to one kind without reading messages. More kinds may be
+ * added in a later version, so a `when` over it should have an `else`.
+ */
+@ExperimentalHdgifeApi
+public enum class IssueKind {
     /** The story calls an `EXTERNAL` with no Kotlin binding and no ink fallback. [Severity.ERROR]. */
     UNBOUND_EXTERNAL,
 
@@ -40,30 +46,40 @@ enum class IssueKind {
     /** A variable that is observed (or meant to be) is not declared in the story. [Severity.ERROR]. */
     UNDECLARED_OBSERVED_VARIABLE,
 
-    /** A requirement tag has a clause the engine cannot read. [Severity.WARNING]. */
+    /**
+     * A requirement tag has a clause the engine cannot read (at run time that choice would report a
+     * `RequirementResult.Unreadable`). [Severity.WARNING].
+     */
     UNREADABLE_REQUIREMENT,
 }
 
-/** One finding of [validateStory]. [subject] is the name or text it is about (a function, a variable, a clause). */
-class ValidationIssue internal constructor(val severity: Severity, val kind: IssueKind, val subject: String, val message: String) {
+/** One finding of a validation. [subject] is the name or text it is about (a function, a variable, a clause). */
+@ExperimentalHdgifeApi
+public class ValidationIssue internal constructor(
+    public val severity: Severity,
+    public val kind: IssueKind,
+    public val subject: String,
+    public val message: String,
+) {
     override fun equals(other: Any?): Boolean = this === other || other is ValidationIssue &&
         severity == other.severity && kind == other.kind && subject == other.subject && message == other.message
 
     override fun hashCode(): Int = listOf(severity, kind, subject, message).hashCode()
 
-    override fun toString() = "ValidationIssue(severity=$severity, kind=$kind, subject=$subject, message=$message)"
+    override fun toString(): String = "ValidationIssue(severity=$severity, kind=$kind, subject=$subject, message=$message)"
 }
 
-/** The result of [validateStory]: every finding, most serious first. */
-class StoryReport internal constructor(val issues: List<ValidationIssue>) {
-    val errors: List<ValidationIssue> get() = issues.filter { it.severity == Severity.ERROR }
-    val warnings: List<ValidationIssue> get() = issues.filter { it.severity == Severity.WARNING }
-    val infos: List<ValidationIssue> get() = issues.filter { it.severity == Severity.INFO }
+/** The result of a validation: every finding, most serious first. */
+@ExperimentalHdgifeApi
+public class StoryReport internal constructor(public val issues: List<ValidationIssue>) {
+    public val errors: List<ValidationIssue> get() = issues.filter { it.severity == Severity.ERROR }
+    public val warnings: List<ValidationIssue> get() = issues.filter { it.severity == Severity.WARNING }
+    public val infos: List<ValidationIssue> get() = issues.filter { it.severity == Severity.INFO }
 
     /** True when there are no errors. Warnings and infos do not count. */
-    val ok: Boolean get() = errors.isEmpty()
+    public val isOk: Boolean get() = errors.isEmpty()
 
-    fun of(kind: IssueKind): List<ValidationIssue> = issues.filter { it.kind == kind }
+    public fun of(kind: IssueKind): List<ValidationIssue> = issues.filter { it.kind == kind }
 
     override fun equals(other: Any?): Boolean = this === other || other is StoryReport && issues == other.issues
 
@@ -74,7 +90,19 @@ class StoryReport internal constructor(val issues: List<ValidationIssue>) {
 }
 
 /**
- * Checks [story] and reports what is wrong or risky, without throwing. It reads the compiled story and its
+ * Validates a [Story] that has no [StoryManager]. With a manager, call `StoryManager.validateStory()` instead: it also
+ * knows the manager's bindings and observers. Here a function counts as bound when the story itself has a binding for
+ * it, and the requirement tag key is `"requires"`. Nothing is run and the story is not changed.
+ */
+@ExperimentalHdgifeApi
+public object StoryValidator {
+    /** Checks [story] and returns what it found, without throwing. See `StoryManager.validateStory()` for what is covered. */
+    @JvmStatic
+    public fun validate(story: Story): StoryReport = validateStory(story)
+}
+
+/**
+ * Checks [story] and reports what is wrong or risky, without throwing (reached through `StoryManager.validateStory()` and `StoryValidator.validate`). It reads the compiled story and its
  * variables only. Nothing is run, so it does not change the story, and it never calls your bindings.
  *
  * What it covers:
@@ -92,7 +120,7 @@ class StoryReport internal constructor(val issues: List<ValidationIssue>) {
  *   scan of the tags written literally in the ink source. Tags with `{...}` inside, or added at runtime, are not seen,
  *   and whether the entity or stat exists is only known when the game runs, so it is not checked.
  */
-fun validateStory(
+internal fun validateStory(
     story: Story,
     boundFunctions: Set<String> = emptySet(),
     observedVariables: Collection<String> = emptyList(),

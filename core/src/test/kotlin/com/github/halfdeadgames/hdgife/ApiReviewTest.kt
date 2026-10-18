@@ -213,12 +213,12 @@ class ApiReviewTest {
     @Test
     fun `the constructor takes an HdgifeStory and the plain one has its own entry point`() {
         val hdgife: HdgifeStory = compileLib("{stat_of(\"p\", \"hp\")}")
-        assertTrue(StoryManager(hdgife, MapStats().also { it["p", "hp"] = 3 }).lookaheadSafe)
+        assertTrue(StoryManager(hdgife, MapStats().also { it["p", "hp"] = 3 }).isLookaheadSafe)
         val plain = StoryManager.forPlainStory(
             com.bladecoder.ink.runtime.Story(compileLib("{stat_of(\"p\", \"hp\")}").toJson()),
             MapStats().also { it["p", "hp"] = 3 },
         )
-        assertFalse(plain.lookaheadSafe)
+        assertFalse(plain.isLookaheadSafe)
         assertEquals(listOf("3"), plain.next().texts())
     }
 
@@ -266,7 +266,11 @@ class ApiReviewTest {
         val classes = listOf(
             com.github.halfdeadgames.hdgife.story.DialogStep::class, com.github.halfdeadgames.hdgife.story.DialogLine::class,
             com.github.halfdeadgames.hdgife.story.DialogChoice::class, StoryEvent::class,
-            com.github.halfdeadgames.hdgife.story.ChoiceRequirement::class, com.github.halfdeadgames.hdgife.story.ValidationIssue::class,
+            com.github.halfdeadgames.hdgife.story.RequirementResult.Met::class,
+            com.github.halfdeadgames.hdgife.story.RequirementResult.Unmet::class,
+            com.github.halfdeadgames.hdgife.story.RequirementResult.Mismatch::class,
+            com.github.halfdeadgames.hdgife.story.RequirementResult.MissingStat::class,
+            com.github.halfdeadgames.hdgife.story.RequirementResult.Unreadable::class, com.github.halfdeadgames.hdgife.story.ValidationIssue::class,
             com.github.halfdeadgames.hdgife.story.StoryReport::class, TextSpan::class, Style::class, TextMarker::class,
         )
         for (type in classes) {

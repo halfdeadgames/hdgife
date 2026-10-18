@@ -50,6 +50,8 @@ if (JavaVersion.current().isJava9Compatible()) {
         compileJava.options.release.set(11)
 }
 kotlin.compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+// The harness shows styles, requirements and validation, which are experimental in hdgife.
+kotlin.compilerOptions.optIn.add('com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi')
 
 dependencies {
   implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"

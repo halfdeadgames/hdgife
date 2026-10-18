@@ -1,6 +1,5 @@
 package com.github.halfdeadgames.hdgife.compiler
 
-import com.badlogic.gdx.files.FileHandle
 import com.bladecoder.ink.compiler.Compiler
 import com.bladecoder.ink.compiler.IFileHandler
 import com.bladecoder.ink.runtime.Error.ErrorHandler
@@ -32,10 +31,13 @@ import java.io.FileNotFoundException
  * math helpers. They work together or alone, and are never added automatically.
  *
  * Errors are [InkCompileException]s. Ink's messages name the source and line.
+ *
+ * Sources from libGDX `FileHandle`s are compiled with the extension functions in GdxSources.kt (`compile(file)`,
+ * `compileFolder(folder)`, `InkSource.of(file)`), which keep gdx types out of this class.
  */
-class InkCompilerService {
+public class InkCompilerService {
     /** Gets ink warnings and notes. Null means they are dropped. */
-    var log: HdgifeLog? = null
+    public var log: HdgifeLog? = null
 
     init {
         // FLOOR, CEILING and INT crash on floats in Blade Ink 1.3.2, see InkNativePatch
@@ -43,7 +45,7 @@ class InkCompilerService {
     }
 
     /** Compiles [sources]. The first is the root and the others are included after it, in order. */
-    fun compile(sources: List<InkSource>): HdgifeStory {
+    public fun compile(sources: List<InkSource>): HdgifeStory {
         require(sources.isNotEmpty()) { "No ink sources given" }
         val byName = LinkedHashMap<String, InkSource>()
         for (source in sources) {
@@ -67,33 +69,11 @@ class InkCompilerService {
     }
 
     /** Compiles [main] as the root, then [extras] in the order given. */
-    fun compile(main: InkSource, extras: List<InkSource> = emptyList()): HdgifeStory = compile(listOf(main) + extras)
-
-    /** Same with files, read as UTF-8. Includes not in the list are looked up next to the including file. */
-    fun compile(main: FileHandle, extras: List<FileHandle> = emptyList()): HdgifeStory =
-        compile((listOf(main) + extras).map(InkSource::of))
-
-    /**
-     * Compiles the `.ink` files of [folder]. Paths are compared as text, case-sensitive, with `/` as separator.
-     * The root is `main.ink` in the folder if there is one, else the first file in that order.
-     * The rest follow in that order. Control the order with file names (`000_base.ink`, `010_extra.ink`)
-     * or use [compile] with your own list. [recursive] also takes files in subfolders. Throws if there are none.
-     */
-    fun compileFolder(folder: FileHandle, recursive: Boolean = true): HdgifeStory {
-        val files = inkFiles(folder, recursive)
-        val root = folder.path().replace('\\', '/').trimEnd('/')
-        fun relative(file: FileHandle): String {
-            val path = file.path().replace('\\', '/')
-            return if (path.startsWith("$root/")) path.substring(root.length + 1) else file.name()
-        }
-        val sorted = files.sortedBy { relative(it) }
-        if (sorted.isEmpty()) throw InkCompileException(listOf("No .ink files in '${folder.path()}'"))
-        val main = sorted.firstOrNull { relative(it) == "main.ink" } ?: sorted[0]
-        return compile(main, sorted.filter { it !== main })
-    }
+    @JvmOverloads
+    public fun compile(main: InkSource, extras: List<InkSource> = emptyList()): HdgifeStory = compile(listOf(main) + extras)
 
     /** Loads a story from compiled JSON, as made by `story.toJson()`. No compiler work is done. */
-    fun loadCompiled(json: String): HdgifeStory {
+    public fun loadCompiled(json: String): HdgifeStory {
         val story = try {
             HdgifeStory(json)
         } catch (e: Exception) {
@@ -121,15 +101,6 @@ class InkCompilerService {
         }
         return story
     }
-
-    private fun inkFiles(dir: FileHandle, recursive: Boolean): List<FileHandle> =
-        dir.list().flatMap { child ->
-            when {
-                child.isDirectory -> if (recursive) inkFiles(child, true) else emptyList()
-                child.extension() == "ink" -> listOf(child)
-                else -> emptyList()
-            }
-        }
 
     private class SourceReadException(val sourceName: String, cause: Throwable) :
         RuntimeException("Cannot read ink source '$sourceName': ${cause.message}", cause)
