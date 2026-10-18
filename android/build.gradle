@@ -11,6 +11,8 @@ android {
       manifest.srcFile 'AndroidManifest.xml'
       res.directories.add('res')
       assets.directories.add('../assets')
+      // Android only: the TrueType fonts the harness draws crisp text with (see AndroidFonts)
+      assets.directories.add('assets')
       jniLibs.directories.add('libs')
     }
   }
@@ -57,10 +59,15 @@ dependencies {
   coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:$androidDesugaringLibraryVersion"
   implementation project(':harness')
   implementation "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
+  implementation "com.badlogicgames.gdx:gdx-freetype:$gdxVersion"
   natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
+  natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-armeabi-v7a"
   natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
+  natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-arm64-v8a"
   natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86"
+  natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-x86"
   natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"
+  natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-x86_64"
 }
 
 // Precompiled ink. By default the harness compiles ink/main.ink on the device at startup (runtime compile, the case

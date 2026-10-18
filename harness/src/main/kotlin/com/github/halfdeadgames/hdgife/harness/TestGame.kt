@@ -65,10 +65,12 @@ private fun inkFiles(dir: FileHandle): List<FileHandle> =
  * The harness. [onReady] is the script mode hook: it is called on the render thread once the story is compiled
  * and the dialog screen is showing. The UI test uses it to drive the screen; a normal run leaves it null.
  * [onFailure] gets the error when the story fails to compile or the screen fails to start, so a test can fail fast.
+ * [fonts] is the optional source of crisp fonts at the real pixel size (the Android launcher gives one).
  */
 class TestGame(
     private val onReady: ((DialogScreen) -> Unit)? = null,
     private val onFailure: ((Throwable) -> Unit)? = null,
+    private val fonts: FontSource? = null,
 ) : KtxGame<KtxScreen>() {
     /** Called after each frame is drawn, before the buffers swap. The only place a screenshot sees the frame. */
     var afterRender: (() -> Unit)? = null
@@ -87,7 +89,7 @@ class TestGame(
                 val manager = StoryManager(story, provider) {
                     log = HdgifeLog { logger.info { it } }
                 }
-                val screen = DialogScreen(manager, provider, compiler)
+                val screen = DialogScreen(manager, provider, compiler, fonts)
                 addScreen(screen)
                 setScreen<DialogScreen>()
                 onReady?.invoke(screen)

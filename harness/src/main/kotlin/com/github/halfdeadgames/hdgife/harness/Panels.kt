@@ -8,10 +8,13 @@ import com.badlogic.gdx.scenes.scene2d.InputListener
 import com.badlogic.gdx.scenes.scene2d.actions.Actions
 import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane
+import com.badlogic.gdx.scenes.scene2d.ui.Cell
 import com.badlogic.gdx.scenes.scene2d.ui.Skin
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener
+import com.badlogic.gdx.scenes.scene2d.utils.Drawable
+import com.badlogic.gdx.utils.Align
 import com.github.halfdeadgames.hdgife.story.DialogLine
 import com.github.halfdeadgames.hdgife.story.DialogStep
 import com.github.halfdeadgames.hdgife.story.StoryEvent
@@ -25,6 +28,13 @@ enum class ViewMode { SPLIT, RAW, RENDERED }
 enum class ChoiceMode { HIDE, GREY, SHOW }
 
 internal const val CHOICE_STYLE = "choice"
+
+/** A tab button (checked = the open view) and the small label style. Both exist only in the touch layout. */
+internal const val TAB_STYLE = "tab"
+internal const val SMALL_STYLE = "small"
+
+/** A flat color from the skin's white pixel. */
+internal fun Skin.tint(r: Float, g: Float, b: Float): Drawable = newDrawable("white", Color(r, g, b, 1f))
 
 private val DIM = Color(0.62f, 0.62f, 0.62f, 1f)
 
@@ -61,18 +71,28 @@ internal fun monoFont(skin: Skin, file: com.badlogic.gdx.files.FileHandle): Bitm
 }
 
 /** Left panel: the step exactly as the engine gave it, scrollable, in a small monospace-ish font. */
-class RawPanel(skin: Skin, font: BitmapFont) : Table() {
+class RawPanel(skin: Skin, font: BitmapFont, touch: Boolean = false) : Table() {
     private val title = Label("RAW  the engine's DialogStep", skin)
-    private val body = Label("", Label.LabelStyle(font, Color.LIGHT_GRAY)).apply { wrap = true }
-    private val bodyTable = Table().apply { top().left().pad(0f, 4f, 0f, 4f); add(body).growX() }
+    private val body = Label("", Label.LabelStyle(font, if (touch) Color(0.84f, 0.85f, 0.88f, 1f) else Color.LIGHT_GRAY)).apply { wrap = true }
+    private val bodyTable = Table().apply {
+        if (touch) top().left().pad(12f) else top().left().pad(0f, 4f, 0f, 4f)
+        add(body).growX()
+    }
     private val pane = ScrollPane(bodyTable, skin).apply {
         setScrollingDisabled(true, false)
-        setFadeScrollBars(false)
+        // a finger scrolls by dragging, so the bars only appear while moving
+        setFadeScrollBars(touch)
+        setScrollbarsOnTop(touch) // no reserved strip on the right of the text
         scrollOnHover()
     }
 
     init {
-        add(title).left().padBottom(4f).row()
+        if (touch) {
+            // the tabs already name the view, so the panel is a darker sheet of its own
+            background(skin.tint(0.06f, 0.065f, 0.08f))
+        } else {
+            add(title).left().padBottom(4f).row()
+        }
         add(pane).grow()
     }
 
@@ -97,21 +117,45 @@ class RawPanel(skin: Skin, font: BitmapFont) : Table() {
  * markers written where they sit, events as gold notes where they happened, and choice buttons that follow
  * the [ChoiceMode]. The test reads it through [labels] and [choiceButtons].
  */
-class RenderedPanel(private val skin: Skin, private val onChoose: (Int) -> Unit) : Table() {
+class RenderedPanel(private val skin: Skin, private val touch: Boolean = false, private val onChoose: (Int) -> Unit) : Table() {
     private val title = Label("RENDERED  what a player would see", skin)
-    private val lineTable = Table().apply { top().left().pad(0f, 4f, 0f, 4f) }
+    private val lineTable = Table().apply {
+        if (touch) {
+            // a dialog box: a lighter card with room around the text
+            top().left().pad(16f)
+            background(this@RenderedPanel.skin.tint(0.14f, 0.155f, 0.2f))
+        } else {
+            top().left().pad(0f, 4f, 0f, 4f)
+        }
+    }
     private val pane = ScrollPane(lineTable, skin).apply {
         setScrollingDisabled(true, false)
-        setFadeScrollBars(false)
+        setFadeScrollBars(touch)
+        setScrollbarsOnTop(touch) // no reserved strip on the right of the text
         scrollOnHover()
     }
     private val choiceTable = Table()
+    // on a phone the choices scroll on their own when there are more than fit, so the text always keeps some room
+    private val choicePane = ScrollPane(choiceTable, skin).apply {
+        setScrollingDisabled(true, false)
+        setFadeScrollBars(true)
+        setScrollbarsOnTop(true)
+        setOverscroll(false, false)
+    }
+    private val choiceCell: Cell<*>
     private val speakers = SpeakerColors()
 
     init {
-        add(title).left().padBottom(4f).row()
+        if (!touch) add(title).left().padBottom(4f).row()
         add(pane).grow().row()
-        add(choiceTable).growX().padTop(8f)
+        choiceCell = if (touch) add(choicePane).growX().padTop(10f) else add(choiceTable).growX().padTop(8f)
+    }
+
+    /** Touch layout only: the most height the choices may take before they scroll. */
+    fun limitChoices(maxHeight: Float) {
+        if (!touch) return
+        choiceCell.maxHeight(maxHeight)
+        invalidateHierarchy()
     }
 
     /** Every row of the text area, top to bottom: lines, event notes, tags and the open-style note. */
@@ -121,11 +165,12 @@ class RenderedPanel(private val skin: Skin, private val onChoose: (Int) -> Unit)
     val choiceButtons: List<TextButton> get() = choiceTable.children.filterIsInstance<TextButton>()
 
     private fun addRow(markup: String, color: Color? = null): Label {
-        val label = Label(markup, skin).apply {
+        // tags and events are side notes: the smaller font on a phone
+        val label = (if (touch && color != null) Label(markup, skin, SMALL_STYLE) else Label(markup, skin)).apply {
             wrap = true
             if (color != null) this.color.set(color)
         }
-        lineTable.add(label).growX().padBottom(4f).row()
+        lineTable.add(label).growX().padBottom(if (touch) if (color != null) 8f else 14f else 4f).row()
         return label
     }
 
@@ -170,11 +215,19 @@ class RenderedPanel(private val skin: Skin, private val onChoose: (Int) -> Unit)
         for (choice in step.choices) {
             if (!choice.isAvailable && mode == ChoiceMode.HIDE) continue
             val button = scene2d.textButton("", CHOICE_STYLE)
-            button.label.setText(choiceMarkup(choice))
+            val markup = choiceMarkup(choice)
+            // the requirement hint goes on its own line on a phone, where the button is narrow
+            button.label.setText(if (touch) markup.replace("  [#ff8a80](needs", "${Char(10)}[#ff8a80](needs") else markup)
             button.label.wrap = true
+            if (touch) {
+                button.label.setAlignment(Align.left)
+                button.labelCell.growX()
+                button.pad(12f, 16f, 12f, 16f)
+            }
             if (!choice.isAvailable && mode == ChoiceMode.GREY) button.isDisabled = true
             button.onChange { onChoose(choice.index) }
-            choiceTable.add(button).growX().padBottom(4f).row()
+            // 56dp: more than the 48dp that Android asks for a touch target
+            choiceTable.add(button).growX().minHeight(if (touch) 56f else 0f).padBottom(if (touch) 8f else 4f).row()
         }
     }
 }
