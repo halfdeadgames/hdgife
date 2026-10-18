@@ -127,8 +127,8 @@ He serves the {stat("faction")}. Stance: {stat("stance")}. {stat("is_injured"): 
 Ilse pours something amber into a chipped cup. {stat("is_injured"): She winces and shifts her bandaged arm.} {stat("mood") > 60: "Sit, sit."|"What do you want?"} The fire {&crackles|spits|settles}. # mood: warm
 "<b>Rule one: <em>never</em> ask what is in the crates.</b>" She says it {stat("tiredness") > 60: wearily|lightly}, and she means it.
 She nods at Varga, who is at {stat_text_of("varga", "mood")} percent of a good mood. # speaker: narrator
-<em>She lowers her voice, and her eyes keep going to the cellar door,
-the way a dog watches a pot.</em> {chance(invert(stat("sanity"))): {~She hums off key.|She counts her keys twice.}}
+<em>She lowers her voice.
+Her eyes keep going to the cellar door, the way a dog watches a pot.</em> {chance(invert(stat("sanity"))): {~She hums off key.|She counts her keys twice.}}
 + [Buy a flask of rum for 3 coin # requires: player.coin >= 3]
   ~ emit2("spend", "coin", 3)
   ~ emit1("give_item", "rum")

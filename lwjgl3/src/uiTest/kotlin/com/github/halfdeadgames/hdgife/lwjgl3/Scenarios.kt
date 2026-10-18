@@ -191,8 +191,8 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
             "narrator: She nods at Varga, who is at 40 percent of a good mood.", "# speaker: narrator")
         expect("[#ffffff]Rule one: [][#ffd27f]never[][#ffffff] ask what is in the crates.[]" in markupRow("Rule one")) { "Nested bold and em: ${markupRow("Rule one")}" }
         // a style left open over a line break
-        expect("[#ffd27f]She lowers her voice, and her eyes keep going to the cellar door,[]" in markupRow("She lowers her voice")) { "em, first line" }
-        expect("[#ffd27f]the way a dog watches a pot.[]" in markupRow("the way a dog")) { "em must carry onto the second line" }
+        expect("[#ffd27f]She lowers her voice.[]" in markupRow("She lowers her voice")) { "em, first line" }
+        expect("[#ffd27f]Her eyes keep going to the cellar door, the way a dog watches a pot.[]" in markupRow("Her eyes keep going")) { "em must carry onto the second line" }
         expectEquals(5, buttons.size, "ilse choices")
         expect(buttons.none { it.isDisabled }) { "Everything is open for Ilse by default: ${buttons.map(::buttonText)}" }
         expect(buttonText(buttons[3]) == "Say it |pause=0.4|with charm") { "Marker in a choice: ${buttonText(buttons[3])}" }
