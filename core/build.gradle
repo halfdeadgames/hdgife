@@ -39,6 +39,65 @@ object Hdgife {
 }
 sourceSets.main.kotlin.srcDir(generateVersion)
 
+// HdgifeInk (the library version and the reserved function names) is read from the two bundled ink files, so the
+// Kotlin side can never drift from them: the version is `CONST hdgife_version` in hdgife.ink, the reserved names are
+// every `=== function` and `EXTERNAL` of hdgife.ink and hdgife_util.ink.
+def generatedInkDir = layout.buildDirectory.dir('generated/hdgifeInk/kotlin')
+def generateInkLibrary = tasks.register('generateInkLibrary') {
+  def coreFile = file('src/main/resources/hdgife/hdgife.ink')
+  def utilFile = file('src/main/resources/hdgife/hdgife_util.ink')
+  def outDir = generatedInkDir
+  inputs.files(coreFile, utilFile)
+  outputs.dir(outDir)
+  doLast {
+    def functionNames = { File f ->
+      def found = new LinkedHashSet<String>()
+      f.eachLine('UTF-8') { line ->
+        def m = (line =~ /^(?:===\s*function|EXTERNAL)\s+(\w+)/)
+        if (m.find()) found << m.group(1)
+      }
+      found
+    }
+    def version = null
+    coreFile.eachLine('UTF-8') { line ->
+      def m = (line =~ /^CONST\s+hdgife_version\s*=\s*(\d+)/)
+      if (m.find()) version = m.group(1)
+    }
+    if (version == null) throw new GradleException('hdgife.ink has no "CONST hdgife_version = N"')
+    def core = functionNames(coreFile)
+    def util = functionNames(utilFile)
+    def overlap = core.intersect(util)
+    if (!overlap.isEmpty()) throw new GradleException("hdgife.ink and hdgife_util.ink both declare: ${overlap}")
+    def list = { Collection<String> names -> names.collect { '"' + it + '"' }.join(', ') }
+    def dir = outDir.get().asFile.toPath().resolve('com/github/halfdeadgames/hdgife')
+    java.nio.file.Files.createDirectories(dir)
+    dir.resolve('HdgifeInk.kt').toFile().text = """package com.github.halfdeadgames.hdgife
+
+/** Facts about the bundled ink libraries. Generated from hdgife.ink and hdgife_util.ink, do not edit. */
+object HdgifeInk {
+    /**
+     * The version of hdgife.ink this engine expects (`CONST hdgife_version`). A story that includes another version,
+     * or an old one with no version (counted as 0), is refused with an IncompatibleLibraryException.
+     */
+    const val VERSION = ${version}
+
+    /** The functions of hdgife.ink. */
+    internal val CORE_FUNCTIONS: List<String> = listOf(${list(core)})
+
+    /** The functions of hdgife_util.ink. */
+    internal val UTIL_FUNCTIONS: List<String> = listOf(${list(util)})
+
+    /**
+     * Every function name the libraries reserve, from hdgife.ink and hdgife_util.ink (the names are not prefixed, so a
+     * story must not define its own with these names). validateStory warns about one defined without its library.
+     */
+    val LIBRARY_FUNCTIONS: List<String> = CORE_FUNCTIONS + UTIL_FUNCTIONS
+}
+"""
+  }
+}
+sourceSets.main.kotlin.srcDir(generateInkLibrary)
+
 apply plugin: 'maven-publish'
 
 java {

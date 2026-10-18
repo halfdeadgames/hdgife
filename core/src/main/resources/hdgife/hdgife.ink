@@ -1,4 +1,5 @@
-// hdgife helper library. Add `INCLUDE hdgife.ink` at the top of your main ink file.
+// hdgife core library. Add `INCLUDE hdgife.ink` at the top of your main ink file. The optional math helpers
+// (chance, clamp, avg2, avg3, blend, invert, scale100) are in hdgife_util.ink: `INCLUDE hdgife_util.ink`.
 //
 // The stat, number-format and event functions are EXTERNAL: StoryManager binds them to your
 // NarrativeStateProvider, number format settings and event channel. The ink bodies below are fallbacks that run
@@ -13,6 +14,16 @@
 
 // All parameters and temps in this file start with hdg_, so your story can declare VARs like n, x or name.
 // Don't declare your own knots or variables starting with hdg_ or hdgife_.
+//
+// Reserved names. Every function in this file is reserved, and so is every function of hdgife_util.ink. They are not
+// prefixed, so don't define your own with these names, in a story that includes the library or one that does not
+// (StoryManager takes over the external ones, and validateStory reports the rest):
+//   stat, stat_of, has_stat, has_stat_of, stat_text, stat_text_of, fmt, speak, emit, emit1, emit2, emit3,
+//   and everything starting with hdgife_.
+//
+// The library has a version, below. StoryManager and validateStory compare it with the version of the engine and
+// refuse a story whose hdgife.ink is another one (recompile it). A missing version counts as 0, which is too old.
+CONST hdgife_version = 1
 //
 // Current speaker, kept here so it is part of the saved ink state. Set it with StoryManager.speaker or
 // speak() below.
@@ -32,17 +43,17 @@ EXTERNAL hdgife_emit1(hdg_seq, hdg_name, hdg_a)
 EXTERNAL hdgife_emit2(hdg_seq, hdg_name, hdg_a, hdg_b)
 EXTERNAL hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c)
 
-// Events for the game. Use as statements: ~ emit("give_item", "sword")
+// Events for the game. Use as statements: ~ emit1("give_item", "sword")
 // The name and arguments come back, in order, on DialogStep.events and StoryManager.onEvent. The engine does
-// nothing with them, the game decides. emit0 takes no argument, emit one, emit2 two, emit3 three (ink has no
-// overloads). Each call is reported exactly once, also between a line and a `<>` glue line, and also inside a
+// nothing with them, the game decides. emit takes just the name, emit1 one argument, emit2 two, emit3 three (ink
+// has no overloads). Each call is reported exactly once, also between a line and a `<>` glue line, and also inside a
 // function. Without a StoryManager they do nothing. In choice text they fire when the choice is created,
 // which is not a good place for them, so keep them in statements.
-=== function emit0(hdg_name) ===
+=== function emit(hdg_name) ===
 ~ hdgife_event_seq++
 ~ hdgife_emit0(hdgife_event_seq, hdg_name)
 
-=== function emit(hdg_name, hdg_a) ===
+=== function emit1(hdg_name, hdg_a) ===
 ~ hdgife_event_seq++
 ~ hdgife_emit1(hdgife_event_seq, hdg_name, hdg_a)
 
@@ -82,7 +93,7 @@ EXTERNAL hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c)
 === function speak(hdg_name) ===
 ~ hdgife_speaker = hdg_name
 
-// Number display. Use these inline: {stat_text("strength")} or {fmt(avg3(a, b, c), 1, "round")}.
+// Number display. Use these inline: {stat_text("strength")} or {fmt(stat("strength"), 1, "round")}.
 //
 // stat_text / stat_text_of print a stat with the game's format for it (StoryManager.numberFormat and
 // formatOverride). fmt formats any number: mode is "floor", "ceil", "round" (ties away from zero) or
@@ -117,14 +128,6 @@ EXTERNAL hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c)
 - else: {hdgife_digits(hdg_n, hdg_s, hdg_decimals)}
 }
 
-// Rounds down to a whole number and prints it.
-=== function floor_text(hdg_x) ===
-{fmt(hdg_x, 0, "floor")}
-
-// Rounds to the nearest value with the given decimals and prints it.
-=== function round_text(hdg_x, hdg_decimals) ===
-{fmt(hdg_x, hdg_decimals, "round")}
-
 === function hdgife_pow10(hdg_n) ===
 {
 - hdg_n <= 0: ~ return 1
@@ -151,38 +154,11 @@ EXTERNAL hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c)
 === function has_stat_of(hdg_entity, hdg_name) ===
 ~ return false
 
-// True with a pct percent chance (0 or less never, 100 or more always).
-=== function chance(hdg_pct) ===
-~ return RANDOM(1, 100) <= hdg_pct
-
-// Limits x to the range lo..hi.
-=== function clamp(hdg_x, hdg_lo, hdg_hi) ===
-{
-- hdg_x < hdg_lo: ~ return hdg_lo
-- hdg_x > hdg_hi: ~ return hdg_hi
-- else: ~ return hdg_x
-}
-
-// Plain averages. Values are floats, so no integer truncation.
-=== function avg2(hdg_a, hdg_b) ===
-~ return (hdg_a + hdg_b) / 2.0
-
-=== function avg3(hdg_a, hdg_b, hdg_c) ===
-~ return (hdg_a + hdg_b + hdg_c) / 3.0
-
-// Weighted blend of two values: (a*wa + b*wb) / (wa + wb).
-=== function blend(hdg_a, hdg_wa, hdg_b, hdg_wb) ===
-~ return (hdg_a * hdg_wa + hdg_b * hdg_wb) / (hdg_wa + hdg_wb + 0.0)
-
-// Flips a 0..100 value, so low becomes high. Handy for "low mood" style checks.
-=== function invert(hdg_x) ===
-~ return 100 - hdg_x
-
-// Maps x from the range lo..hi onto 0..100, clamped.
-=== function scale100(hdg_x, hdg_lo, hdg_hi) ===
-~ return clamp((hdg_x - hdg_lo) * 100.0 / (hdg_hi - hdg_lo), 0, 100)
-
 // Used by StoryManager.seedRandom. Seeds RANDOM and shuffles.
 === function hdgife_seed(hdg_n) ===
 ~ SEED_RANDOM(hdg_n)
 ~ return 0
+
+// The library version, for the engine to read from the compiled story. Leave it alone.
+=== function hdgife_lib_version() ===
+~ return hdgife_version

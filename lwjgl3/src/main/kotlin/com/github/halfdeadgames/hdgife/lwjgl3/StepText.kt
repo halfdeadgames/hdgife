@@ -188,14 +188,16 @@ private fun StringBuilder.spansAndMarkers(indent: Int, spans: List<TextSpan>, ma
 /**
  * The exact [DialogStep] the engine gave, as readable text: every field, nothing left out. [number] counts the
  * steps shown. [note] says when the harness changed anything before showing it (a restored save, refreshed choices).
+ * [linesFrom] is the step whose lines and step tags are listed, [step] itself unless the harness kept the lines of an
+ * earlier step (after a load).
  */
-fun formatRaw(step: DialogStep, number: Int, note: String? = null): String = buildString {
+fun formatRaw(step: DialogStep, number: Int, note: String? = null, linesFrom: DialogStep = step): String = buildString {
     title("STEP $number")
     field(0, "ended", step.ended.toString())
     note?.let { field(0, "note", esc(it)) }
     append('\n')
-    title("LINES (${step.lines.size})")
-    for ((i, line) in step.lines.withIndex()) {
+    title("LINES (${linesFrom.lines.size})")
+    for ((i, line) in linesFrom.lines.withIndex()) {
         append(DIM).append("[[").append(i).append("][]\n")
         field(2, "text", quote(line.text))
         field(2, "speaker", line.speaker?.let { esc(it) } ?: "null")
@@ -204,7 +206,7 @@ fun formatRaw(step: DialogStep, number: Int, note: String? = null): String = bui
     }
     append('\n')
     title("STEP TAGS")
-    tags(0, step.tags)
+    tags(0, linesFrom.tags)
     append('\n')
     title("CHOICES (${step.choices.size})")
     for (choice in step.choices) {

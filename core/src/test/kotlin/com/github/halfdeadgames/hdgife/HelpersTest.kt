@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 /** The hdgife.ink helper functions, InkSource.of, HdgifeStory.from, Comparison and style edge cases. */
 class HelpersTest {
     /** Runs one expression on a story with the library, without a manager (the ink fallbacks). */
-    private fun ink(expression: String): String = compileLib("{$expression}").Continue().trim()
+    private fun ink(expression: String): String = compileLib("INCLUDE hdgife_util.ink\n{$expression}").Continue().trim()
 
     @Test
     fun `avg2 and avg3 do not truncate`() {
@@ -57,17 +57,25 @@ class HelpersTest {
     }
 
     @Test
-    fun `floor_text and round_text print whole numbers and decimals`() {
-        assertEquals("2", ink("floor_text(2.7)"))
-        assertEquals("-3", ink("floor_text(-2.1)"))
-        assertEquals("3", ink("round_text(2.5, 0)"))
-        assertEquals("1.3", ink("round_text(1.25, 1)"))
-        assertEquals("-3", ink("round_text(-2.5, 0)"))
+    fun `fmt prints whole numbers and decimals in the ink fallback`() {
+        assertEquals("2", ink("fmt(2.7, 0, \"floor\")"))
+        assertEquals("-3", ink("fmt(-2.1, 0, \"floor\")"))
+        assertEquals("3", ink("fmt(2.5, 0, \"round\")"))
+        assertEquals("1.3", ink("fmt(1.25, 1, \"round\")"))
+        assertEquals("-3", ink("fmt(-2.5, 0, \"round\")"))
+    }
+
+    @Test
+    fun `floor_text and round_text are gone`() {
+        for (name in listOf("floor_text", "round_text")) {
+            assertFalse(compileLib("Hi").hasFunction(name), name)
+            assertFalse(name in HdgifeInk.LIBRARY_FUNCTIONS, name)
+        }
     }
 
     private fun draws(seed: Int, pct: Int, count: Int = 40): List<String> {
-        val m = managerOf((1..count).joinToString("\n") { "{chance($pct)}" })
-        assertTrue(m.seedRandom(seed))
+        val m = managerOf("INCLUDE hdgife_util.ink\n" + (1..count).joinToString("\n") { "{chance($pct)}" })
+        m.seedRandom(seed)
         return m.next().texts()
     }
 

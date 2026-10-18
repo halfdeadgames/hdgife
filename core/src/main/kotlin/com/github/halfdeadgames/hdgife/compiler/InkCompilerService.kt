@@ -12,12 +12,12 @@ import com.github.halfdeadgames.hdgife.HdgifeLog
 import java.io.FileNotFoundException
 
 /**
- * Compiles ink into a [Story]. It compiles what you give it, in the order you give it.
+ * Compiles ink into an [HdgifeStory]. It compiles what you give it, in the order you give it.
  * Choosing the sources, their order and the thread is the game's job. To run a different set of sources,
  * compile again and build a new `StoryManager` from the new story.
  *
- * The stories it returns are [HdgifeStory]s: plain Blade Ink stories with the lookahead-safe external function
- * fix. Everything else about them is the normal [Story] API.
+ * [HdgifeStory] is a normal Blade Ink [Story] with the lookahead-safe external function fix, and it is what
+ * `StoryManager` takes. Everything else about it is the normal [Story] API.
  *
  * Every call is plain blocking. Run it on whatever thread or coroutine context you like, but don't use the
  * [Story] from two threads at once.
@@ -28,7 +28,8 @@ import java.io.FileNotFoundException
  * `INCLUDE x.ink` inside a source is resolved relative to that source's own name, with `..` allowed.
  * It finds a listed source of that name first, then asks [InkSource.sibling]. A source is only ever
  * loaded once per compile, so listing a file that another source also includes is fine.
- * `INCLUDE hdgife.ink` gives the bundled helper library from the classpath. It is never added automatically.
+ * `INCLUDE hdgife.ink` gives the bundled core library from the classpath, and `INCLUDE hdgife_util.ink` the optional
+ * math helpers. They work together or alone, and are never added automatically.
  *
  * Errors are [InkCompileException]s. Ink's messages name the source and line.
  */
@@ -42,11 +43,11 @@ class InkCompilerService {
     }
 
     /** Compiles [sources]. The first is the root and the others are included after it, in order. */
-    fun compile(sources: List<InkSource>): Story {
+    fun compile(sources: List<InkSource>): HdgifeStory {
         require(sources.isNotEmpty()) { "No ink sources given" }
         val byName = LinkedHashMap<String, InkSource>()
         for (source in sources) {
-            require(source.name != BUILTIN_NAME) { "'$BUILTIN_NAME' is reserved for the bundled library" }
+            require(source.name !in BUILTIN_PATHS) { "'${source.name}' is reserved for the bundled library" }
             require(byName.put(source.name, source) == null) { "Duplicate ink source name '${source.name}'" }
         }
         val handler = SourceResolver(byName)
@@ -66,10 +67,10 @@ class InkCompilerService {
     }
 
     /** Compiles [main] as the root, then [extras] in the order given. */
-    fun compile(main: InkSource, extras: List<InkSource> = emptyList()): Story = compile(listOf(main) + extras)
+    fun compile(main: InkSource, extras: List<InkSource> = emptyList()): HdgifeStory = compile(listOf(main) + extras)
 
     /** Same with files, read as UTF-8. Includes not in the list are looked up next to the including file. */
-    fun compile(main: FileHandle, extras: List<FileHandle> = emptyList()): Story =
+    fun compile(main: FileHandle, extras: List<FileHandle> = emptyList()): HdgifeStory =
         compile((listOf(main) + extras).map(InkSource::of))
 
     /**
@@ -78,7 +79,7 @@ class InkCompilerService {
      * The rest follow in that order. Control the order with file names (`000_base.ink`, `010_extra.ink`)
      * or use [compile] with your own list. [recursive] also takes files in subfolders. Throws if there are none.
      */
-    fun compileFolder(folder: FileHandle, recursive: Boolean = true): Story {
+    fun compileFolder(folder: FileHandle, recursive: Boolean = true): HdgifeStory {
         val files = inkFiles(folder, recursive)
         val root = folder.path().replace('\\', '/').trimEnd('/')
         fun relative(file: FileHandle): String {
@@ -92,7 +93,7 @@ class InkCompilerService {
     }
 
     /** Loads a story from compiled JSON, as made by `story.toJson()`. No compiler work is done. */
-    fun loadCompiled(json: String): Story {
+    fun loadCompiled(json: String): HdgifeStory {
         val story = try {
             HdgifeStory(json)
         } catch (e: Exception) {
@@ -102,7 +103,7 @@ class InkCompilerService {
     }
 
     /** Rebuilds [story] as an [HdgifeStory] (fresh state) with ink fallbacks for EXTERNAL functions allowed. */
-    private fun finish(story: Story): Story = HdgifeStory.from(story).also { it.setAllowExternalFunctionFallbacks(true) }
+    private fun finish(story: Story): HdgifeStory = HdgifeStory.from(story).also { it.setAllowExternalFunctionFallbacks(true) }
 
     private fun run(rootName: String, text: String, handler: IFileHandler): Story {
         val errors = ArrayList<String>()
@@ -156,7 +157,7 @@ class InkCompilerService {
                 if (blocks.any { match.range.first in it }) return@replace match.value
                 val target = match.groupValues[2].substringBefore("//").substringBefore("/*").trim()
                 if (target.isEmpty()) return@replace match.value
-                if (target == BUILTIN_NAME) return@replace match.value
+                if (target in BUILTIN_PATHS) return@replace match.value
                 val full = normalizePath("$dir/$target")
                 if (full !in listed) source.sibling?.invoke(target)?.let { listed[full] = it }
                 match.groupValues[1] + full
@@ -175,10 +176,11 @@ class InkCompilerService {
         override fun resolveInkFilename(includeName: String): String = normalizePath(includeName)
 
         override fun loadInkFileContents(fullFilename: String): String {
-            if (fullFilename == BUILTIN_NAME) {
-                if (!loaded.add(BUILTIN_NAME)) return ""
-                val stream = InkCompilerService::class.java.classLoader.getResourceAsStream(BUILTIN_PATH)
-                    ?: throw FileNotFoundException("Bundled $BUILTIN_PATH is missing")
+            val builtinPath = BUILTIN_PATHS[fullFilename]
+            if (builtinPath != null) {
+                if (!loaded.add(fullFilename)) return ""
+                val stream = InkCompilerService::class.java.classLoader.getResourceAsStream(builtinPath)
+                    ?: throw FileNotFoundException("Bundled $builtinPath is missing")
                 return stream.use { String(it.readBytes(), Charsets.UTF_8) }
             }
             val source = listed[fullFilename] ?: run {
@@ -212,8 +214,11 @@ class InkCompilerService {
             return ranges
         }
 
-        const val BUILTIN_NAME = "hdgife.ink"
-        const val BUILTIN_PATH = "hdgife/hdgife.ink"
+        /** The bundled libraries: the name ink sources `INCLUDE` them by, and where they sit on the classpath. */
+        val BUILTIN_PATHS = mapOf(
+            "hdgife.ink" to "hdgife/hdgife.ink",
+            "hdgife_util.ink" to "hdgife/hdgife_util.ink",
+        )
         val INCLUDE_LINE = Regex("(?m)^([ \\t]*INCLUDE[ \\t]+)([^\\r\\n]+)")
     }
 }

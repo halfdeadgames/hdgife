@@ -113,7 +113,7 @@ class StatsTest {
         val m = managerOf("VAR gold = 0\n{gold}")
         m.valueConverter = { (it as Money).amount }
         m.setVariable("gold", Money(9))
-        assertEquals(9, m.variable("gold"))
+        assertEquals(9, m.getVariable("gold"))
     }
 
     @Test
@@ -184,7 +184,7 @@ class StatsTest {
         val stats = MapStats().also { it["player", "hp"] = 12; it["player", "mp"] = 3 }
         val m = managerOf("VAR player_hp = 0\n{player_hp}", stats)
         assertEquals(listOf("player_mp", "player_xp"), m.syncStatsToInk("player", listOf("hp", "mp", "xp")))
-        assertEquals(12, m.variable("player_hp"))
+        assertEquals(12, m.getVariable("player_hp"))
     }
 
     // ---- number display ----
@@ -384,7 +384,7 @@ class StatsTest {
 
     @Test
     fun `StoryManager applies the patch itself`() {
-        val m = StoryManager(com.bladecoder.ink.runtime.Story(compileInk("{FLOOR(2.5)}").toJson()))
+        val m = StoryManager.forPlainStory(com.bladecoder.ink.runtime.Story(compileInk("{FLOOR(2.5)}").toJson()))
         assertEquals("2.0", m.next().texts().single())
     }
 }

@@ -4,7 +4,7 @@ import com.badlogic.gdx.files.FileHandle
 
 /**
  * One piece of ink source. [name] identifies it in errors and is what other sources `INCLUDE`.
- * Use `/` as the separator and keep names unique within one compile. `hdgife.ink` is reserved.
+ * Use `/` as the separator and keep names unique within one compile. `hdgife.ink` and `hdgife_util.ink` are reserved.
  *
  * The text is read when the compiler needs it, so a lazy loader can read a file, a network
  * response or a packed archive. [sibling] finds other sources next to this one by relative path,

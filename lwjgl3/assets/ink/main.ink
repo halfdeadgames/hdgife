@@ -13,6 +13,7 @@
 // <color=orange>, <em>, <b>, <shake amp=2 speed=0.5>, <wave=2,0.5>, point markers <pause=0.6/> <slam/> <sfx name=x/>.
 // "Debug" scenes (the older test scenes) live in debug.ink: divert debug_menu.
 INCLUDE hdgife.ink
+INCLUDE hdgife_util.ink
 INCLUDE debug.ink
 
 EXTERNAL roll(sides)
@@ -53,7 +54,7 @@ VAR player_coin = 0
 The storm hits <b>The <em>Lantern</em> Pass</b> like a thrown door.
 You are {player_name()}, and the toll lodge is the only light for ten miles. <pause=0.6/> A sign on the post reads: "Toll 3 coin. Blades <<a hand long may pass."
 The lamp burns <color=ff8800>amber</color>, the snow is <color=\#9ecbff>pale blue</color> and your hands are <color=orange>raw</color>. # sfx: wind # sfx: door
-~ emit0("door_opened")
+~ emit("door_opened")
 "Shut that door, you're letting the weather in!" # speaker: ilse # shout
 Your pack holds {stat_text_of("player", "coin")} coin. Grit {stat_text_of("player", "grit")}, wits {stat_text_of("player", "wits")}, {stat_text_of("player", "hp")} hp.
 -> lodge
@@ -88,7 +89,7 @@ He serves the {stat("faction")}. Stance: {stat("stance")}. {stat("is_injured"): 
   { total >= 14:
     "The Colonel, is it." He stamps something. <slam/>
     ~ door_open = true
-    ~ emit("give_item", "pass")
+    ~ emit1("give_item", "pass")
   - else:
     "I know the Colonel. You are not him."
     ~ suspicion += 2
@@ -130,7 +131,7 @@ She nods at Varga, who is at {stat_text_of("varga", "mood")} percent of a good m
 the way a dog watches a pot.</em> {chance(invert(stat("sanity"))): {~She hums off key.|She counts her keys twice.}}
 + [Buy a flask of rum for 3 coin # requires: player.coin >= 3]
   ~ emit2("spend", "coin", 3)
-  ~ emit("give_item", "rum")
+  ~ emit1("give_item", "rum")
   She slides a flask across. <slam/> "Not a word to Varga."
   -> ilse_talk
 + [Ask for the side door # requires: trust > 50, faction == guild]
@@ -140,7 +141,7 @@ the way a dog watches a pot.</em> {chance(invert(stat("sanity"))): {~She hums of
   -> ilse_talk
 + [Offer to dress her wound # requires: is_injured == true, player.wits >= 5]
   You work quickly. She hisses, then <color=gold>laughs</color>. "You have done this before."
-  ~ emit("give_item", "bandage")
+  ~ emit1("give_item", "bandage")
   -> ilse_talk
 + [Say it <pause=0.4/>with <color=gold>charm</color> # requires: player.charm >= 4.5]
   "Madam, your rum is the only warm thing between here and the sea."
@@ -185,19 +186,19 @@ Stat check: Wren {has_stat_of("player", "charm"): has charm|has no charm}, Ilse 
 === rumor ===
 ~ speak("ilse")
 Word has it
-~ emit("rumor_heard", "pass")
+~ emit1("rumor_heard", "pass")
 <> that the pass closes at dawn.
 -> lodge
 
 === escape ===
 ~ speak("")
 You ease the side door open and the storm swallows you. <pause=1.0/> Behind you the lamps gutter, one by one.
-~ emit("left_pass", "side_door")
+~ emit1("left_pass", "side_door")
 -> END
 
 === pay_and_leave ===
 ~ speak("varga")
 ~ emit2("spend", "coin", 3)
 "Three coin." He stamps your papers. {suspicion > 2: "And I will remember your face."|"Mind the ice."}
-~ emit("left_pass", "front_door")
+~ emit1("left_pass", "front_door")
 -> END

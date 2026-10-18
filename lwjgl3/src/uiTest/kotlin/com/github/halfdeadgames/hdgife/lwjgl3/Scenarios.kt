@@ -505,7 +505,7 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         shot("21-debug-requirements")
     }
 
-    ui.scenario(report, "debug: has_stat true, floor_text, round_text, the aliases and the unknown fmt mode") {
+    ui.scenario(report, "debug: has_stat true, fmt floor and round, the aliases and the unknown fmt mode") {
         command("divert debug_menu")
         click("Coverage lab")
         expectRows(

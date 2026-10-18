@@ -63,7 +63,7 @@ A voice from the queue: "<color=0x66ccff>Hurry</color> up!" # speaker: crowd
 + [Back the merchant up # requires: merchant.mood >= 50]
   ~ speak("merchant")
   "Told you," she says. "You owe me a <em>drink</em>."
-  ~ emit("give_item", "pass")
+  ~ emit1("give_item", "pass")
   -> debug_menu
 + [Pull rank # requires: player.rank >= 3]
   The guard salutes.
@@ -77,7 +77,7 @@ A voice from the queue: "<color=0x66ccff>Hurry</color> up!" # speaker: crowd
   -> debug_menu
 + [Show your papers # requires: player.is_injured == false, player.faction == rebels]
   He squints at them. <b>Forged</b>, obviously, but he waves you on.
-  ~ emit("give_item", "pass")
+  ~ emit1("give_item", "pass")
   -> debug_menu
 + [Leave] -> debug_menu
 
@@ -85,7 +85,7 @@ A voice from the queue: "<color=0x66ccff>Hurry</color> up!" # speaker: crowd
 // so a save made here brings it back on load.
 === rumor_open ===
 Word has it
-~ emit("rumor_heard", "gate")
+~ emit1("rumor_heard", "gate")
 <> that the gate falls tonight.
 A man leans in and <color=ff5555>speaks low.
 + [Listen] "Run," he says, <b>fast</b> and quiet.</color> Then he is gone.
@@ -112,12 +112,12 @@ Odd requirements. The raw panel shows what the engine made of each one.
   -> debug_requirements
 + [Back] -> debug_menu
 
-// Small engine functions the showcase skipped: has_stat true, floor_text, round_text, the ceiling and truncate
+// Small engine functions the showcase skipped: has_stat true, the floor and round modes of fmt, the ceiling and truncate
 // aliases of fmt, and an fmt mode that does not exist (the engine logs it and rounds).
 === coverage_lab ===
 ~ speak("guard")
 Has mood {has_stat("mood")}, has luck {has_stat("luck")}.
-Floor {floor_text(12.9)}, round {round_text(12.346, 2)}.
+Floor {fmt(12.9, 0, "floor")}, round {fmt(12.346, 2, "round")}.
 Ceiling {fmt(12.1, 0, "ceiling")}, truncate {fmt(-12.9, 0, "truncate")}.
 Sideways {fmt(12.5, 0, "sideways")}.
 + [Back] -> debug_menu

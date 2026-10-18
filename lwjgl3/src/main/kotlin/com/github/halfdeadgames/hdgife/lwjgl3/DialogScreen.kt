@@ -14,6 +14,7 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport
 import com.github.halfdeadgames.hdgife.HdgifeLog
 import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
 import com.github.halfdeadgames.hdgife.story.DialogStep
+import com.github.halfdeadgames.hdgife.story.IncompatibleLibraryException
 import com.github.halfdeadgames.hdgife.story.NumberFormat
 import com.github.halfdeadgames.hdgife.story.Rounding
 import com.github.halfdeadgames.hdgife.story.StoryManager
@@ -243,10 +244,15 @@ class DialogScreen(
         say("Story error: ${e.message}")
     }
 
-    private fun showStep(step: DialogStep, note: String? = null, number: Int = ++stepNumber) {
+    /**
+     * Shows [step]. [linesFrom] is where the panels take the lines and the step tags from. It is [step] itself, except
+     * after a load: a save holds no lines, so the harness keeps the lines of the step that was saved and takes
+     * everything else (choices, open styles, ended, events) from the engine.
+     */
+    private fun showStep(step: DialogStep, note: String? = null, number: Int = ++stepNumber, linesFrom: DialogStep = step) {
         lastStep = step
-        raw.show(step, number, note)
-        rendered.show(step, choiceMode)
+        raw.show(step, number, note, linesFrom)
+        rendered.show(step, choiceMode, linesFrom)
         statusLabel.setText(if (step.ended) "Story ended." else "")
         restartButton.isVisible = step.ended
     }
@@ -274,7 +280,7 @@ class DialogScreen(
     /** Keeps the latest value of an ink variable for the info line, and logs each change to the console. */
     private fun watch(name: String) {
         observe(name)
-        watched[name] = show(manager.variable(name))
+        watched[name] = show(manager.getVariable(name))
         refreshInfo()
     }
 
@@ -288,7 +294,7 @@ class DialogScreen(
 
     override fun listVariables(): List<String> = manager.variableNames
 
-    override fun getVariable(name: String): Any? = manager.variable(name)
+    override fun getVariable(name: String): Any? = manager.getVariable(name)
 
     override fun setVariable(name: String, value: Any) = manager.setVariable(name, value)
 
@@ -325,7 +331,7 @@ class DialogScreen(
 
     override fun setStat(entity: String, stat: String, value: Any) {
         val name = applyStat(manager, provider, entity, stat, value)
-        val synced = manager.variable(name)
+        val synced = manager.getVariable(name)
         say(if (synced == null) "$entity.$stat = $value (no ink variable $name)" else "$name = $synced")
     }
 
@@ -352,7 +358,12 @@ class DialogScreen(
 
     override fun seed(value: Int) {
         rng = Random(value)
-        say(if (manager.seedRandom(value)) "Seeded $value (ink and the game's dice)" else "Seed needs INCLUDE hdgife.ink")
+        try {
+            manager.seedRandom(value)
+            say("Seeded $value (ink and the game's dice)")
+        } catch (e: IncompatibleLibraryException) {
+            say("Seed needs INCLUDE hdgife.ink")
+        }
     }
 
     override fun fixRoll(value: Int?) {
@@ -422,8 +433,7 @@ class DialogScreen(
         // The engine brings back the story, the speaker and the open styles. The lines are not part of a save, so the
         // game shows the ones it kept, with the choices and open styles read again from the engine.
         val again = readNext() ?: return
-        val step = saved.step.copy(choices = again.choices, ended = again.ended, openStyles = again.openStyles, events = emptyList())
-        showStep(step, "loaded save: lines kept by the harness, choices and openStyles read again from the engine", saved.number)
+        showStep(again, "loaded save: lines kept by the harness, choices and openStyles read again from the engine", saved.number, linesFrom = saved.step)
         say("Loaded (speaker is now ${manager.speaker ?: "none"})")
     }
 
@@ -447,7 +457,7 @@ class DialogScreen(
         KtxAsync.launch {
             try {
                 val story = withContext(Dispatchers.IO) { compileHarnessStory(compiler) }
-                manager.story = story
+                manager.replaceStory(story)
                 syncPlayer()
                 restartView()
                 say("Reloaded")

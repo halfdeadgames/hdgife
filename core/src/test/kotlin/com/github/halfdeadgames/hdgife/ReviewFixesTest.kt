@@ -3,6 +3,7 @@ package com.github.halfdeadgames.hdgife
 import com.bladecoder.ink.runtime.HdgifeStory
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.compiler.InkSource
+import com.github.halfdeadgames.hdgife.story.IncompatibleLibraryException
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.github.halfdeadgames.hdgife.story.StoryStepException
 import kotlin.test.Test
@@ -45,7 +46,7 @@ class ReviewFixesTest {
         m.bindFunction("give") { calls++ }
         val seen = ArrayList<Any?>()
         m.observe("hp") { _, new -> seen += new }
-        m.story = m.story
+        m.replaceStory(m.story as HdgifeStory)
         m.next()
         assertEquals(1, calls)
         assertEquals(listOf<Any?>(5), seen)
@@ -57,7 +58,7 @@ class ReviewFixesTest {
         StoryManager(managed, stats("p", "hp", 1))
         val previous = compileLib("Old")
         val m = StoryManager(previous, stats("p", "hp", 2))
-        m.story = managed
+        m.replaceStory(managed)
         assertEquals(listOf("2"), m.next().texts())
         assertNull(previous.getExternalFunction("stat_of"), "the old story is unbound")
     }
@@ -70,8 +71,8 @@ class ReviewFixesTest {
         m.next()
         val before = m.story
         val saved = m.saveState()
-        val old = compileInk("VAR hdgife_speaker = \"\"\nEXTERNAL emit(name, a)\n~ emit(\"x\", 1)\nHi\n-> END\n=== function emit(name, a) ===\n~ return 0")
-        assertFailsWith<IllegalStateException> { m.story = old }
+        val old = compileInk("VAR hdgife_speaker = \"\"\nEXTERNAL emit1(name, a)\n~ emit1(\"x\", 1)\nHi\n-> END\n=== function emit1(name, a) ===\n~ return 0")
+        assertFailsWith<IncompatibleLibraryException> { m.replaceStory(old) }
         assertSame(before, m.story)
         assertNotNull(before.getExternalFunction("stat"))
         assertNotNull(before.getExternalFunction("later"))
@@ -82,7 +83,7 @@ class ReviewFixesTest {
 
     // ---- next() failure ----
 
-    private val boomInk = "EXTERNAL boom()\n~ emit0(\"early\")\n<b>Line one\n~ boom()\nLine two\n-> END\n=== function boom() ===\n~ return 0"
+    private val boomInk = "EXTERNAL boom()\n~ emit(\"early\")\n<b>Line one\n~ boom()\nLine two\n-> END\n=== function boom() ===\n~ return 0"
 
     @Test
     fun `a throwing bound function gives a StoryStepException with the partial step`() {
@@ -212,7 +213,7 @@ class ReviewFixesTest {
     @Test
     fun `seed without the library throws`() {
         val m = managerOf("Hi", lib = false)
-        assertFailsWith<IllegalStateException> { m.seed = 1 }
+        assertFailsWith<IncompatibleLibraryException> { m.seed = 1 }
     }
 
     // ---- INCLUDE handling ----
@@ -357,7 +358,7 @@ class ReviewFixesTest {
         val m = managerOf("VAR v_hp = 0\nHi", stats("hero", "hp", 9))
         m.variableNamer = { _, stat -> "v_$stat" }
         val skipped = m.syncStatsToInk("hero", listOf("hp", "mp"))
-        assertEquals(9, m.variable("v_hp"))
+        assertEquals(9, m.getVariable("v_hp"))
         assertEquals(listOf("v_mp"), skipped)
     }
 

@@ -1,5 +1,7 @@
 package com.github.halfdeadgames.hdgife.story
 
+import com.github.halfdeadgames.hdgife.HdgifeException
+
 /**
  * One stretch of story output, from the current position up to the next choice or the end.
  *
@@ -11,7 +13,7 @@ package com.github.halfdeadgames.hdgife.story
  * [ended] is true when there are no choices and nothing more to continue.
  * The engine reports. Whether to show, hide or grey out a choice is up to the game.
  */
-data class DialogStep(
+class DialogStep internal constructor(
     val lines: List<DialogLine>,
     val tags: Tags,
     val choices: List<DialogChoice>,
@@ -20,6 +22,15 @@ data class DialogStep(
     val openStyles: List<Style> = emptyList(),
 ) {
     val text: String = lines.joinToString("\n") { it.text }
+
+    override fun equals(other: Any?): Boolean = this === other || other is DialogStep &&
+        lines == other.lines && tags == other.tags && choices == other.choices && ended == other.ended &&
+        events == other.events && openStyles == other.openStyles
+
+    override fun hashCode(): Int = listOf(lines, tags, choices, ended, events, openStyles).hashCode()
+
+    override fun toString() =
+        "DialogStep(lines=$lines, tags=$tags, choices=$choices, ended=$ended, events=$events, openStyles=$openStyles)"
 }
 
 /**
@@ -30,13 +41,20 @@ data class DialogStep(
  * produced, otherwise null. [tags] are the tags of this line, including tags written on their own lines just
  * above it (that is how ink attaches them).
  */
-data class DialogLine(
+class DialogLine internal constructor(
     val text: String,
     val speaker: String?,
     val tags: Tags,
     val spans: List<TextSpan>,
     val markers: List<TextMarker> = emptyList(),
-)
+) {
+    override fun equals(other: Any?): Boolean = this === other || other is DialogLine &&
+        text == other.text && speaker == other.speaker && tags == other.tags && spans == other.spans && markers == other.markers
+
+    override fun hashCode(): Int = listOf(text, speaker, tags, spans, markers).hashCode()
+
+    override fun toString() = "DialogLine(text=$text, speaker=$speaker, tags=$tags, spans=$spans, markers=$markers)"
+}
 
 /**
  * A choice offered by ink. [index] is what you pass to `StoryManager.choose`. [text] is plain, [spans] styled.
@@ -46,7 +64,7 @@ data class DialogLine(
  * tag, already evaluated. [available] is true when all of them are met, or there are none.
  * Choose never refuses an unavailable choice. That is a decision for the game.
  */
-data class DialogChoice(
+class DialogChoice internal constructor(
     val index: Int,
     val text: String,
     val spans: List<TextSpan>,
@@ -55,6 +73,15 @@ data class DialogChoice(
     val markers: List<TextMarker> = emptyList(),
 ) {
     val available: Boolean = requirements.all { it.met }
+
+    override fun equals(other: Any?): Boolean = this === other || other is DialogChoice &&
+        index == other.index && text == other.text && spans == other.spans && tags == other.tags &&
+        requirements == other.requirements && markers == other.markers
+
+    override fun hashCode(): Int = listOf(index, text, spans, tags, requirements, markers).hashCode()
+
+    override fun toString() =
+        "DialogChoice(index=$index, text=$text, spans=$spans, tags=$tags, requirements=$requirements, markers=$markers)"
 }
 
 /**
@@ -72,7 +99,16 @@ data class DialogChoice(
  * timeline, not a story event: a different branch after a load can give another event the same id. [StoryManager.reset]
  * starts again at 1. [id] is 0 only for an event the game built itself.
  */
-data class StoryEvent(val name: String, val args: List<Any?>, val lineIndex: Int, val id: Int = 0)
+class StoryEvent internal constructor(val name: String, val args: List<Any?>, val lineIndex: Int, val id: Int = 0) {
+    internal fun atLine(lineIndex: Int) = StoryEvent(name, args, lineIndex, id)
+
+    override fun equals(other: Any?): Boolean = this === other || other is StoryEvent &&
+        name == other.name && args == other.args && lineIndex == other.lineIndex && id == other.id
+
+    override fun hashCode(): Int = listOf(name, args, lineIndex, id).hashCode()
+
+    override fun toString() = "StoryEvent(name=$name, args=$args, lineIndex=$lineIndex, id=$id)"
+}
 
 /** Comparison used by a [ChoiceRequirement]. */
 enum class Comparison(val symbol: String) {
@@ -105,7 +141,7 @@ enum class Comparison(val symbol: String) {
  * [raw] is the text as written. When the text could not be read, [op] is null, [entity] may be null, [stat] is
  * empty, [target] is null and [met] is false. [valid] tells these apart.
  */
-data class ChoiceRequirement(
+class ChoiceRequirement internal constructor(
     val entity: String?,
     val stat: String,
     val op: Comparison?,
@@ -116,6 +152,15 @@ data class ChoiceRequirement(
     val mismatch: Boolean = false,
 ) {
     val valid: Boolean get() = op != null
+
+    override fun equals(other: Any?): Boolean = this === other || other is ChoiceRequirement &&
+        entity == other.entity && stat == other.stat && op == other.op && target == other.target &&
+        actual == other.actual && met == other.met && raw == other.raw && mismatch == other.mismatch
+
+    override fun hashCode(): Int = listOf(entity, stat, op, target, actual, met, raw, mismatch).hashCode()
+
+    override fun toString() =
+        "ChoiceRequirement(entity=$entity, stat=$stat, op=$op, target=$target, actual=$actual, met=$met, raw=$raw, mismatch=$mismatch)"
 }
 
 /**
@@ -123,4 +168,5 @@ data class ChoiceRequirement(
  * hit a runtime error. [step] holds what was built before the failure (the lines so far, their events and the
  * open styles; no choices, not ended). The original exception is the [cause].
  */
-class StoryStepException(message: String, cause: Throwable, val step: DialogStep) : RuntimeException(message, cause)
+class StoryStepException internal constructor(message: String, cause: Throwable, val step: DialogStep) :
+    HdgifeException(message, cause)

@@ -1,6 +1,8 @@
 package com.github.halfdeadgames.hdgife
 
 import com.bladecoder.ink.runtime.SimpleJson
+import com.github.halfdeadgames.hdgife.story.IncompatibleLibraryException
+import com.github.halfdeadgames.hdgife.story.SaveStateException
 import com.github.halfdeadgames.hdgife.story.Style
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import kotlin.test.Test
@@ -39,9 +41,9 @@ class StateTest {
         val saved = m.saveState()
         m.choose(0)
         m.choose(0)
-        assertEquals(4, m.variable("count"))
+        assertEquals(4, m.getVariable("count"))
         m.loadState(saved)
-        assertEquals(2, m.variable("count"))
+        assertEquals(2, m.getVariable("count"))
         assertTrue(m.next().texts().isEmpty(), "choices are pending, so no new lines")
         assertEquals(3, m.choose(0).texts().single().substringAfter("count ").toInt())
     }
@@ -54,19 +56,28 @@ class StateTest {
         val saved = first.saveState()
         val second = StoryManager(compiler.loadCompiled(first.story.toJson()))
         second.loadState(saved)
-        assertEquals(2, second.variable("count"))
+        assertEquals(2, second.getVariable("count"))
     }
 
     @Test
-    fun `loadState rejects text that is not a state`() {
+    fun `loadState rejects text that is not a state with a SaveStateException that wraps ink's error`() {
         val m = managerOf(loopInk)
-        assertFailsWith<Exception> { m.loadState("garbage") }
+        val ex = assertFailsWith<SaveStateException> { m.loadState("garbage") }
+        assertTrue(ex.cause != null)
+    }
+
+    @Test
+    fun `loadState rejects a damaged envelope`() {
+        val m = managerOf(loopInk)
+        assertFailsWith<SaveStateException> { m.loadState("{\"v\":1,\"ink\":5}") }
+        assertFailsWith<SaveStateException> { m.loadState("{\"v\":\"x\",\"ink\":\"{}\"}") }
+        assertFailsWith<SaveStateException> { m.loadState("{\"v\":1,\"ink\":\"{}\",\"styles\":[5]}") }
     }
 
     @Test
     fun `the same seed gives the same random sequence`() {
-        val a = managerOf(loopInk).also { assertTrue(it.seedRandom(42)) }
-        val b = managerOf(loopInk).also { assertTrue(it.seedRandom(42)) }
+        val a = managerOf(loopInk).also { it.seedRandom(42) }
+        val b = managerOf(loopInk).also { it.seedRandom(42) }
         assertEquals(roll(a, 6), roll(b, 6))
     }
 
@@ -105,10 +116,11 @@ class StateTest {
     }
 
     @Test
-    fun `seedRandom returns false without the library`() {
+    fun `seedRandom throws without the library`() {
         val m = managerOf("Hi", lib = false)
-        assertFalse(m.seedRandom(1))
-        assertFailsWith<IllegalStateException> { m.seed = 1 }
+        assertFailsWith<IncompatibleLibraryException> { m.seedRandom(1) }
+        assertFailsWith<IncompatibleLibraryException> { m.seed = 1 }
+        assertNull(m.seed)
     }
 
     @Test
@@ -119,7 +131,7 @@ class StateTest {
         m.choose(0)
         m.choose(0)
         m.reset()
-        assertEquals(0, m.variable("count"))
+        assertEquals(0, m.getVariable("count"))
         assertNull(m.speaker)
         val step = m.next()
         assertEquals(1, step.texts().single().substringAfter("count ").toInt())
@@ -173,12 +185,12 @@ class StateTest {
     fun `a story with its own VAR n can include the library`() {
         val m = managerOf("VAR n = 3\nVAR x = 1\nVAR name = \"Ann\"\nn {n} x {x} {name} {stat(\"hp\")}")
         assertEquals(listOf("n 3 x 1 Ann 0.0"), m.next().texts())
-        assertEquals(3, m.variable("n"))
+        assertEquals(3, m.getVariable("n"))
     }
 
     @Test
     fun `library parameter names do not clash with story variables`() {
-        val m = managerOf("VAR hdg = 1\n{clamp(15, 0, 10)} {avg2(2, 4)} {fmt(2.5, 0, \"floor\")}")
+        val m = managerOf("INCLUDE hdgife_util.ink\nVAR hdg = 1\n{clamp(15, 0, 10)} {avg2(2, 4)} {fmt(2.5, 0, \"floor\")}")
         assertEquals(listOf("10 3.0 2"), m.next().texts())
     }
 
@@ -247,7 +259,7 @@ class StateTest {
         val m = managerOf(styledInk)
         m.next()
         val saved = m.saveState().replace("\"v\":1", "\"v\":2")
-        assertFailsWith<IllegalArgumentException> { m.loadState(saved) }
+        assertFailsWith<SaveStateException> { m.loadState(saved) }
         val line = m.choose(0).lines.single()
         assertEquals("and go now then.", line.text)
         assertEquals(Style("color", "red"), line.spans.first().styles.single())

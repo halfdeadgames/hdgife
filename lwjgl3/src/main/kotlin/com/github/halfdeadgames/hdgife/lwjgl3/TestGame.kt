@@ -3,7 +3,7 @@ package com.github.halfdeadgames.hdgife.lwjgl3
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.files.FileHandle
 import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
-import com.bladecoder.ink.runtime.Story
+import com.bladecoder.ink.runtime.HdgifeStory
 import com.github.halfdeadgames.hdgife.HdgifeLog
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +21,7 @@ private val logger = logger<TestGame>()
  * path. The game (here, the harness) decides which sources to feed and in what order; the engine just compiles
  * the list as given. Blocking, so call it off the render thread.
  */
-fun compileHarnessStory(compiler: InkCompilerService): Story {
+fun compileHarnessStory(compiler: InkCompilerService): HdgifeStory {
     val extra = Gdx.files.local("extra/")
     val extras = if (extra.isDirectory) inkFiles(extra).sortedBy { it.path() } else emptyList()
     return compiler.compile(Gdx.files.internal("ink/main.ink"), extras)

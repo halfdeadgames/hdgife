@@ -83,8 +83,8 @@ class RawPanel(skin: Skin, font: BitmapFont) : Table() {
     val scrollY: Float get() = pane.scrollY
     val maxScrollY: Float get() = pane.maxY
 
-    fun show(step: DialogStep, number: Int, note: String?) {
-        body.setText(formatRaw(step, number, note))
+    fun show(step: DialogStep, number: Int, note: String?, linesFrom: DialogStep = step) {
+        body.setText(formatRaw(step, number, note, linesFrom))
         pane.validate()
         pane.scrollY = 0f
         pane.updateVisualScroll()
@@ -129,10 +129,10 @@ class RenderedPanel(private val skin: Skin, private val onChoose: (Int) -> Unit)
         return label
     }
 
-    fun show(step: DialogStep, mode: ChoiceMode) {
+    fun show(step: DialogStep, mode: ChoiceMode, linesFrom: DialogStep = step) {
         lineTable.clearChildren()
         var next = 0
-        for ((index, line) in step.lines.withIndex()) {
+        for ((index, line) in linesFrom.lines.withIndex()) {
             while (next < step.events.size && step.events[next].lineIndex <= index) addEvent(step.events[next++])
             addLine(line)
         }

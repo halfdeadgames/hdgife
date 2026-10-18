@@ -3,6 +3,7 @@ package com.github.halfdeadgames.hdgife
 import com.bladecoder.ink.runtime.InkList
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.story.StoryEvent
+import com.github.halfdeadgames.hdgife.story.IncompatibleLibraryException
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.github.halfdeadgames.hdgife.story.StoryStepException
 import kotlin.test.Test
@@ -17,11 +18,11 @@ import kotlin.test.assertTrue
 class EventsTest {
     private val eventInk = """
         Line one
-        ~ emit("first", 1)
+        ~ emit1("first", 1)
         Line two <>
         ~ emit2("second", "x", true)
         glued
-        ~ emit0("third")
+        ~ emit("third")
         ~ emit3("fourth", 1, 2.5, "z")
         -> END
     """.trimIndent()
@@ -30,25 +31,27 @@ class EventsTest {
     fun `a story from an old hdgife ink is refused loudly`() {
         val old = compileInk("""
             VAR hdgife_speaker = ""
-            EXTERNAL emit(name, a)
-            ~ emit("x", 1)
+            EXTERNAL emit1(name, a)
+            ~ emit1("x", 1)
             Hi
             -> END
-            === function emit(name, a) ===
+            === function emit1(name, a) ===
             ~ return 0
         """.trimIndent())
-        val ex = assertFailsWith<IllegalStateException> { StoryManager(old) }
-        assertContains(ex.message.orEmpty(), "hdgife_event_seq")
+        val ex = assertFailsWith<IncompatibleLibraryException> { StoryManager(old) }
+        assertContains(ex.message.orEmpty(), "out of date")
+        assertEquals(0, ex.found)
+        assertEquals(HdgifeInk.VERSION, ex.expected)
     }
 
     @Test
     fun `a user story with its own emit and no hdgife ink runs untouched`() {
         val story = compileInk("""
             VAR count = 0
-            ~ emit("x", 1)
+            ~ emit1("x", 1)
             Hi
             -> END
-            === function emit(name, a) ===
+            === function emit1(name, a) ===
             ~ count++
             ~ return 0
         """.trimIndent())
@@ -61,9 +64,9 @@ class EventsTest {
     fun `reset after a throwing textCleaner drops late events`() {
         val m = managerOf("""
             Line
-            ~ emit0("a")
+            ~ emit("a")
             Next
-            ~ emit0("b")
+            ~ emit("b")
             End
         """.trimIndent())
         var calls = 0
@@ -92,14 +95,14 @@ class EventsTest {
 
     @Test
     fun `an event is not reported again by a later step`() {
-        val m = managerOf("~ emit0(\"once\")\nHi\n* [Go] Bye -> END")
+        val m = managerOf("~ emit(\"once\")\nHi\n* [Go] Bye -> END")
         assertEquals(1, m.next().events.size)
         assertTrue(m.choose(0).events.isEmpty())
     }
 
     @Test
     fun `glue lookahead does not duplicate events`() {
-        val m = managerOf("A <>\n~ emit0(\"x\")\nB\n~ emit0(\"y\")\nC")
+        val m = managerOf("A <>\n~ emit(\"x\")\nB\n~ emit(\"y\")\nC")
         val step = m.next()
         assertEquals(listOf("x", "y"), step.events.map { it.name })
         assertEquals(listOf("A B", "C"), step.texts())
@@ -107,14 +110,14 @@ class EventsTest {
 
     @Test
     fun `glue joins across an emit between a line and the glue line`() {
-        val step = managerOf("You have\n~ emit(\"seen\", 1)\n<> 5 hp.\nNext").next()
+        val step = managerOf("You have\n~ emit1(\"seen\", 1)\n<> 5 hp.\nNext").next()
         assertEquals(listOf("You have 5 hp.", "Next"), step.texts())
         assertEquals(listOf("seen" to 0), step.events.map { it.name to it.lineIndex })
     }
 
     @Test
     fun `an emit that glue does not join is reported before the line after it`() {
-        val step = managerOf("A\n~ emit0(\"x\")\nB").next()
+        val step = managerOf("A\n~ emit(\"x\")\nB").next()
         assertEquals(listOf("A", "B"), step.texts())
         assertEquals(listOf("x" to 1), step.events.map { it.name to it.lineIndex })
     }
@@ -122,7 +125,7 @@ class EventsTest {
     @Test
     fun `several emits around glue and breaks keep order and line index`() {
         val m = managerOf(
-            "One\n~ emit0(\"a\")\n<> two\n~ emit0(\"b\")\n~ emit0(\"c\")\nThree <>\n~ emit0(\"d\")\n<> four\n~ emit0(\"e\")\n-> END",
+            "One\n~ emit(\"a\")\n<> two\n~ emit(\"b\")\n~ emit(\"c\")\nThree <>\n~ emit(\"d\")\n<> four\n~ emit(\"e\")\n-> END",
         )
         val step = m.next()
         assertEquals(listOf("One two", "Three four"), step.texts())
@@ -131,7 +134,7 @@ class EventsTest {
 
     @Test
     fun `an emit inside an ink function is reported once across glue`() {
-        val m = managerOf("Gold\n~ reward(3)\n<> up.\nDone\n=== function reward(n) ===\n~ emit(\"gold\", n)\n~ return n")
+        val m = managerOf("Gold\n~ reward(3)\n<> up.\nDone\n=== function reward(n) ===\n~ emit1(\"gold\", n)\n~ return n")
         val step = m.next()
         assertEquals(listOf("Gold up.", "Done"), step.texts())
         assertEquals(listOf("gold"), step.events.map { it.name })
@@ -143,15 +146,15 @@ class EventsTest {
         val m = managerOf(
             """
             Start
-            ~ emit0("s")
+            ~ emit("s")
             <> here
             * [Left] Went left
-                ~ emit0("l")
+                ~ emit("l")
                 <> fully
                 -> done
             * [Right] -> done
             = done
-            ~ emit0("d")
+            ~ emit("d")
             End
             -> END
             """.trimIndent(),
@@ -169,15 +172,17 @@ class EventsTest {
 
     @Test
     fun `a plain story reports events once but its emit ends glue lookahead`() {
-        val plain = Story(compileLib("A\n~ emit0(\"x\")\n<> B\n~ emit0(\"y\")\nC").toJson())
-        val step = StoryManager(plain).next()
+        val plain = Story(compileLib("A\n~ emit(\"x\")\n<> B\n~ emit(\"y\")\nC").toJson())
+        val manager = StoryManager.forPlainStory(plain)
+        assertFalse(manager.lookaheadSafe)
+        val step = manager.next()
         assertEquals(listOf("A", "B", "C"), step.texts())
         assertEquals(listOf("x" to 1, "y" to 2), step.events.map { it.name to it.lineIndex })
     }
 
     @Test
     fun `an emit in choice text fires once when the choice is created`() {
-        val m = managerOf("Pick\n* [Buy {cost()}] -> END\n=== function cost() ===\n~ emit(\"shown\", 1)\n~ return 5")
+        val m = managerOf("Pick\n* [Buy {cost()}] -> END\n=== function cost() ===\n~ emit1(\"shown\", 1)\n~ return 5")
         val step = m.next()
         assertEquals("Buy 5", step.choices.single().text)
         assertEquals(listOf("shown" to 0), step.events.map { it.name to it.lineIndex })
@@ -186,7 +191,7 @@ class EventsTest {
 
     @Test
     fun `events after a load are reported once`() {
-        val m = managerOf("A\n* [Go]\n  ~ emit0(\"go\")\n  B\n  -> END")
+        val m = managerOf("A\n* [Go]\n  ~ emit(\"go\")\n  B\n  -> END")
         m.next()
         val saved = m.saveState()
         assertEquals(listOf("go"), m.choose(0).events.map { it.name })
@@ -196,7 +201,7 @@ class EventsTest {
 
     @Test
     fun `an event line index points at the line produced right after it`() {
-        val step = managerOf("One\n~ emit0(\"a\")\nTwo\n~ emit0(\"b\")\n-> END").next()
+        val step = managerOf("One\n~ emit(\"a\")\nTwo\n~ emit(\"b\")\n-> END").next()
         assertEquals(listOf("One", "Two"), step.texts())
         assertEquals(listOf("a" to 1, "b" to 2), step.events.map { it.name to it.lineIndex })
     }
@@ -212,14 +217,14 @@ class EventsTest {
 
     @Test
     fun `reset drops pending events`() {
-        val m = managerOf("~ emit0(\"a\")\nHi")
+        val m = managerOf("~ emit(\"a\")\nHi")
         m.reset()
         assertEquals(1, m.next().events.size)
     }
 
     @Test
     fun `emit works without a provider and without a manager`() {
-        assertEquals("Hi", compileLib("~ emit0(\"x\")\nHi").Continue().trim())
+        assertEquals("Hi", compileLib("~ emit(\"x\")\nHi").Continue().trim())
     }
 
     // ---- bindFunction ----
@@ -281,7 +286,7 @@ class EventsTest {
     fun `bindings survive assigning a new story`() {
         val m = managerOf(addInk)
         m.bindFunction("add") { it.int(0) * 10 }
-        m.story = compileLib(addInk)
+        m.replaceStory(compileLib(addInk))
         assertEquals(listOf("20"), m.next().texts())
     }
 
@@ -313,29 +318,29 @@ class EventsTest {
     @Test
     fun `variable returns the ink value or null`() {
         val m = managerOf(varInk)
-        assertEquals(10, m.variable("hp"))
-        assertEquals(1.5f, m.variable("rate"))
-        assertEquals("Ann", m.variable("name"))
-        assertEquals(true, m.variable("alive"))
-        assertNull(m.variable("nope"))
+        assertEquals(10, m.getVariable("hp"))
+        assertEquals(1.5f, m.getVariable("rate"))
+        assertEquals("Ann", m.getVariable("name"))
+        assertEquals(true, m.getVariable("alive"))
+        assertNull(m.getVariable("nope"))
     }
 
     @Test
     fun `typed variable coerces ints to wider numbers`() {
         val m = managerOf(varInk)
-        assertEquals(10, m.variable<Int>("hp"))
-        assertEquals(10f, m.variable<Float>("hp"))
-        assertEquals(10.0, m.variable<Double>("hp"))
-        assertEquals(10L, m.variable<Long>("hp"))
-        assertEquals(1.5, m.variable<Double>("rate"))
-        assertNull(m.variable<Int>("nope"))
+        assertEquals(10, m.variableAs<Int>("hp"))
+        assertEquals(10f, m.variableAs<Float>("hp"))
+        assertEquals(10.0, m.variableAs<Double>("hp"))
+        assertEquals(10L, m.variableAs<Long>("hp"))
+        assertEquals(1.5, m.variableAs<Double>("rate"))
+        assertNull(m.variableAs<Int>("nope"))
     }
 
     @Test
     fun `typed variable throws on a real mismatch`() {
         val m = managerOf(varInk)
-        assertFailsWith<IllegalArgumentException> { m.variable<String>("hp") }
-        assertFailsWith<IllegalArgumentException> { m.variable<Int>("rate") }
+        assertFailsWith<IllegalArgumentException> { m.variableAs<String>("hp") }
+        assertFailsWith<IllegalArgumentException> { m.variableAs<Int>("rate") }
     }
 
     @Test
@@ -344,9 +349,9 @@ class EventsTest {
         m.setVariable("hp", 99)
         m.setVariable("name", "Bo")
         m.setVariable("rate", 2.0)
-        assertEquals(99, m.variable("hp"))
-        assertEquals("Bo", m.variable("name"))
-        assertEquals(2.0f, m.variable("rate"))
+        assertEquals(99, m.getVariable("hp"))
+        assertEquals("Bo", m.getVariable("name"))
+        assertEquals(2.0f, m.getVariable("rate"))
     }
 
     @Test
@@ -357,9 +362,9 @@ class EventsTest {
     @Test
     fun `setVariable keeps an InkList`() {
         val m = managerOf("LIST items = sword, shield\nVAR bag = (sword)\nHi")
-        val list = InkList(m.variable("bag") as InkList)
+        val list = InkList(m.getVariable("bag") as InkList)
         m.setVariable("bag", list)
-        assertTrue(m.variable("bag") is InkList)
+        assertTrue(m.getVariable("bag") is InkList)
     }
 
     @Test
@@ -456,7 +461,7 @@ class EventsTest {
         var name = 0
         m.observe("hp") { _, _ -> hp++ }
         m.observe("name") { _, _ -> name++ }
-        m.story = compileLib("VAR hp = 1\nHi")
+        m.replaceStory(compileLib("VAR hp = 1\nHi"))
         m.setVariable("hp", 5)
         assertEquals(1, hp)
         assertEquals(0, name)

@@ -66,6 +66,17 @@ class DialogTest {
         assertTrue(managerOf("Hi").lookaheadSafe)
     }
 
+    @Test
+    fun `lookaheadSafe is a mode decided by the entry point`() {
+        val plain = com.bladecoder.ink.runtime.Story(compileLib("Hi").toJson())
+        val m = StoryManager.forPlainStory(plain)
+        assertFalse(m.lookaheadSafe)
+        m.replaceStory(compileLib("Hi"))
+        assertTrue(m.lookaheadSafe)
+        m.replacePlainStory(plain)
+        assertFalse(m.lookaheadSafe)
+    }
+
     // ---- speakers ----
 
     @Test

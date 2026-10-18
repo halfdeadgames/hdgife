@@ -5,6 +5,8 @@ import com.bladecoder.ink.runtime.InkList
 import com.bladecoder.ink.runtime.InkNativePatch
 import com.bladecoder.ink.runtime.SimpleJson
 import com.bladecoder.ink.runtime.Story
+import com.bladecoder.ink.runtime.StoryException
+import com.github.halfdeadgames.hdgife.HdgifeInk
 import com.github.halfdeadgames.hdgife.HdgifeLog
 import com.github.halfdeadgames.hdgife.state.NarrativeStateProvider
 import kotlin.reflect.KClass
@@ -60,7 +62,7 @@ fun cleanLine(raw: String): String =
  * Events are lookahead safe: each one is reported exactly once and in order, also across glue (see "Glue and lookahead").
  *
  * ### Variables
- * [variable], [setVariable], [observe], [variableNames].
+ * [getVariable], [variableAs], [setVariable], [observe], [variableNames].
  *
  * ### Checking a story
  * [validateStory] lists what is wrong or risky in the story and its bindings, without throwing.
@@ -68,20 +70,22 @@ fun cleanLine(raw: String): String =
  * ### Glue and lookahead
  * Ink runs ahead past a line break to see if glue (`<>`) joins the next line. A function that is not lookahead
  * safe ends that run ahead, which can stop glue from joining. Blade Ink 1.3.2 has a bug that makes safe functions
- * fail inside choice text and `"{...}"` strings. [HdgifeStory] fixes it. Stories made by `InkCompilerService` are
- * [HdgifeStory]s. If you pass a plain [Story] (built another way), the stat functions are bound as not lookahead
- * safe instead, which works everywhere except that they end glue lookahead. [lookaheadSafe] tells which one you got.
+ * fail inside choice text and `"{...}"` strings. [HdgifeStory] fixes it. The constructor and [replaceStory] take an
+ * [HdgifeStory] (what `InkCompilerService` returns) and bind the stat functions lookahead safe. A plain [Story]
+ * (built another way) goes through [forPlainStory] and [replacePlainStory]: the stat functions are bound as not
+ * lookahead safe, which works everywhere except that they end glue lookahead. [lookaheadSafe] tells which mode the
+ * manager is in; the entry point decides it.
  * Events are the exception: they may run in lookahead either way. Ink counts them in `hdgife_event_seq`, which ink
  * undoes together with the lookahead, and [next] only keeps events that the count still includes.
- * A story built with an old hdgife.ink (declares `hdgife_speaker` but has no `hdgife_event_seq`) is refused with an [IllegalStateException]
- * (and a [log] message), because its events could never be kept.
+ * A story whose hdgife.ink is not the version this engine expects (`HdgifeInk.VERSION`; a missing version counts as
+ * 0) is refused with an [IncompatibleLibraryException] (and a [log] message), because its events could never be kept.
  *
  * ### Saving and resetting
  * [saveState] and [loadState] cover everything ink holds, including [speaker] and the random seed, plus the open
  * styles, in one opaque string. Ink state needs `INCLUDE hdgife.ink`, which keeps the speaker in an ink variable.
  * Your own stat values live in your game, so save those yourself. [loadState] also reads a plain ink state JSON
  * (styles are then closed). [reset]
- * restarts the story. To run different sources, compile a new story and make a new manager (or assign [story]).
+ * restarts the story. To run different sources, compile a new story and make a new manager (or call [replaceStory]).
  *
  * ### Defaults
  * Every default below is a game decision and can be replaced: [numberFormat], [formatOverride], [variableNamer],
@@ -90,45 +94,72 @@ fun cleanLine(raw: String): String =
  *
  * Story is not thread-safe. Call this from one thread.
  */
-class StoryManager(
+class StoryManager private constructor(
     story: Story,
+    lookaheadSafeMode: Boolean,
     /** Source of stat values. Null means no stats: `stat` gives 0, `has_stat` false, requirements unmet. */
-    var stateProvider: NarrativeStateProvider? = null,
+    var stateProvider: NarrativeStateProvider?,
     /**
      * Builds the ink variable name that [syncStatsToInk] writes a stat to. Default [defaultVariableName]:
      * `entityId_statName` with anything outside `[A-Za-z0-9_]` replaced by `_` (`player_hp`).
      */
-    var variableNamer: (entityId: String, statName: String) -> String = ::defaultVariableName,
+    var variableNamer: (entityId: String, statName: String) -> String,
 ) {
     /**
-     * The wrapped story. Assigning a new one (after a reload, say) binds the stat functions, your [bindFunction]s
-     * and your [observe]rs to it, and resets what the manager holds (open styles, pending events, [speaker] is kept).
-     * The old story is unbound from this manager. Assigning the story it already has is allowed and rebinds it.
-     * Throws [IllegalStateException] if the story was built with an old hdgife.ink (it declares `hdgife_speaker` but
-     * has no `hdgife_event_seq`); the manager is then unchanged.
+     * Wraps [story], which stat functions bound lookahead safe (see "Glue and lookahead"). Throws
+     * [IncompatibleLibraryException] if the story includes a hdgife.ink of another version. Use [forPlainStory] for
+     * a story that is not an [HdgifeStory].
+     */
+    constructor(
+        story: HdgifeStory,
+        stateProvider: NarrativeStateProvider? = null,
+        variableNamer: (entityId: String, statName: String) -> String = ::defaultVariableName,
+    ) : this(story, true, stateProvider, variableNamer)
+
+    private var current: Story = story
+
+    /**
+     * The wrapped story. It is fixed for the life of the manager; [replaceStory] swaps it. Everything ink-side you
+     * do through the story itself (`choosePathString`, `variablesState`) is allowed, but prefer the manager's API.
+     */
+    val story: Story get() = current
+
+    /**
+     * Swaps in [story] (after a reload, say). It is checked first, and a refused story leaves the manager exactly as
+     * it was. Then it binds the stat functions, your [bindFunction]s and your [observe]rs to it, and resets what the
+     * manager holds (open styles, pending events; [speaker] is kept). The old story is unbound from this manager.
+     * Giving it the story it already has is allowed and rebinds it. Observers whose variable the new story does not
+     * declare are dropped (and logged). Sets [lookaheadSafe] to true.
+     *
+     * Throws [IncompatibleLibraryException] if the story includes a hdgife.ink of another version.
      *
      * One story should have one manager. A manager takes over the library names (`stat`, `fmt`, `hdgife_emit0` ...)
      * and its own [bindFunction] names on the story it gets, replacing any earlier binding, such as the one of a
      * previous manager. Functions another manager bound under other names stay with that manager.
      */
-    var story: Story = story
-        set(value) {
-            // Validate first: a refused story leaves the manager exactly as it was.
-            checkEventSupport(value)
-            val old = field
-            val keep = speaker
-            closeStyles("the story was replaced")
-            detachObservations()
-            unbindOwn(old)
-            field = value
-            value.setAllowExternalFunctionFallbacks(allowExternalFunctionFallbacks)
-            bind(value)
-            lastSeed = null
-            pendingEvents.clear()
-            unconfirmedEvents.clear()
-            speaker = keep
-            reattachObservations()
-        }
+    fun replaceStory(story: HdgifeStory) = swapStory(story, true)
+
+    /** Same as [replaceStory] for a plain [Story]: [lookaheadSafe] becomes false. */
+    fun replacePlainStory(story: Story) = swapStory(story, false)
+
+    private fun swapStory(value: Story, safeMode: Boolean) {
+        // Validate first: a refused story leaves the manager exactly as it was.
+        checkLibrary(value)
+        val old = current
+        val keep = speaker
+        closeStyles("the story was replaced")
+        detachObservations()
+        unbindOwn(old)
+        current = value
+        lookaheadSafe = safeMode
+        value.setAllowExternalFunctionFallbacks(allowExternalFunctionFallbacks)
+        bind(value)
+        lastSeed = null
+        pendingEvents.clear()
+        unconfirmedEvents.clear()
+        speaker = keep
+        reattachObservations()
+    }
 
     /** Gets warnings such as an unknown `fmt` mode or an unbalanced style marker. Default null: the engine logs nothing. */
     var log: HdgifeLog? = null
@@ -202,8 +233,13 @@ class StoryManager(
 
     private class UserFunction(val lookaheadSafe: Boolean, val block: (FunctionArgs) -> Any?)
 
-    /** True when the stat functions of the current story are bound lookahead safe (see "Glue and lookahead"). */
-    val lookaheadSafe: Boolean get() = story is HdgifeStory
+    /**
+     * True when the stat functions of the current story are bound lookahead safe (see "Glue and lookahead"). It is
+     * a mode, set by the entry point: true for the constructor and [replaceStory], false for [forPlainStory] and
+     * [replacePlainStory].
+     */
+    var lookaheadSafe: Boolean = lookaheadSafeMode
+        private set
 
     /**
      * Entity that ink's `stat` and `has_stat` read from. Null means none, so they give 0 / false.
@@ -220,8 +256,8 @@ class StoryManager(
 
     init {
         InkNativePatch.apply()
-        checkEventSupport(story)
-        this.story.setAllowExternalFunctionFallbacks(allowExternalFunctionFallbacks)
+        checkLibrary(story)
+        story.setAllowExternalFunctionFallbacks(allowExternalFunctionFallbacks)
         bind(story)
     }
 
@@ -254,16 +290,14 @@ class StoryManager(
         attached.clear()
     }
 
-    /** Stories compiled with an old hdgife.ink declare `hdgife_speaker` but have no `hdgife_event_seq`: every event would be lost. */
-    private fun checkEventSupport(target: Story) {
-        val hasEmit = target.hasFunction("emit") || target.hasFunction("emit0")
-        // Only a story that clearly includes hdgife.ink (it declares hdgife_speaker) is checked; a user's own `emit` is left alone.
-        val fromHdgifeInk = target.variablesState.get(SPEAKER_VARIABLE) != null
-        if (hasEmit && fromHdgifeInk && target.variablesState.get(EVENT_SEQ_VARIABLE) == null) {
-            val message = "The story's hdgife.ink is out of date (no hdgife_event_seq), so emit events would be lost. Recompile it with the current hdgife.ink."
-            log?.log(message)
-            throw IllegalStateException(message)
-        }
+    /**
+     * A story that includes hdgife.ink must carry the version this engine expects. An old one has no version (0): its
+     * events could never be kept. A story that does not include hdgife.ink is not checked.
+     */
+    private fun checkLibrary(target: Story) {
+        val problem = libraryProblem(target) ?: return
+        log?.log(problem.message.orEmpty())
+        throw problem
     }
 
     /** Library functions are always rebound to this manager, replacing whatever was bound under the name. */
@@ -273,7 +307,7 @@ class StoryManager(
     }
 
     private fun attach(target: Story, name: String, safe: Boolean, function: Story.ExternalFunction<Any?>) {
-        if (safe && target is HdgifeStory) target.bindLookaheadSafe(name, function)
+        if (safe && lookaheadSafe) (target as HdgifeStory).bindLookaheadSafe(name, function)
         else target.bindExternalFunction(name, function, false)
         attached[name] = function
     }
@@ -302,8 +336,8 @@ class StoryManager(
      *
      * [lookaheadSafe] says the function may be called early or twice because ink runs ahead for glue. Leave it false
      * (default) for anything with a side effect, and know it then ends glue lookahead. Make it true only for
-     * pure reads. Safe functions need an [HdgifeStory] ([lookaheadSafe] property) to work inside strings. Bindings
-     * survive assigning a new [story]. Throws if [name] is already bound by something else.
+     * pure reads. Safe functions only work inside strings in [lookaheadSafe] mode. Bindings
+     * survive [replaceStory]. Throws [IllegalArgumentException] if [name] is already bound by something else.
      */
     fun bindFunction(name: String, lookaheadSafe: Boolean = false, function: (FunctionArgs) -> Any?) {
         if (name in userFunctions) unbindFunction(name)
@@ -355,7 +389,7 @@ class StoryManager(
         for (i in pendingEvents.indices) {
             val p = pendingEvents[i]
             if (!p.late) continue
-            pendingEvents[i] = PendingEvent(if (lineAdded) p.event.copy(lineIndex = p.event.lineIndex + 1) else p.event, false)
+            pendingEvents[i] = PendingEvent(if (lineAdded) p.event.atLine(p.event.lineIndex + 1) else p.event, false)
         }
     }
 
@@ -447,39 +481,45 @@ class StoryManager(
 
     /**
      * Sets the current [speaker] and jumps to [knotPath] (`knot` or `knot.stitch`).
-     * Call [next] afterwards to read the output. Throws if the path does not exist.
+     * Call [next] afterwards to read the output. Throws [StoryPathException] if ink cannot find the path (ink's
+     * `StoryException` is its cause); the speaker is then left as it was.
      */
     fun beginScene(knotPath: String, speakerId: String? = null) {
+        try {
+            story.choosePathString(knotPath)
+        } catch (e: StoryException) {
+            throw StoryPathException(knotPath, e)
+        }
         speaker = speakerId
-        story.choosePathString(knotPath)
     }
 
     /**
-     * Seeds ink's RANDOM and shuffles so output is repeatable. Needs `INCLUDE hdgife.ink`
-     * (returns false if the library is missing). Call it again after [reset], which reseeds randomly.
+     * Seeds ink's RANDOM and shuffles so output is repeatable. Needs `INCLUDE hdgife.ink`: throws
+     * [IncompatibleLibraryException] if the library is missing. Call it again after [reset], which reseeds randomly.
      *
      * The seed is stored in the ink state (ink's own SEED_RANDOM, together with the position in the random
      * sequence), so [saveState] and [loadState] carry it and the sequence continues exactly. The engine
      * can't set the seed directly: blade-ink keeps that setter package-private.
      */
-    fun seedRandom(seed: Int): Boolean {
-        if (!story.hasFunction(SEED_FUNCTION)) return false
+    fun seedRandom(seed: Int) {
+        if (!story.hasFunction(SEED_FUNCTION)) {
+            throw IncompatibleLibraryException("Seeding needs INCLUDE hdgife.ink in the story", 0)
+        }
         story.evaluateFunction(SEED_FUNCTION, arrayOf<Any>(seed))
         lastSeed = seed
-        return true
     }
 
     /**
      * The last seed set through this manager, or null if none since the story was assigned or [loadState]
      * was called (the seed itself still lives in the loaded state). Setting calls [seedRandom] and throws
-     * [IllegalStateException] if the story doesn't include hdgife.ink, and [IllegalArgumentException] for null
+     * [IncompatibleLibraryException] if the story doesn't include hdgife.ink, and [IllegalArgumentException] for null
      * (there is no way to unseed; call [reset] and don't seed).
      */
     var seed: Int?
         get() = lastSeed
         set(value) {
             requireNotNull(value) { "The seed can't be set to null" }
-            check(seedRandom(value)) { "Seeding needs INCLUDE hdgife.ink in the story" }
+            seedRandom(value)
         }
 
     /**
@@ -519,9 +559,9 @@ class StoryManager(
     /**
      * Restores a string from [saveState], or a plain ink state JSON (an older save). Output continues from there,
      * and styles that were open at save time are open again. A plain ink JSON has no style information, so open
-     * styles are closed. Throws [IllegalArgumentException] for a save from a newer version or a broken envelope,
-     * and ink's exception if the state doesn't match the story. Stat values are not part of it. Pending events
-     * are dropped.
+     * styles are closed. Throws [SaveStateException] for a save from a newer version or a broken envelope, and for
+     * a state that ink refuses (the story doesn't match; ink's exception is the cause). Stat values are not part of
+     * it. Pending events are dropped.
      */
     fun loadState(json: String) {
         var inkJson = json
@@ -529,13 +569,19 @@ class StoryManager(
         var savedSpeaker: String? = null
         val envelope = readEnvelope(json)
         if (envelope != null) {
-            val version = (envelope["v"] as? Number)?.toInt() ?: throw IllegalArgumentException("Save has no version")
-            require(version in 1..SAVE_VERSION) { "Save version $version is not supported (this engine reads up to $SAVE_VERSION)" }
-            inkJson = envelope["ink"] as? String ?: throw IllegalArgumentException("Save has no ink state")
+            val version = (envelope["v"] as? Number)?.toInt() ?: throw SaveStateException("Save has no version")
+            if (version !in 1..SAVE_VERSION) {
+                throw SaveStateException("Save version $version is not supported (this engine reads up to $SAVE_VERSION)")
+            }
+            inkJson = envelope["ink"] as? String ?: throw SaveStateException("Save has no ink state")
             styles = readStyles(envelope["styles"])
             savedSpeaker = envelope["speaker"] as? String
         }
-        story.state.loadJson(inkJson)
+        try {
+            story.state.loadJson(inkJson)
+        } catch (e: Exception) {
+            throw SaveStateException("Ink could not load the state: ${e.message}", e)
+        }
         lastSeed = null
         if (envelope == null) {
             closeStyles("state was loaded")
@@ -561,10 +607,10 @@ class StoryManager(
     private fun readStyles(raw: Any?): List<Style> {
         val list = raw as? List<*> ?: return emptyList()
         return list.map { item ->
-            val map = item as? Map<*, *> ?: throw IllegalArgumentException("Save has a broken style entry")
+            val map = item as? Map<*, *> ?: throw SaveStateException("Save has a broken style entry")
             val params = (map["params"] as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value.toString() }
             Style(
-                map["name"] as? String ?: throw IllegalArgumentException("Save has a style without a name"),
+                map["name"] as? String ?: throw SaveStateException("Save has a style without a name"),
                 map["value"] as? String,
                 params ?: emptyMap(),
             )
@@ -765,7 +811,7 @@ class StoryManager(
      * How many `emit` calls the story has made so far: the [StoryEvent.id] of the latest event, 0 before the first.
      * Part of the ink state, so [loadState] sets it back. Save it next to your own handled-events mark if you dedupe by id.
      */
-    val eventCount: Int get() = variable(EVENT_SEQ_VARIABLE) as? Int ?: 0
+    val eventCount: Int get() = getVariable(EVENT_SEQ_VARIABLE) as? Int ?: 0
 
     /**
      * Checks the story and this manager's bindings and returns what it found, without throwing (see [StoryReport]).
@@ -790,18 +836,15 @@ class StoryManager(
      * The current value of ink variable [name]: an `Int`, `Float`, `Boolean` or `String` (an `InkList` for lists),
      * or null if the story declares no such variable.
      */
-    fun variable(name: String): Any? = story.variablesState.get(name)
+    fun getVariable(name: String): Any? = story.variablesState.get(name)
 
     /**
-     * Typed read: `variable<Int>("player_hp")`. Null when [name] is not declared. An ink int is accepted as a
-     * `Float`, `Double` or `Long`, a float as a `Double`. Any other mismatch throws [IllegalArgumentException].
+     * Typed read: `getVariable("player_hp", Int::class)`, or `variableAs<Int>("player_hp")` from Kotlin. Null when
+     * [name] is not declared. An ink int is accepted as a `Float`, `Double` or `Long`, a float as a `Double`. Any
+     * other mismatch throws [IllegalArgumentException].
      */
-    @JvmName("variableTyped")
-    inline fun <reified T : Any> variable(name: String): T? = coerceVariable(name, variable(name), T::class)
-
-    @PublishedApi
-    internal fun <T : Any> coerceVariable(name: String, value: Any?, type: KClass<T>): T? {
-        if (value == null) return null
+    fun <T : Any> getVariable(name: String, type: KClass<T>): T? {
+        val value = getVariable(name) ?: return null
         val converted: Any? = when {
             type.isInstance(value) -> value
             value is Int && type == Float::class -> value.toFloat()
@@ -816,12 +859,15 @@ class StoryManager(
         )
     }
 
+    /** Typed read with the type as a type argument: `variableAs<Int>("player_hp")`. Same rules as [getVariable]. */
+    inline fun <reified T : Any> variableAs(name: String): T? = getVariable(name, T::class)
+
     /**
      * Sets ink variable [name] to [value], mapped like stats (see [NarrativeStateProvider]; an `InkList` is kept).
      * Throws [IllegalArgumentException] if the variable isn't declared. Observers fire as for any change.
      */
     fun setVariable(name: String, value: Any) {
-        require(variable(name) != null) { "'$name' is not a variable declared in the story" }
+        require(getVariable(name) != null) { "'$name' is not a variable declared in the story" }
         story.variablesState.set(name, if (value is InkList) value else toInk(value) ?: value)
     }
 
@@ -832,9 +878,9 @@ class StoryManager(
      * Throws [IllegalArgumentException] if the variable isn't declared. Stop it with [unobserve].
      */
     fun observe(name: String, observer: (old: Any?, new: Any?) -> Unit): VariableObservation {
-        require(variable(name) != null) { "'$name' is not a variable declared in the story" }
+        require(getVariable(name) != null) { "'$name' is not a variable declared in the story" }
         val observation = VariableObservation(name, observer, this)
-        observation.last = variable(name)
+        observation.last = getVariable(name)
         observations += observation
         attach(observation)
         return observation
@@ -869,19 +915,19 @@ class StoryManager(
 
     private fun reattachObservations() {
         for (observation in observations.toList()) {
-            if (variable(observation.name) == null) {
+            if (getVariable(observation.name) == null) {
                 log?.log("Observer on '${observation.name}' dropped: the new story doesn't declare it")
                 observation.active = false
                 observations.remove(observation)
                 continue
             }
-            observation.last = variable(observation.name)
+            observation.last = getVariable(observation.name)
             attach(observation)
         }
     }
 
     private fun rebaseObservations() {
-        for (observation in observations) observation.last = variable(observation.name)
+        for (observation in observations) observation.last = getVariable(observation.name)
     }
 
     companion object {
@@ -890,6 +936,17 @@ class StoryManager(
         private const val EVENT_SEQ_VARIABLE = "hdgife_event_seq"
         private const val SAVE_VERSION = 1
         private val NOT_NAME = Regex("[^A-Za-z0-9_]")
+
+        /**
+         * A manager for a plain [Story] that is not an [HdgifeStory]: the stat functions are bound as not lookahead
+         * safe, so they end glue lookahead (see "Glue and lookahead"). [lookaheadSafe] is false. Prefer an
+         * [HdgifeStory] from `InkCompilerService` and the public constructor.
+         */
+        fun forPlainStory(
+            story: Story,
+            stateProvider: NarrativeStateProvider? = null,
+            variableNamer: (entityId: String, statName: String) -> String = ::defaultVariableName,
+        ): StoryManager = StoryManager(story, false, stateProvider, variableNamer)
         // A name is a plain word (letters, digits, _ and -) or quoted ('...' or "..."), so it can hold spaces, dots and commas.
         private const val NAME = """\x22[^\x22]+\x22|'[^']+'|[\w-]+"""
         private val REQUIREMENT = Regex("""(?:($NAME)\.)?($NAME)\s*(>=|<=|==|!=|>|<)\s*(.+)""")

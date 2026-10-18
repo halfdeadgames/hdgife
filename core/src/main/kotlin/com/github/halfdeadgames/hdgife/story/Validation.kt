@@ -6,6 +6,7 @@ import com.bladecoder.ink.runtime.Divert
 import com.bladecoder.ink.runtime.Story
 import com.bladecoder.ink.runtime.StringValue
 import com.bladecoder.ink.runtime.Tag
+import com.github.halfdeadgames.hdgife.HdgifeInk
 
 /** How serious a [ValidationIssue] is. */
 enum class Severity {
@@ -27,10 +28,13 @@ enum class IssueKind {
     /** An `EXTERNAL` with no Kotlin binding runs its ink fallback instead. [Severity.INFO]. */
     EXTERNAL_USES_FALLBACK,
 
-    /** A library name is defined in a story that does not include hdgife.ink, and the manager will take it over. [Severity.WARNING]. */
+    /**
+     * A reserved library name (see `HdgifeInk.LIBRARY_FUNCTIONS`) is defined in a story that does not include the
+     * file it belongs to (hdgife.ink or hdgife_util.ink). [Severity.WARNING].
+     */
     LIBRARY_WITHOUT_INCLUDE,
 
-    /** The story includes an out-of-date hdgife.ink. [Severity.ERROR] when events would be lost, else [Severity.WARNING]. */
+    /** The story includes a hdgife.ink that is not the version of this engine (old, with no version, or newer). [Severity.ERROR]. */
     OLD_LIBRARY,
 
     /** A variable that is observed (or meant to be) is not declared in the story. [Severity.ERROR]. */
@@ -41,10 +45,17 @@ enum class IssueKind {
 }
 
 /** One finding of [validateStory]. [subject] is the name or text it is about (a function, a variable, a clause). */
-data class ValidationIssue(val severity: Severity, val kind: IssueKind, val subject: String, val message: String)
+class ValidationIssue internal constructor(val severity: Severity, val kind: IssueKind, val subject: String, val message: String) {
+    override fun equals(other: Any?): Boolean = this === other || other is ValidationIssue &&
+        severity == other.severity && kind == other.kind && subject == other.subject && message == other.message
+
+    override fun hashCode(): Int = listOf(severity, kind, subject, message).hashCode()
+
+    override fun toString() = "ValidationIssue(severity=$severity, kind=$kind, subject=$subject, message=$message)"
+}
 
 /** The result of [validateStory]: every finding, most serious first. */
-data class StoryReport(val issues: List<ValidationIssue>) {
+class StoryReport internal constructor(val issues: List<ValidationIssue>) {
     val errors: List<ValidationIssue> get() = issues.filter { it.severity == Severity.ERROR }
     val warnings: List<ValidationIssue> get() = issues.filter { it.severity == Severity.WARNING }
     val infos: List<ValidationIssue> get() = issues.filter { it.severity == Severity.INFO }
@@ -54,14 +65,13 @@ data class StoryReport(val issues: List<ValidationIssue>) {
 
     fun of(kind: IssueKind): List<ValidationIssue> = issues.filter { it.kind == kind }
 
+    override fun equals(other: Any?): Boolean = this === other || other is StoryReport && issues == other.issues
+
+    override fun hashCode(): Int = issues.hashCode()
+
     override fun toString(): String =
         if (issues.isEmpty()) "No issues" else issues.joinToString("\n") { "${it.severity}: ${it.message}" }
 }
-
-private val LIBRARY_FUNCTIONS = listOf(
-    "stat", "stat_of", "has_stat", "has_stat_of", "stat_text", "stat_text_of", "fmt",
-    "hdgife_emit0", "hdgife_emit1", "hdgife_emit2", "hdgife_emit3",
-)
 
 /**
  * Checks [story] and reports what is wrong or risky, without throwing. It reads the compiled story and its
@@ -72,10 +82,11 @@ private val LIBRARY_FUNCTIONS = listOf(
  *   off, see `Story.allowExternalFunctionFallbacks`), an info when the fallback will run. A function counts as bound
  *   when [story] has a binding for it or its name is in [boundFunctions]. An `EXTERNAL` that is declared but never
  *   called is not in the compiled story and is not seen.
- * - Library names (`stat`, `fmt`, `has_stat_of`, ...) that the story defines itself without `INCLUDE hdgife.ink`. The
- *   manager binds those names to its own functions and replaces yours, so include the library or rename them.
- * - An old hdgife.ink: no `hdgife_event_seq` (events would be lost, `StoryManager` refuses such a story), or no
- *   `has_stat_of`.
+ * - Reserved library names (`HdgifeInk.LIBRARY_FUNCTIONS`: `stat`, `fmt`, `emit`, `chance`, `clamp`, ...) that the story
+ *   defines itself without including the file they belong to (`INCLUDE hdgife.ink` or `INCLUDE hdgife_util.ink`). A
+ *   manager binds the external ones to its own functions and replaces yours, so include the library or rename them.
+ * - A hdgife.ink of another version than `HdgifeInk.VERSION`, an old one with no version included (counted as 0;
+ *   `StoryManager` refuses such a story with an `IncompatibleLibraryException`).
  * - [observedVariables] that the story does not declare.
  * - Clauses in `# requires:` tags (the key is [requirementsTagKey]) that the engine cannot read. This is a best-effort
  *   scan of the tags written literally in the ink source. Tags with `{...}` inside, or added at runtime, are not seen,
@@ -89,7 +100,8 @@ fun validateStory(
 ): StoryReport {
     val issues = ArrayList<ValidationIssue>()
     val variables = story.variablesState
-    val includesLibrary = variables.get("hdgife_speaker") != null
+    val core = includesCoreLibrary(story)
+    val util = includesUtilLibrary(story)
 
     val externals = LinkedHashSet<String>()
     val requirementTags = ArrayList<Pair<String, String>>()
@@ -107,28 +119,23 @@ fun validateStory(
         }
     }
 
-    if (!includesLibrary) {
-        for (name in LIBRARY_FUNCTIONS) {
+    for ((names, included, file) in listOf(
+        Triple(HdgifeInk.CORE_FUNCTIONS, core, "hdgife.ink"),
+        Triple(HdgifeInk.UTIL_FUNCTIONS, util, "hdgife_util.ink"),
+    )) {
+        if (included) continue
+        for (name in names) {
             if (story.hasFunction(name)) {
                 issues += ValidationIssue(
                     Severity.WARNING, IssueKind.LIBRARY_WITHOUT_INCLUDE, name,
-                    "$name is a library name, but the story does not INCLUDE hdgife.ink; a StoryManager replaces your $name with its own",
+                    "$name is a reserved library name, but the story does not INCLUDE $file; " +
+                        "a StoryManager replaces your external $name with its own, and including the library later would clash",
                 )
             }
         }
-    } else {
-        val hasEmit = story.hasFunction("emit") || story.hasFunction("emit0")
-        if (hasEmit && variables.get("hdgife_event_seq") == null) {
-            issues += ValidationIssue(
-                Severity.ERROR, IssueKind.OLD_LIBRARY, "hdgife_event_seq",
-                "hdgife.ink is out of date (no hdgife_event_seq), so emit events would be lost; recompile with the current hdgife.ink",
-            )
-        } else if (!story.hasFunction("has_stat_of")) {
-            issues += ValidationIssue(
-                Severity.WARNING, IssueKind.OLD_LIBRARY, "has_stat_of",
-                "hdgife.ink is out of date (no has_stat_of); recompile with the current hdgife.ink",
-            )
-        }
+    }
+    libraryProblem(story)?.let {
+        issues += ValidationIssue(Severity.ERROR, IssueKind.OLD_LIBRARY, "hdgife_version", it.message.orEmpty())
     }
 
     for (name in observedVariables.distinct()) {

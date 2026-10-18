@@ -1,7 +1,7 @@
 package com.github.halfdeadgames.hdgife
 
 import com.badlogic.gdx.files.FileHandle
-import com.bladecoder.ink.runtime.Story
+import com.bladecoder.ink.runtime.HdgifeStory
 import com.github.halfdeadgames.hdgife.compiler.InkCompileException
 import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
 import com.github.halfdeadgames.hdgife.compiler.InkSource
@@ -33,7 +33,7 @@ class CompilerTest {
     private fun write(path: String, text: String): File =
         File(dir, path).also { it.parentFile.mkdirs(); it.writeText(text) }
 
-    private fun linesOf(story: Story) = StoryManager(story).next().texts()
+    private fun linesOf(story: HdgifeStory) = StoryManager(story).next().texts()
 
     @Test
     fun `compiles a story from a string`() {

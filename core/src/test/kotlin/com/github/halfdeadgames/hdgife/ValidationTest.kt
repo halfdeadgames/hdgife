@@ -2,8 +2,10 @@ package com.github.halfdeadgames.hdgife
 
 import com.github.halfdeadgames.hdgife.story.IssueKind
 import com.github.halfdeadgames.hdgife.story.Severity
+import com.github.halfdeadgames.hdgife.story.coreLibraryVersion
 import com.github.halfdeadgames.hdgife.story.validateStory
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -84,37 +86,67 @@ class ValidationTest {
     }
 
     @Test
+    fun `util names without the util include are a warning, with it they are not`() {
+        val own = compileInk("""
+            Hi {clamp(5, 0, 3)}
+            -> END
+            === function clamp(x, lo, hi) ===
+            ~ return lo
+        """.trimIndent())
+        val issue = validateStory(own).of(IssueKind.LIBRARY_WITHOUT_INCLUDE).single()
+        assertEquals("clamp", issue.subject)
+        assertContains(issue.message, "hdgife_util.ink")
+        // the bundled one, with or without the core library, is not reported
+        assertEquals(emptyList(), validateStory(compileInk("INCLUDE hdgife_util.ink\nHi")).of(IssueKind.LIBRARY_WITHOUT_INCLUDE))
+        assertEquals(emptyList(), validateStory(compileLib("INCLUDE hdgife_util.ink\nHi")).of(IssueKind.LIBRARY_WITHOUT_INCLUDE))
+        // a user's clamp next to the core library is still reserved
+        val withCore = compileLib("Hi\n-> END\n=== function clamp(x) ===\n~ return x")
+        assertEquals("clamp", validateStory(withCore).of(IssueKind.LIBRARY_WITHOUT_INCLUDE).single().subject)
+    }
+
+    @Test
     fun `a story that includes the library has no library warning`() {
         assertEquals(emptyList(), managerOf("Hi {stat(\"x\")}\n-> END").validateStory().of(IssueKind.LIBRARY_WITHOUT_INCLUDE))
     }
 
     @Test
-    fun `an old hdgife ink without the event counter is an error`() {
+    fun `an old hdgife ink with no version is an error`() {
         val old = compileInk("""
             VAR hdgife_speaker = ""
-            EXTERNAL emit(name, a)
-            ~ emit("x", 1)
+            EXTERNAL emit1(name, a)
+            ~ emit1("x", 1)
             Hi
             -> END
-            === function emit(name, a) ===
+            === function emit1(name, a) ===
             ~ return 0
         """.trimIndent())
         val issue = validateStory(old).of(IssueKind.OLD_LIBRARY).single()
         assertEquals(Severity.ERROR, issue.severity)
-        assertEquals("hdgife_event_seq", issue.subject)
+        assertEquals("hdgife_version", issue.subject)
+        assertContains(issue.message, "out of date")
     }
 
     @Test
-    fun `an hdgife ink from before has_stat_of is a warning`() {
-        val old = compileInk("""
-            VAR hdgife_speaker = ""
-            VAR hdgife_event_seq = 0
-            Hi
-            -> END
-        """.trimIndent())
-        val issue = validateStory(old).of(IssueKind.OLD_LIBRARY).single()
-        assertEquals(Severity.WARNING, issue.severity)
-        assertEquals("has_stat_of", issue.subject)
+    fun `an hdgife ink of another version is an error whichever way`() {
+        for (version in listOf(HdgifeInk.VERSION + 1, HdgifeInk.VERSION - 1).filter { it > 0 }) {
+            val other = compileInk("""
+                VAR hdgife_speaker = ""
+                Hi
+                -> END
+                === function hdgife_lib_version() ===
+                ~ return $version
+            """.trimIndent())
+            val issue = validateStory(other).of(IssueKind.OLD_LIBRARY).single()
+            assertEquals(Severity.ERROR, issue.severity)
+            assertContains(issue.message, "version $version")
+        }
+    }
+
+    @Test
+    fun `the library version is read from the story without running it`() {
+        val story = compileLib("Hi\n-> END")
+        assertEquals(HdgifeInk.VERSION, coreLibraryVersion(story))
+        assertEquals(0, coreLibraryVersion(compileInk("Hi")))
     }
 
     @Test

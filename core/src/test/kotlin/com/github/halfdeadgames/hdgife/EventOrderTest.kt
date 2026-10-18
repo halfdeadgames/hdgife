@@ -42,7 +42,7 @@ class EventOrderTest {
     fun `choose delivers events before the choices of its step`() {
         val stats = MapStats().also { it["player", "coin"] = 1 }
         val m = managerOf(
-            "* [Go] Went\n~ emit(\"grant\", 5)\n* * [Buy # requires: player.coin >= 5] Bought -> END\n* * [Leave] Left -> END",
+            "* [Go] Went\n~ emit1(\"grant\", 5)\n* * [Buy # requires: player.coin >= 5] Bought -> END\n* * [Leave] Left -> END",
             stats,
         )
         m.onEvent = { stats["player", "coin"] = (stats.getStat("player", "coin") as Int) + (it.args[0] as Int) }
@@ -52,7 +52,7 @@ class EventOrderTest {
 
     @Test
     fun `onEvent runs once per event, in order, and the step lists the same events`() {
-        val m = managerOf("A <>\n~ emit0(\"x\")\nB\n~ emit(\"y\", 1)\nC\n~ emit0(\"z\")\n* [Go] -> END")
+        val m = managerOf("A <>\n~ emit(\"x\")\nB\n~ emit1(\"y\", 1)\nC\n~ emit(\"z\")\n* [Go] -> END")
         val seen = ArrayList<StoryEvent>()
         m.onEvent = { seen += it }
         val step = m.next()
@@ -62,7 +62,7 @@ class EventOrderTest {
 
     @Test
     fun `an event is delivered when the story ends too`() {
-        val m = managerOf("Hi\n~ emit0(\"bye\")\n-> END")
+        val m = managerOf("Hi\n~ emit(\"bye\")\n-> END")
         val seen = ArrayList<String>()
         m.onEvent = { seen += it.name }
         assertTrue(m.next().ended)
@@ -71,7 +71,7 @@ class EventOrderTest {
 
     @Test
     fun `an exception in onEvent comes out as a StoryStepException that keeps the step`() {
-        val m = managerOf("Hi\n~ emit0(\"a\")\n* [Go] -> END")
+        val m = managerOf("Hi\n~ emit(\"a\")\n* [Go] -> END")
         m.onEvent = { error("nope") }
         val ex = assertFailsWith<StoryStepException> { m.next() }
         assertEquals(listOf("a"), ex.step.events.map { it.name })
@@ -82,26 +82,26 @@ class EventOrderTest {
 
     @Test
     fun `ids count emits from one`() {
-        val step = managerOf("~ emit0(\"a\")\n~ emit(\"b\", 1)\nLine\n~ emit0(\"c\")").next()
+        val step = managerOf("~ emit(\"a\")\n~ emit1(\"b\", 1)\nLine\n~ emit(\"c\")").next()
         assertEquals(listOf(1, 2, 3), step.events.map { it.id })
     }
 
     @Test
     fun `ids stay the same through glue lookahead`() {
-        val step = managerOf("A <>\n~ emit0(\"x\")\nB\n~ emit0(\"y\")\nC").next()
+        val step = managerOf("A <>\n~ emit(\"x\")\nB\n~ emit(\"y\")\nC").next()
         assertEquals(listOf("x" to 1, "y" to 2), step.events.map { it.name to it.id })
     }
 
     @Test
     fun `ids continue across steps and eventCount follows`() {
-        val m = managerOf("~ emit0(\"a\")\n* [Go]\n  ~ emit0(\"b\")\n  Done -> END")
+        val m = managerOf("~ emit(\"a\")\n* [Go]\n  ~ emit(\"b\")\n  Done -> END")
         assertEquals(0, m.eventCount)
         assertEquals(listOf(1), m.next().events.map { it.id })
         assertEquals(listOf(2), m.choose(0).events.map { it.id })
         assertEquals(2, m.eventCount)
     }
 
-    private val twoEvents = "~ emit0(\"first\")\nOne\n* [Go]\n  ~ emit0(\"second\")\n  Two -> END"
+    private val twoEvents = "~ emit(\"first\")\nOne\n* [Go]\n  ~ emit(\"second\")\n  Two -> END"
 
     @Test
     fun `an event replayed after loading an earlier save has the same id`() {
@@ -129,7 +129,7 @@ class EventOrderTest {
 
     @Test
     fun `reset starts the ids again`() {
-        val m = managerOf("~ emit0(\"a\")\nHi")
+        val m = managerOf("~ emit(\"a\")\nHi")
         assertEquals(1, m.next().events.single().id)
         m.reset()
         assertEquals(1, m.next().events.single().id)

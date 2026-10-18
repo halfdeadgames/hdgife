@@ -9,7 +9,7 @@ import com.github.halfdeadgames.hdgife.HdgifeLog
  * [value] is the text after the first `=`, as written (quotes removed). [params] are the `key=value` pairs
  * that follow. Both are raw strings, the game reads them as it likes.
  */
-data class Style(
+class Style internal constructor(
     val name: String,
     val value: String? = null,
     val params: Map<String, String> = emptyMap(),
@@ -25,6 +25,13 @@ data class Style(
      * game resolves itself). Reads [value], or the parameter [key] when one is given. See [parseHexColor].
      */
     fun hexColor(key: String? = null): Int? = (if (key == null) value else params[key])?.let(::parseHexColor)
+
+    override fun equals(other: Any?): Boolean =
+        this === other || other is Style && name == other.name && value == other.value && params == other.params
+
+    override fun hashCode(): Int = listOf(name, value, params).hashCode()
+
+    override fun toString() = "Style(name=$name, value=$value, params=$params)"
 }
 
 /**
@@ -32,11 +39,11 @@ data class Style(
  * index in the line's plain text where it sits (the marker comes before the character at [offset], and
  * `offset == text.length` means after the last one). The engine doesn't interpret it.
  */
-data class TextMarker(
+class TextMarker internal constructor(
     val name: String,
+    val offset: Int,
     val value: String? = null,
     val params: Map<String, String> = emptyMap(),
-    val offset: Int,
 ) {
     /** [value] split at commas and trimmed. */
     val values: List<String> get() = splitValues(value)
@@ -46,12 +53,27 @@ data class TextMarker(
 
     /** Same as [Style.hexColor]. */
     fun hexColor(key: String? = null): Int? = (if (key == null) value else params[key])?.let(::parseHexColor)
+
+    internal fun atOffset(offset: Int) = TextMarker(name, offset, value, params)
+
+    override fun equals(other: Any?): Boolean = this === other || other is TextMarker &&
+        name == other.name && offset == other.offset && value == other.value && params == other.params
+
+    override fun hashCode(): Int = listOf(name, offset, value, params).hashCode()
+
+    override fun toString() = "TextMarker(name=$name, offset=$offset, value=$value, params=$params)"
 }
 
 private fun splitValues(value: String?): List<String> = value?.split(',')?.map(String::trim).orEmpty()
 
 /** A run of plain [text] with the [styles] active over it, outermost first. Empty list means unstyled. */
-data class TextSpan(val text: String, val styles: List<Style> = emptyList())
+class TextSpan internal constructor(val text: String, val styles: List<Style> = emptyList()) {
+    override fun equals(other: Any?): Boolean = this === other || other is TextSpan && text == other.text && styles == other.styles
+
+    override fun hashCode(): Int = listOf(text, styles).hashCode()
+
+    override fun toString() = "TextSpan(text=$text, styles=$styles)"
+}
 
 /**
  * Reads [text] as a hex color and returns RGBA8888 (red in the top byte, alpha in the low byte), or null if
@@ -169,7 +191,7 @@ internal fun parseStyles(
                 open += token.style
             }
             is SelfToken -> rawMarkers += TextMarker(
-                token.style.name, token.style.value, token.style.params, plain.length,
+                token.style.name, plain.length, token.style.value, token.style.params,
             )
             is CloseToken -> {
                 flush()
@@ -196,7 +218,7 @@ internal fun parseStyles(
             spans += TextSpan(text, run.styles)
         }
     }
-    val markers = rawMarkers.map { it.copy(offset = map[it.offset]) }
+    val markers = rawMarkers.map { it.atOffset(map[it.offset]) }
     return StyledText(cleaned, spans, markers, open.toList())
 }
 

@@ -1,6 +1,6 @@
 package com.github.halfdeadgames.hdgife
 
-import com.bladecoder.ink.runtime.Story
+import com.bladecoder.ink.runtime.HdgifeStory
 import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
 import com.github.halfdeadgames.hdgife.compiler.InkSource
 import com.github.halfdeadgames.hdgife.state.NarrativeStateProvider
@@ -29,10 +29,10 @@ class LogSink : HdgifeLog {
 val compiler = InkCompilerService()
 
 /** Compiles one ink text. Add `INCLUDE hdgife.ink` yourself when the test needs the library. */
-fun compileInk(text: String): Story = compiler.compile(InkSource("main.ink", text))
+fun compileInk(text: String): HdgifeStory = compiler.compile(InkSource("main.ink", text))
 
 /** Compiles text that starts with `INCLUDE hdgife.ink`. */
-fun compileLib(text: String): Story = compileInk("INCLUDE hdgife.ink\n$text")
+fun compileLib(text: String): HdgifeStory = compileInk("INCLUDE hdgife.ink\n$text")
 
 fun managerOf(text: String, stats: NarrativeStateProvider? = null, lib: Boolean = true): StoryManager =
     StoryManager(if (lib) compileLib(text) else compileInk(text), stats)
