@@ -90,24 +90,23 @@ private fun describeMarker(marker: TextMarker) = buildString {
 
 /** What the harness does not draw: effect spans and point markers. It only reports them. */
 private fun effectsNote(line: DialogLine): String? {
-    val parts = ArrayList<String>()
-    for (span in line.spans) {
-        for (style in span.styles) if (style.name !in DRAWN) parts += "${describeStyle(style)} on \"${span.text}\""
+    val parts = buildList {
+        for (span in line.spans) {
+            for (style in span.styles) if (style.name !in DRAWN) add("${describeStyle(style)} on \"${span.text}\"")
+        }
+        line.markers.mapTo(this, ::describeMarker)
     }
-    for (marker in line.markers) parts += describeMarker(marker)
     return if (parts.isEmpty()) null else "fx: " + parts.joinToString("; ")
 }
 
 /** Spans to libGDX markup. A literal `[` is doubled so it isn't read as markup. */
-private fun toMarkup(spans: List<TextSpan>): String {
-    val out = StringBuilder()
+private fun toMarkup(spans: List<TextSpan>): String = buildString {
     for (span in spans) {
         val color = styleColor(span)
-        if (color != null) out.append('[').append(color).append(']')
-        out.append(span.text.replace("[", "[["))
-        if (color != null) out.append("[]")
+        if (color != null) append('[').append(color).append(']')
+        append(span.text.replace("[", "[["))
+        if (color != null) append("[]")
     }
-    return out.toString()
 }
 
 private fun describe(r: ChoiceRequirement): String {
@@ -146,10 +145,10 @@ class DialogScreen(
     private var lastStep: DialogStep? = null
     private var choiceMode = ChoiceMode.GREY
     private var savedState: String? = null
-    private val observations = HashMap<String, VariableObservation>()
+    private val observations = mutableMapOf<String, VariableObservation>()
 
     /** The harness's own game state, driven by ink: `emit("give_item", x)` adds to it, ink reads it back. */
-    private val inventory = HashMap<String, Int>()
+    private val inventory = mutableMapOf<String, Int>()
 
     init {
         // ktx-scene2d builders read the default skin
@@ -270,13 +269,15 @@ class DialogScreen(
         choiceTable.clearChildren()
         for (choice in step.choices) {
             if (!choice.available && choiceMode == ChoiceMode.HIDE) continue
-            val markup = StringBuilder(toMarkup(choice.spans))
-            if (!choice.available) {
-                val needs = choice.requirements.filter { !it.met }.joinToString("; ") { describe(it) }
-                markup.append("  [#ff8a80](needs ").append(needs.replace("[", "[[")).append(")[]")
+            val markup = buildString {
+                append(toMarkup(choice.spans))
+                if (!choice.available) {
+                    val needs = choice.requirements.filterNot { it.met }.joinToString("; ", transform = ::describe)
+                    append("  [#ff8a80](needs ").append(needs.replace("[", "[[")).append(")[]")
+                }
             }
             val button = scene2d.textButton("")
-            button.label.setText(markup.toString())
+            button.label.setText(markup)
             button.label.wrap = true
             if (!choice.available && choiceMode == ChoiceMode.GREY) button.isDisabled = true
             button.onChange { choose(choice.index) }
@@ -307,8 +308,12 @@ class DialogScreen(
 
     override fun unobserve(name: String) {
         val observation = observations.remove(name)
-        if (observation == null) console.log("Not observing $name") else manager.unobserve(observation)
-        if (observation != null) console.log("Stopped observing $name")
+        if (observation == null) {
+            console.log("Not observing $name")
+        } else {
+            manager.unobserve(observation)
+            console.log("Stopped observing $name")
+        }
     }
 
     override fun setStat(entity: String, stat: String, value: Any) {

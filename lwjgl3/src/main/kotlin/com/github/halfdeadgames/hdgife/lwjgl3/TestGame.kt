@@ -23,17 +23,12 @@ private val logger = logger<TestGame>()
  */
 fun compileHarnessStory(compiler: InkCompilerService): Story {
     val extra = Gdx.files.local("extra/")
-    val extras = ArrayList<FileHandle>()
-    if (extra.exists() && extra.isDirectory) collectInk(extra, extras)
-    extras.sortBy { it.path() }
+    val extras = if (extra.isDirectory) inkFiles(extra).sortedBy { it.path() } else emptyList()
     return compiler.compile(Gdx.files.internal("ink/main.ink"), extras)
 }
 
-private fun collectInk(dir: FileHandle, out: MutableList<FileHandle>) {
-    for (child in dir.list()) {
-        if (child.isDirectory) collectInk(child, out) else if (child.extension() == "ink") out += child
-    }
-}
+private fun inkFiles(dir: FileHandle): List<FileHandle> =
+    dir.list().flatMap { if (it.isDirectory) inkFiles(it) else listOfNotNull(it.takeIf { f -> f.extension() == "ink" }) }
 
 class TestGame : KtxGame<KtxScreen>() {
     override fun create() {

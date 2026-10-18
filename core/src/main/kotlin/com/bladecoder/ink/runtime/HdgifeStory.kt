@@ -21,7 +21,7 @@ package com.bladecoder.ink.runtime
  * [from] to get one (the compiler service already does).
  */
 class HdgifeStory(json: String) : Story(json) {
-    private val safeFunctions = HashMap<String, ExternalFunction<*>>()
+    private val safeFunctions = mutableMapOf<String, ExternalFunction<*>>()
 
     /**
      * Binds [function] for the ink EXTERNAL [name], safe to call during lookahead and inside strings.

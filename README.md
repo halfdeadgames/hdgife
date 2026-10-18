@@ -152,7 +152,7 @@ fun unobserve(name: String)
 
 #### Choosing sources, resetting
 
-The engine knows no scenes and no load order. The intended pattern: the game decides which ink sources to use and in what order (a base story, then extra files, whatever its rules are), compiles them with `InkCompilerService`, and builds a **new `StoryManager`** from the result, optionally with `loadState(saved)`. Replacing a base scene is then just the game choosing which file to feed, since ink itself can't override a knot defined earlier. `manager.story = newStory` does the same on an existing manager and keeps its settings, bindings and observers. `reset()` starts the *same* compiled story over: ink state (variables, position, visits, seed, speaker), open styles and pending events are cleared. It does not recompile, and your observers are told about variables that changed back.
+The engine knows no scenes and no load order. The intended pattern: the game decides which ink sources to use and in what order (a base story, then extra files, whatever its rules are), compiles them with `InkCompilerService`, and builds a new `StoryManager` from the result, optionally with `loadState(saved)`. Replacing a base scene is then just the game choosing which file to feed, since ink itself can't override a knot defined earlier. `manager.story = newStory` does the same on an existing manager and keeps its settings, bindings and observers. `reset()` starts the *same* compiled story over: ink state (variables, position, visits, seed, speaker), open styles and pending events are cleared. It does not recompile, and your observers are told about variables that changed back.
 
 ```kotlin
 data class DialogStep(val lines: List<DialogLine>, val tags: Tags, val choices: List<DialogChoice>, val ended: Boolean,
@@ -199,7 +199,7 @@ Each clause is `[entity.]stat op value`, ops `> >= < <= == !=`, separated by com
 
 - numbers (`Int`, `Float`...) compare with every op, against a number written bare (`strength >= 12`, `ratio < 0.5`). `10` equals `10.0`.
 - strings and enums (by name) and booleans compare only with `==` and `!=`. The value is written bare (`faction == rebels`, `is_injured == false`) or in quotes (`faction == "red guard"`). String comparison is case-sensitive. Because `,` separates clauses and `#` starts a tag, a string value can't contain either.
-- a value or operator that doesn't fit the stat's type (`strength >= high`, `faction > 3`, `is_injured == 4`, `is_injured < true`) is a **mismatch**: unmet, `mismatch = true`, and logged.
+- a value or operator that doesn't fit the stat's type (`strength >= high`, `faction > 3`, `is_injured == 4`, `is_injured < true`) is a mismatch: unmet, `mismatch = true`, and logged.
 - a missing stat (no provider, no entity, or null) gives `actual = null` and is unmet, whatever the operator.
 - a clause it can't read is logged and returned unmet, with `valid = false` and the text in `raw`.
 
@@ -229,7 +229,7 @@ Anything that is not a well-formed marker (`a < b`, `<3`, `<b and c>`) is plain 
 
 **Point markers.** `<pause=0.5/>` and `<slam/>` come back on `DialogLine.markers` as `TextMarker(name, value, params, offset)`. `offset` is a character index into `DialogLine.text`: the marker sits just before the character at that index, and `offset == text.length` means after the last one. Several markers can share an offset. The engine does not interpret them: a typewriter effect would wait at `pause` and call a screen shake at `slam`. Choices have `markers` too.
 
-**Colors.** `#` starts an ink tag, so `<color=#ff0000>` can't work. Write hex without it: `<color=ff0000>`, `<color=ff000080>` (with alpha), `<color=0xff0000>` or `<color=f00>`, or a name: `<color=red>`. The engine does not render. `Style.hexColor()` (also `TextMarker.hexColor()`, and `parseHexColor(text)`) returns **RGBA8888** (`0xRRGGBBAA`, red in the top byte) when the value is valid hex, and **null** for anything else, so the game resolves names its own way:
+**Colors.** `#` starts an ink tag, so `<color=#ff0000>` can't work. Write hex without it: `<color=ff0000>`, `<color=ff000080>` (with alpha), `<color=0xff0000>` or `<color=f00>`, or a name: `<color=red>`. The engine does not render. `Style.hexColor()` (also `TextMarker.hexColor()`, and `parseHexColor(text)`) returns RGBA8888 (`0xRRGGBBAA`, red in the top byte) when the value is valid hex, and null for anything else, so the game resolves names its own way:
 
 ```kotlin
 val rgba = style.hexColor() ?: namedColors[style.value]   // hex first, then your own names
@@ -253,7 +253,7 @@ For a style with a named parameter use `style.hexColor("color")`. 3, 6 and 8 dig
 
 `emit0(name)`, `emit(name, a)`, `emit2(name, a, b)`, `emit3(name, a, b, c)`: ink has no overloads, so the number is in the name. Arguments are plain `Int`, `Float`, `Boolean` or `String`. Events come back in order on `DialogStep.events` (`StoryEvent(name, args, lineIndex)`) and, if set, through `manager.onEvent`, which is called after `next()` has built the step. `lineIndex` is the index in `DialogStep.lines` of the line produced right after the call: the event happened just before that line is shown (`lines.size` if no line follows). The engine never acts on an event. Tags (`# kind: value`) are the other way to attach data to a line and need nothing special.
 
-Each call is reported **exactly once**. The functions are bound as not lookahead safe, so ink never runs them during its glue lookahead (it stops before the call and runs it for real afterwards). The price: an `emit` that sits between a line and a glue line (`<>`) that joins to it ends the lookahead, so the glue does not join. Put the `emit` before the first line, or after the glued text. Use `emit` as a statement, not inside `"{...}"` or choice text.
+Each call is reported exactly once. The functions are bound as not lookahead safe, so ink never runs them during its glue lookahead (it stops before the call and runs it for real afterwards). The price: an `emit` that sits between a line and a glue line (`<>`) that joins to it ends the lookahead, so the glue does not join. Put the `emit` before the first line, or after the glued text. Use `emit` as a statement, not inside `"{...}"` or choice text.
 
 **Game-defined functions.** Bind a lambda to an ink `EXTERNAL` function:
 
@@ -403,7 +403,7 @@ Plain `{cond}` choices are hidden by ink. `requires` ones are reported, and `man
 
 ### Ink float functions
 
-Blade Ink 1.3.2 throws `ClassCastException` on `FLOOR`, `CEILING` and `INT` with a float argument, even `FLOOR(2.5)`. The cause is in its `NativeFunctionCall`: the float versions cast the boxed argument with `(double) val` and `(int) val`, but ink floats are boxed `Float`, so the cast fails. Fixed in `com.bladecoder.ink.runtime.InkNativePatch`, a small object in Blade Ink's own package. Ink looks these operations up in one shared table, and the table has a package-private registration method. The patch registers correct float versions there. No reflection, no copy of the Blade Ink class, and it applies to already compiled stories too. `InkCompilerService` and `StoryManager` apply it for you. If you build a `Story` yourself, call `InkNativePatch.apply()` first. The jar therefore has a few classes in the `com.bladecoder.ink.runtime` package, which is fine on the classpath but not in a Java module. `FLOOR(-2.5)` is -3.0, `CEILING(-2.5)` is -2.0, `INT(-2.7)` is -2.
+Blade Ink 1.3.2 throws `ClassCastException` on `FLOOR`, `CEILING` and `INT` with a float argument, even `FLOOR(2.5)`. The cause is in its `NativeFunctionCall`: the float versions cast the boxed argument with `(double) val` and `(int) val`, but ink floats are boxed `Float`, so the cast fails. Fixed in `com.bladecoder.ink.runtime.InkNativePatch`, a small object in Blade Ink's own package. Ink looks these operations up in one shared table, and the table has a package-private registration method. The patch registers correct float versions there. No reflection, no copy of the Blade Ink class, and it applies to already compiled stories too. `InkCompilerService` and `StoryManager` apply it for you. If you build a `Story` yourself, call `InkNativePatch.apply()` first. `FLOOR(-2.5)` is -3.0, `CEILING(-2.5)` is -2.0, `INT(-2.7)` is -2.
 
 ## Defaults
 
@@ -414,7 +414,7 @@ Every default that is a game decision can be replaced. Nothing here is hard-wire
 | `StoryManager.numberFormat` | `NumberFormat(decimals = 0, rounding = ROUND)` | How `stat_text` prints numbers. Round half away from zero, no decimals. |
 | `StoryManager.formatOverride` | `null` | Per-stat `NumberFormat`, falls back to `numberFormat` when null. |
 | `StoryManager.variableNamer` | `defaultVariableName`: `entity_stat`, characters outside `[A-Za-z0-9_]` become `_` | Which ink variable `syncStatsToInk` writes to. A settable property. |
-| `StoryManager.textCleaner` | `cleanLine`: collapse spaces, no space before `, . ; : ! ?`, trim. **English punctuation.** | Cleans each line and choice (plain text, after markers are removed). Replace for other languages, or `{ it }` to turn off. |
+| `StoryManager.textCleaner` | `cleanLine`: collapse spaces, no space before `, . ; : ! ?`, trim. English punctuation. | Cleans each line and choice (plain text, after markers are removed). Replace for other languages, or `{ it }` to turn off. |
 | `StoryManager.speakerTagKey` | `"speaker"` | The tag key that names a line's speaker. |
 | `StoryManager.requirementsTagKey` | `"requires"` | The tag key for choice requirements. |
 | `StoryManager.allowExternalFunctionFallbacks` | `true` | Whether an `EXTERNAL` without a binding may fall back to the ink function of the same name. hdgife.ink needs it. With `false`, every EXTERNAL needs a binding. Applied to the current and any later story. |
@@ -472,7 +472,6 @@ To run a different set of sources, compile them again and build a new `StoryMana
 - The `emit` functions are numbered by argument count because ink has no overloads.
 - There's no reusable UI in the library. That's on purpose, though I might add some optional helpers later.
 - Web/TeaVM is untested.
-- No real unit tests yet.
 
 ## Setup
 
@@ -497,6 +496,8 @@ The library depends only on libGDX (`gdx`, for `FileHandle`), Blade Ink (runtime
 The jar contains only the engine and the generic `hdgife/hdgife.ink` helper library, which has functions and no scenes. Demo stories live in the test harness.
 
 ## Testing locally
+
+Unit tests run with `./gradlew :core:test` (JUnit 5, no libGDX application needed).
 
 To try changes before pushing, publish to your local Maven repo:
 

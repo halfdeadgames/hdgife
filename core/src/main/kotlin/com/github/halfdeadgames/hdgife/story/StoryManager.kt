@@ -1,6 +1,7 @@
 package com.github.halfdeadgames.hdgife.story
 
 import com.bladecoder.ink.runtime.HdgifeStory
+import com.bladecoder.ink.runtime.InkList
 import com.bladecoder.ink.runtime.InkNativePatch
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.HdgifeLog
@@ -572,7 +573,6 @@ class StoryManager(
     @PublishedApi
     internal fun <T : Any> coerceVariable(name: String, value: Any?, type: KClass<T>): T? {
         if (value == null) return null
-        @Suppress("UNCHECKED_CAST")
         val converted: Any? = when {
             type.isInstance(value) -> value
             value is Int && type == Float::class -> value.toFloat()
@@ -593,7 +593,7 @@ class StoryManager(
      */
     fun setVariable(name: String, value: Any) {
         require(variable(name) != null) { "'$name' is not a variable declared in the story" }
-        story.variablesState.set(name, toInk(value) ?: value)
+        story.variablesState.set(name, if (value is InkList) value else toInk(value) ?: value)
     }
 
     /**

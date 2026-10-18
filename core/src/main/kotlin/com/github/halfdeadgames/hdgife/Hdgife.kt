@@ -1,3 +1,6 @@
 package com.github.halfdeadgames.hdgife
 
-object Hdgife { const val VERSION = "0.2.0" }
+/** Library version. */
+object Hdgife {
+    const val VERSION = "0.2.0"
+}

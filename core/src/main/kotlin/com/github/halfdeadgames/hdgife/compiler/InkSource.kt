@@ -45,7 +45,7 @@ internal fun normalizePath(path: String): String {
     for (part in path.replace('\\', '/').split('/')) {
         when {
             part.isEmpty() || part == "." -> {}
-            part == ".." && parts.isNotEmpty() && parts.last() != ".." -> parts.removeAt(parts.size - 1)
+            part == ".." && parts.isNotEmpty() && parts.last() != ".." -> parts.removeAt(parts.lastIndex)
             else -> parts += part
         }
     }

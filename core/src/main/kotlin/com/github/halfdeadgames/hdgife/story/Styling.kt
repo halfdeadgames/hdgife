@@ -15,7 +15,7 @@ data class Style(
     val params: Map<String, String> = emptyMap(),
 ) {
     /** [value] split at commas and trimmed: `shake=2,0.5` gives `["2", "0.5"]`. Empty if there is no value. */
-    val values: List<String> get() = value?.split(',')?.map { it.trim() } ?: emptyList()
+    val values: List<String> get() = splitValues(value)
 
     /** The named parameter [key], or null. */
     fun param(key: String): String? = params[key]
@@ -39,7 +39,7 @@ data class TextMarker(
     val offset: Int,
 ) {
     /** [value] split at commas and trimmed. */
-    val values: List<String> get() = value?.split(',')?.map { it.trim() } ?: emptyList()
+    val values: List<String> get() = splitValues(value)
 
     /** The named parameter [key], or null. */
     fun param(key: String): String? = params[key]
@@ -47,6 +47,8 @@ data class TextMarker(
     /** Same as [Style.hexColor]. */
     fun hexColor(key: String? = null): Int? = (if (key == null) value else params[key])?.let(::parseHexColor)
 }
+
+private fun splitValues(value: String?): List<String> = value?.split(',')?.map(String::trim).orEmpty()
 
 /** A run of plain [text] with the [styles] active over it, outermost first. Empty list means unstyled. */
 data class TextSpan(val text: String, val styles: List<Style> = emptyList())
@@ -58,15 +60,11 @@ data class TextSpan(val text: String, val styles: List<Style> = emptyList())
  *
  * A name made only of the letters a-f that is three letters long (`bad`, `ace`) reads as hex. Put `0x` in
  * front of real hex if you also use such names. A bare `#` in ink text starts a tag, so the form without it
- * is the normal one (`<color=ff0000>`). `#` in ink also lets a literal `#` through, if the compiler accepts it.
+ * is the normal one (`<color=ff0000>`). `\#` is ink's escape for a literal `#` and is accepted too.
  */
 fun parseHexColor(text: String): Int? {
-    var digits = text.trim()
-    digits = when {
-        digits.startsWith("#") -> digits.substring(1)
-        digits.startsWith("0x") || digits.startsWith("0X") -> digits.substring(2)
-        else -> digits
-    }
+    val trimmed = text.trim()
+    val digits = if (trimmed.startsWith("0x", ignoreCase = true)) trimmed.substring(2) else trimmed.removePrefix("#")
     if (digits.isEmpty() || !digits.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
     return when (digits.length) {
         3 -> {
@@ -92,6 +90,9 @@ internal class StyledText(
 private sealed interface Token {
     val end: Int
 }
+
+/** A stretch of plain text, `[start, end)` in the uncleaned text, with the styles open over it. */
+private class Run(val start: Int, val end: Int, val styles: List<Style>)
 
 private class OpenToken(val style: Style, override val end: Int) : Token
 private class SelfToken(val style: Style, override val end: Int) : Token
@@ -132,18 +133,13 @@ internal fun parseStyles(
 
     val plain = StringBuilder(source.length)
     val open = ArrayList<Style>(carried)
-    // runs in plain coordinates: [start, end) with styles
-    val runStarts = ArrayList<Int>()
-    val runEnds = ArrayList<Int>()
-    val runStyles = ArrayList<List<Style>>()
+    val runs = ArrayList<Run>()
     val rawMarkers = ArrayList<TextMarker>()
     var runStart = 0
 
     fun flush() {
         if (plain.length == runStart) return
-        runStarts += runStart
-        runEnds += plain.length
-        runStyles += open.toList()
+        runs += Run(runStart, plain.length, open.toList())
         runStart = plain.length
     }
 
@@ -188,16 +184,16 @@ internal fun parseStyles(
     val map = boundaryMap(raw, cleaned)
 
     val spans = ArrayList<TextSpan>()
-    for (k in runStarts.indices) {
-        val from = map[runStarts[k]]
-        val to = map[runEnds[k]]
+    for (run in runs) {
+        val from = map[run.start]
+        val to = map[run.end]
         if (to <= from) continue
         val text = cleaned.substring(from, to)
         val last = spans.lastOrNull()
-        if (last != null && last.styles == runStyles[k]) {
-            spans[spans.size - 1] = TextSpan(last.text + text, last.styles)
+        if (last != null && last.styles == run.styles) {
+            spans[spans.lastIndex] = TextSpan(last.text + text, last.styles)
         } else {
-            spans += TextSpan(text, runStyles[k])
+            spans += TextSpan(text, run.styles)
         }
     }
     val markers = rawMarkers.map { it.copy(offset = map[it.offset]) }
@@ -207,7 +203,7 @@ internal fun parseStyles(
 private fun closeStyle(open: ArrayList<Style>, name: String, source: String, log: HdgifeLog?) {
     if (name.isEmpty()) {
         if (open.isEmpty()) log?.log("Style: '</>' with nothing open, ignored in \"$source\"")
-        else open.removeAt(open.size - 1)
+        else open.removeAt(open.lastIndex)
         return
     }
     val at = open.indexOfLast { it.name == name }
@@ -218,7 +214,7 @@ private fun closeStyle(open: ArrayList<Style>, name: String, source: String, log
     if (at < open.size - 1) {
         log?.log("Style: '</$name>' closed while <${open.last().name}> was open in \"$source\"")
     }
-    while (open.size > at) open.removeAt(open.size - 1)
+    while (open.size > at) open.removeAt(open.lastIndex)
 }
 
 /**

@@ -13,7 +13,7 @@ package com.bladecoder.ink.runtime
  * Semantics follow ink: FLOOR and CEILING give a float, INT truncates toward zero and gives an int.
  * Safe to call any number of times, and harmless once Blade Ink fixes this itself.
  */
-object InkNativePatch {
+internal object InkNativePatch {
     private var applied = false
 
     @JvmStatic

@@ -6,6 +6,14 @@ dependencies {
   api "com.bladecoder.ink:blade-ink:$bladeInkVersion"
   api "com.bladecoder.ink:blade-ink-compiler:$bladeInkVersion"
   api "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
+
+  // Tests only. Not part of the published pom.
+  testImplementation "org.jetbrains.kotlin:kotlin-test-junit5:$kotlinVersion"
+  testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+  useJUnitPlatform()
 }
 
 apply plugin: 'maven-publish'

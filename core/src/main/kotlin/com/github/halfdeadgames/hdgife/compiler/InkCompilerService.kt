@@ -3,6 +3,7 @@ package com.github.halfdeadgames.hdgife.compiler
 import com.badlogic.gdx.files.FileHandle
 import com.bladecoder.ink.compiler.Compiler
 import com.bladecoder.ink.compiler.IFileHandler
+import com.bladecoder.ink.runtime.Error.ErrorHandler
 import com.bladecoder.ink.runtime.Error.ErrorType
 import com.bladecoder.ink.runtime.HdgifeStory
 import com.bladecoder.ink.runtime.InkNativePatch
@@ -51,14 +52,15 @@ class InkCompilerService {
         val handler = SourceResolver(byName)
         val root = sources[0]
         val story = try {
-            val text = StringBuilder(handler.prepare(root, root.read()))
-            text.append('\n')
-            for (i in 1 until sources.size) text.append("INCLUDE ").append(sources[i].name).append('\n')
-            run(root.name, text.toString(), handler)
+            val text = buildString {
+                append(handler.prepare(root, handler.read(root))).append('\n')
+                for (extra in sources.drop(1)) append("INCLUDE ").append(extra.name).append('\n')
+            }
+            run(root.name, text, handler)
         } catch (e: InkCompileException) {
-            throw InkCompileException(e.errors + handler.failures, e.source, e.cause)
+            throw InkCompileException(e.errors + handler.failures, e.source ?: handler.failedSource, e.cause)
         } catch (e: SourceReadException) {
-            throw InkCompileException(listOf(e.message ?: "Cannot read ink source"), e.sourceName, e.cause)
+            throw InkCompileException(listOf(e.message.orEmpty()), e.sourceName, e.cause)
         }
         return finish(story)
     }
@@ -68,7 +70,7 @@ class InkCompilerService {
 
     /** Same with files, read as UTF-8. Includes not in the list are looked up next to the including file. */
     fun compile(main: FileHandle, extras: List<FileHandle> = emptyList()): Story =
-        compile(listOf(main).plus(extras).map { InkSource.of(it) })
+        compile((listOf(main) + extras).map(InkSource::of))
 
     /**
      * Compiles the `.ink` files of [folder]. Paths are compared as text, case-sensitive, with `/` as separator.
@@ -77,8 +79,7 @@ class InkCompilerService {
      * or use [compile] with your own list. [recursive] also takes files in subfolders. Throws if there are none.
      */
     fun compileFolder(folder: FileHandle, recursive: Boolean = true): Story {
-        val files = ArrayList<FileHandle>()
-        collectInk(folder, recursive, files)
+        val files = inkFiles(folder, recursive)
         val root = folder.path().replace('\\', '/').trimEnd('/')
         fun relative(file: FileHandle): String {
             val path = file.path().replace('\\', '/')
@@ -108,7 +109,7 @@ class InkCompilerService {
         val options = Compiler.Options().apply {
             sourceFilename = rootName
             fileHandler = handler
-            errorHandler = com.bladecoder.ink.runtime.Error.ErrorHandler { message, type ->
+            errorHandler = ErrorHandler { message, type ->
                 if (type == ErrorType.Error) errors += message else log?.log(message)
             }
         }
@@ -120,13 +121,14 @@ class InkCompilerService {
         return story
     }
 
-    private fun collectInk(dir: FileHandle, recursive: Boolean, out: MutableList<FileHandle>) {
-        for (child in dir.list()) {
-            if (child.isDirectory) {
-                if (recursive) collectInk(child, true, out)
-            } else if (child.extension() == "ink") out += child
+    private fun inkFiles(dir: FileHandle, recursive: Boolean): List<FileHandle> =
+        dir.list().flatMap { child ->
+            when {
+                child.isDirectory -> if (recursive) inkFiles(child, true) else emptyList()
+                child.extension() == "ink" -> listOf(child)
+                else -> emptyList()
+            }
         }
-    }
 
     private class SourceReadException(val sourceName: String, cause: Throwable) :
         RuntimeException("Cannot read ink source '$sourceName': ${cause.message}", cause)
@@ -141,6 +143,10 @@ class InkCompilerService {
         /** Why includes failed to load. Ink only says "Failed to load", this keeps the reason. */
         val failures = ArrayList<String>()
 
+        /** Name of the first source that could not be read, if any. */
+        var failedSource: String? = null
+            private set
+
         fun prepare(source: InkSource, text: String): String {
             loaded += source.name
             val dir = source.name.substringBeforeLast('/', "")
@@ -153,19 +159,16 @@ class InkCompilerService {
             }
         }
 
-        private fun read(source: InkSource): String =
+        fun read(source: InkSource): String =
             try {
                 source.read()
             } catch (e: Exception) {
                 failures += "Cannot read ink source '${source.name}': ${e.message}"
+                if (failedSource == null) failedSource = source.name
                 throw SourceReadException(source.name, e)
             }
 
-        override fun resolveInkFilename(includeName: String): String {
-            val name = normalizePath(includeName)
-            if (name == BUILTIN_NAME) return BUILTIN_NAME
-            return name
-        }
+        override fun resolveInkFilename(includeName: String): String = normalizePath(includeName)
 
         override fun loadInkFileContents(fullFilename: String): String {
             if (fullFilename == BUILTIN_NAME) {
@@ -174,8 +177,10 @@ class InkCompilerService {
                     ?: throw FileNotFoundException("Bundled $BUILTIN_PATH is missing")
                 return stream.use { String(it.readBytes(), Charsets.UTF_8) }
             }
-            val source = listed[fullFilename]
-                ?: throw FileNotFoundException("Unlisted ink source: $fullFilename").also { failures += it.message!! }
+            val source = listed[fullFilename] ?: run {
+                failures += "Unlisted ink source: $fullFilename"
+                throw FileNotFoundException("Unlisted ink source: $fullFilename")
+            }
             if (!loaded.add(fullFilename)) return ""
             return prepare(source, read(source))
         }

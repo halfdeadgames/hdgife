@@ -7,7 +7,7 @@ import com.strongjoshua.console.CommandExecutor
 
 /** Mutable stat map for testing. Values can be any type; the engine maps them to ink. Keys are "entity.stat". */
 class MapStateProvider : NarrativeStateProvider {
-    private val stats = HashMap<String, Any>()
+    private val stats = mutableMapOf<String, Any>()
 
     fun setStat(entityId: String, statName: String, value: Any) {
         stats["$entityId.$statName"] = value
@@ -58,7 +58,7 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
 
     fun vars() {
         val names = control.listVariables()
-        if (names.isEmpty()) control.log("No variables") else names.forEach { control.log("$it = ${control.getVariable(it)}") }
+        if (names.isEmpty()) control.log("No variables") else for (name in names) control.log("$name = ${control.getVariable(name)}")
     }
 
     /** Reads one ink variable through the engine's variable API and shows its type. */
