@@ -4,10 +4,12 @@ import com.bladecoder.ink.runtime.InkList
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.story.StoryEvent
 import com.github.halfdeadgames.hdgife.story.StoryManager
+import com.github.halfdeadgames.hdgife.story.StoryStepException
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -67,7 +69,7 @@ class EventsTest {
         var calls = 0
         val cleaner = m.textCleaner
         m.textCleaner = { if (++calls == 2) throw IllegalStateException("boom") else cleaner(it) }
-        assertFailsWith<IllegalStateException> { m.next() }
+        assertIs<IllegalStateException>(assertFailsWith<StoryStepException> { m.next() }.cause)
         m.textCleaner = cleaner
         m.reset()
         val step = m.next()

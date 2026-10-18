@@ -26,7 +26,6 @@ EXTERNAL has_stat(hdg_name)
 EXTERNAL stat_text(hdg_name)
 EXTERNAL stat_text_of(hdg_entity, hdg_name)
 EXTERNAL fmt(hdg_x, hdg_decimals, hdg_mode)
-EXTERNAL speak(hdg_name)
 EXTERNAL hdgife_emit0(hdg_seq, hdg_name)
 EXTERNAL hdgife_emit1(hdg_seq, hdg_name, hdg_a)
 EXTERNAL hdgife_emit2(hdg_seq, hdg_name, hdg_a, hdg_b)
@@ -76,8 +75,8 @@ EXTERNAL hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c)
 ~ return 0.0
 
 // Makes this entity the current speaker until changed: ~ speak("guard"). Use "" for no speaker.
-// StoryManager does not bind this one. The ink body is the implementation, so the speaker lives in
-// hdgife_speaker, is saved with the story and is safe during ink's lookahead. Change who `stat()`
+// This is a plain ink function, not an EXTERNAL, so it needs no binding (it works with fallbacks switched
+// off too). The speaker lives in hdgife_speaker, is saved with the story and is safe during ink's lookahead. Change who `stat()`
 // reads, and the speaker reported on following lines. A `# speaker: name` tag only names one line.
 === function speak(hdg_name) ===
 ~ hdgife_speaker = hdg_name

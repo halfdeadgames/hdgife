@@ -50,24 +50,11 @@ class TestGame(
     override fun create() {
         KtxAsync.initiate()
         val compiler = InkCompilerService().apply { log = HdgifeLog { logger.info { it } } }
-        val provider = MapStateProvider().apply {
-            setStat("guard", "sanity", 80f)
-            setStat("guard", "tiredness", 20f)
-            setStat("guard", "mood", 60f)
-            setStat("guard", "strength", 12f)
-            setStat("merchant", "mood", 70f)
-            setStat("merchant", "strength", 4f)
-            setStat("guard", "faction", "crown")          // a string stat
-            setStat("merchant", "faction", "guild")
-            setStat("player", "faction", "rebels")
-            setStat("player", "is_injured", false)        // a boolean stat
-            setStat("player", "rank", 2)                  // an int stat
-        }
+        val provider = MapStateProvider().apply { loadShowcaseStats() }
         KtxAsync.launch {
             try {
                 val story = withContext(Dispatchers.IO) { compileHarnessStory(compiler) }
                 val manager = StoryManager(story, provider).apply {
-                    speaker = "guard"
                     log = HdgifeLog { logger.info { it } }
                 }
                 val screen = DialogScreen(manager, provider, compiler)

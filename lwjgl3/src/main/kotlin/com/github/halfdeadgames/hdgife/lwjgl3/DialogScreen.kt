@@ -4,33 +4,26 @@ import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
 import com.badlogic.gdx.InputMultiplexer
 import com.badlogic.gdx.graphics.Color
-import com.badlogic.gdx.graphics.Colors
 import com.badlogic.gdx.graphics.g2d.BitmapFont
-import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Label
-import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane
 import com.badlogic.gdx.scenes.scene2d.ui.Skin
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton
-import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener
 import com.badlogic.gdx.utils.viewport.ScreenViewport
+import com.github.halfdeadgames.hdgife.HdgifeLog
 import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
-import com.github.halfdeadgames.hdgife.story.ChoiceRequirement
-import com.github.halfdeadgames.hdgife.story.DialogLine
 import com.github.halfdeadgames.hdgife.story.DialogStep
-import com.github.halfdeadgames.hdgife.story.TextSpan
 import com.github.halfdeadgames.hdgife.story.NumberFormat
 import com.github.halfdeadgames.hdgife.story.Rounding
-import com.github.halfdeadgames.hdgife.story.StoryEvent
 import com.github.halfdeadgames.hdgife.story.StoryManager
-import com.github.halfdeadgames.hdgife.story.Style
-import com.github.halfdeadgames.hdgife.story.TextMarker
+import com.github.halfdeadgames.hdgife.story.StoryStepException
 import com.github.halfdeadgames.hdgife.story.VariableObservation
 import com.strongjoshua.console.GUIConsole
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import ktx.app.KtxInputAdapter
 import ktx.app.KtxScreen
 import ktx.app.clearScreen
 import ktx.async.KtxAsync
@@ -39,101 +32,21 @@ import ktx.scene2d.Scene2DSkin
 import ktx.scene2d.label
 import ktx.scene2d.scene2d
 import ktx.scene2d.textButton
+import kotlin.random.Random
 
 private val log = logger<DialogScreen>()
 
-/** How this harness treats choices whose requirements are not met. The engine leaves that to the game. */
-enum class ChoiceMode { HIDE, GREY, SHOW }
+/** Ink variables the harness watches from the start. Their latest value is in the info line under the panels. */
+private val WATCHED = listOf("suspicion", "door_open", "player_coin")
 
-private const val CHOICE_STYLE = "choice"
-
-/** Style names this harness draws itself. Everything else is an "effect" that the harness only reports. */
-private val DRAWN = setOf("em", "b", "color")
+/** What `save` keeps: the engine's state string and the step that was on screen, so `load` can show it again. */
+private class Snapshot(val state: String, val step: DialogStep, val number: Int)
 
 /**
- * Harness-only mapping from engine style names to libGDX color markup. The engine just reports names.
- * `em` and `b` get fixed colors. `color` is resolved here: hex values (`Style.hexColor()` is non-null) become
- * `[#rrggbbaa]`, anything else is looked up as a libGDX named color. Effects (shake, bounce...) are not drawn.
- */
-private fun styleColor(span: TextSpan): String? {
-    var result: String? = null
-    for (style in span.styles) {
-        when (style.name) {
-            "em" -> result = "#ffd27f"
-            "b" -> result = "#ffffff"
-            "color" -> {
-                val hex = style.hexColor()
-                if (hex != null) {
-                    result = "#%08x".format(hex)
-                } else {
-                    val name = style.value?.uppercase()
-                    if (name != null && Colors.get(name) != null) result = name
-                }
-            }
-        }
-    }
-    return result
-}
-
-private fun show(value: Any?): String = if (value is Float && value % 1f == 0f) value.toInt().toString() else value.toString()
-
-private fun describeStyle(style: Style) = buildString {
-    append(style.name)
-    style.value?.let { append('=').append(it) }
-    for ((k, v) in style.params) append(' ').append(k).append('=').append(v)
-}
-
-private fun describeMarker(marker: TextMarker) = buildString {
-    append('<').append(marker.name)
-    marker.value?.let { append('=').append(it) }
-    for ((k, v) in marker.params) append(' ').append(k).append('=').append(v)
-    append("/> at ").append(marker.offset)
-}
-
-/** What the harness does not draw: effect spans and point markers. It only reports them. */
-private fun effectsNote(line: DialogLine): String? {
-    val parts = buildList {
-        for (span in line.spans) {
-            for (style in span.styles) if (style.name !in DRAWN) add("${describeStyle(style)} on \"${span.text}\"")
-        }
-        line.markers.mapTo(this, ::describeMarker)
-    }
-    return if (parts.isEmpty()) null else "fx: " + parts.joinToString("; ")
-}
-
-/** Spans to libGDX markup. A literal `[` is doubled so it isn't read as markup. */
-private fun toMarkup(spans: List<TextSpan>): String = buildString {
-    for (span in spans) {
-        val color = styleColor(span)
-        if (color != null) append('[').append(color).append(']')
-        append(span.text.replace("[", "[["))
-        if (color != null) append("[]")
-    }
-}
-
-private fun describe(r: ChoiceRequirement): String {
-    if (!r.valid) return "bad requirement '${r.raw}'"
-    val have = r.actual?.let { "have ${show(it)}" } ?: "stat missing"
-    val why = if (r.mismatch) ", type mismatch" else ""
-    return "${r.entity ?: "?"}.${r.stat} ${r.op?.symbol} ${show(r.target)} ($have$why)"
-}
-
-private fun Actor.onChange(block: () -> Unit) {
-    addListener(object : ChangeListener() {
-        override fun changed(event: ChangeEvent?, actor: Actor?) = block()
-    })
-}
-
-/** One line of the on-screen log. [color] tints the whole label, null leaves it plain. */
-private class LogEntry(val text: String, val color: Color?)
-
-/** What `save` keeps: the engine's state string plus the log, so `load` can bring back what was on screen. */
-private class Snapshot(val state: String, val log: List<LogEntry>)
-
-/**
- * Test UI for the ink story: log, choice buttons and a debug console. The read-only members below
- * ([stage], [logLabels], [choiceButtons], [restartButton], [runCommand]) are what the UI test (`:lwjgl3:uiTest`)
- * uses to look at the screen and drive it.
+ * Test UI for the ink story. It shows only the latest [DialogStep], twice: a RAW panel with the exact engine output
+ * and a RENDERED panel with the same step as a game might draw it. A debug console sits on top.
+ * The read-only members below ([stage], [rawText], [renderedLabels], [choiceButtons], [restartButton],
+ * [runCommand]...) are what the UI test (`:lwjgl3:uiTest`) uses to look at the screen and drive it.
  */
 class DialogScreen(
     private val manager: StoryManager,
@@ -142,24 +55,35 @@ class DialogScreen(
 ) : KtxScreen, DialogControl {
     private val skin = Skin(Gdx.files.internal("ui/uiskin.json"))
     private val consoleSkin = Skin(Gdx.files.classpath("default_skin/uiskin.json"))
+    private val mono: BitmapFont
     val stage = Stage(ScreenViewport())
     private val console: GUIConsole
-    // a little side padding: the scroll pane clips at its edge and some glyphs reach left of their origin
-    private val logTable = Table().apply { top().left().pad(0f, 4f, 0f, 4f) }
-    private val logPane = ScrollPane(logTable, skin).apply {
-        setScrollingDisabled(true, false)
-        setFadeScrollBars(false)
-    }
-    private val choiceTable = Table()
+    private val raw: RawPanel
+    private val rendered: RenderedPanel
+    private val panelRow = Table()
     val statusLabel: Label
+    val infoLabel: Label
     val restartButton: TextButton
-    private val dim = Color(0.6f, 0.6f, 0.6f, 1f)
-    private var scrollPending = false
+
     private var lastStep: DialogStep? = null
+    private var stepNumber = 0
     private var choiceMode = ChoiceMode.GREY
+    var viewMode = ViewMode.SPLIT
+        private set
     private var snapshot: Snapshot? = null
-    private val logEntries = ArrayList<LogEntry>()
     private val observations = mutableMapOf<String, VariableObservation>()
+    private val watched = LinkedHashMap<String, String>()
+    private var rng = Random(1)
+    private var fixedRoll: Int? = null
+    private var stateChanged = false
+
+    /** Everything written to the console, in order, so the UI test can read it. Includes the engine's own log lines. */
+    val consoleLines = ArrayList<String>()
+
+    private fun say(message: String) {
+        consoleLines += message
+        console.log(message)
+    }
 
     /** The harness's own game state, driven by ink: `emit("give_item", x)` adds to it, ink reads it back. */
     private val inventory = mutableMapOf<String, Int>()
@@ -173,51 +97,97 @@ class DialogScreen(
         })
         // spans are drawn with libGDX color markup, so every skin font needs it on
         for (font in skin.getAll(BitmapFont::class.java).values()) font.data.markupEnabled = true
+        mono = monoFont(skin, Gdx.files.internal("ui/font-list.fnt"))
+
+        raw = RawPanel(skin, mono)
+        rendered = RenderedPanel(skin, ::choose)
         statusLabel = scene2d.label("")
+        infoLabel = scene2d.label("").apply { color.set(0.62f, 0.62f, 0.62f, 1f) }
         restartButton = scene2d.textButton("Restart").apply { onChange { restart() } }
 
         val root = Table().apply {
             setFillParent(true)
             pad(8f)
-            add(logPane).grow().row()
-            add(choiceTable).growX().padTop(8f).row()
-            add(statusLabel).left().padTop(4f).row()
+            add(panelRow).grow().row()
+            add(infoLabel).left().padTop(4f).row()
+            add(statusLabel).left().padTop(2f).row()
             add(restartButton).left().padTop(4f)
         }
         stage.addActor(root)
         restartButton.isVisible = false
+        applyViewMode()
 
         // the console needs fonts and drawables that uiskin.json lacks, so it gets its bundled skin
         console = GUIConsole(consoleSkin, false, Input.Keys.GRAVE)
         console.setCommandExecutor(DialogCommands(this))
         console.isVisible = false
-        console.log("Console ready. Type help.")
+        say("Console ready. Type help. F2 changes the layout.")
 
+        // the engine's warnings go to the console too, next to wherever the game already sent them
+        val engineLog = manager.log
+        manager.log = HdgifeLog { message ->
+            engineLog?.log(message)
+            say("engine: $message")
+        }
+        manager.formatOverride = ::harnessFormatOverride
         // The engine reports events and never acts on them. This is the harness acting on them.
         manager.onEvent = { event ->
-            console.log("event ${event.name}(${event.args.joinToString { show(it) }}) before line ${event.lineIndex}")
-            if (event.name == "give_item") {
-                val item = event.args.firstOrNull()?.toString()
-                if (item != null) inventory.merge(item, 1, Int::plus)
+            say("event ${event.name}(${event.args.joinToString { show(it) }}) before line ${event.lineIndex}")
+            val first = event.args.firstOrNull()?.toString()
+            when (event.name) {
+                "give_item" -> if (first != null) inventory.merge(first, 1, Int::plus)
+                "spend" -> {
+                    val amount = event.args.getOrNull(1) as? Int
+                    if (first != null && amount != null) {
+                        val have = manager.stateProvider?.getStat("player", first) as? Int ?: 0
+                        applyStat(manager, provider, "player", first, have - amount)
+                        stateChanged = true
+                    }
+                }
             }
         }
-        // And the other direction: ink asks the game. Safe because it only reads.
+        // And the other direction: ink asks the game. roll has a side effect (the dice), so it is not lookahead safe.
         manager.bindFunction("inventory_count", lookaheadSafe = true) { args -> inventory[args.string(0)] ?: 0 }
+        manager.bindFunction("player_name", lookaheadSafe = true) { "Wren" }
+        manager.bindFunction("roll") { args -> fixedRoll ?: rng.nextInt(1, args.int(0) + 1) }
+        syncPlayer()
+        for (name in WATCHED) watch(name)
     }
 
-    /** The log labels, top to bottom. */
-    val logLabels: List<Label> get() = logTable.children.filterIsInstance<Label>()
+    /** The raw panel's text, with color markup. */
+    val rawText: String get() = raw.text
+
+    /** Every row of the rendered panel's text area, top to bottom. */
+    val renderedLabels: List<Label> get() = rendered.labels
 
     /** The choice buttons on screen, top to bottom. */
-    val choiceButtons: List<TextButton> get() = choiceTable.children.filterIsInstance<TextButton>()
+    val choiceButtons: List<TextButton> get() = rendered.choiceButtons
+
+    /** How far the raw panel is scrolled, and how far it can go. */
+    val rawScrollY: Float get() = raw.scrollY
+    val rawMaxScrollY: Float get() = raw.maxScrollY
+
+    /** Which panels are on the stage. */
+    val rawVisible: Boolean get() = raw.hasParent()
+    val renderedVisible: Boolean get() = rendered.hasParent()
+
+    /** The latest step as the engine gave it. */
+    val currentStep: DialogStep? get() = lastStep
 
     /** Runs a console command line exactly as if it was typed into the console. */
     fun runCommand(line: String) = console.execCommand(line)
 
     override fun show() {
-        // console first, so it takes keys when open
-        Gdx.input.inputProcessor = InputMultiplexer(console.inputProcessor, stage)
-        if (logTable.children.size == 0) advance()
+        // console first, so it takes keys when open; then the layout key; then the stage
+        val keys = object : KtxInputAdapter {
+            override fun keyDown(keycode: Int): Boolean {
+                if (keycode != Input.Keys.F2) return false
+                setViewMode(null)
+                return true
+            }
+        }
+        Gdx.input.inputProcessor = InputMultiplexer(console.inputProcessor, keys, stage)
+        if (lastStep == null) advance()
     }
 
     override fun resize(width: Int, height: Int) {
@@ -228,98 +198,105 @@ class DialogScreen(
     override fun render(delta: Float) {
         clearScreen(red = 0.1f, green = 0.1f, blue = 0.12f)
         stage.act(delta)
-        if (scrollPending) {
-            logPane.validate()
-            logPane.scrollPercentY = 1f
-            scrollPending = false
-        }
         stage.draw()
         console.draw()
     }
 
     override fun dispose() {
+        for (observation in observations.values) manager.unobserve(observation)
+        observations.clear()
         stage.dispose()
         console.dispose()
+        mono.dispose()
         skin.dispose()
         consoleSkin.dispose()
     }
 
-    private fun addLine(text: String, color: Color? = null) {
-        logEntries += LogEntry(text, color)
-        val line = Label(text, skin).apply {
-            wrap = true
-            if (color != null) this.color.set(color)
-        }
-        logTable.add(line).growX().padBottom(4f).row()
-        scrollPending = true
-    }
+    // ---- showing a step ----------------------------------------------------------------------------------------
 
-    private fun restoreLog(entries: List<LogEntry>) {
-        logTable.clearChildren()
-        logEntries.clear()
-        for (entry in entries) addLine(entry.text, entry.color)
-    }
-
-    /** Continues the story, appends output and rebuilds the choice buttons. */
-    private fun advance(first: DialogStep? = null) {
+    /** Continues the story and shows what comes out. */
+    private fun advance() {
         val step = try {
-            first ?: manager.next()
+            nextStep()
+        } catch (e: StoryStepException) {
+            showFailure(e)
+            return
         } catch (e: Exception) {
             log.error(e) { "Story error" }
-            addLine("Story error: ${e.message}", Color.SALMON)
-            console.log("Story error: ${e.message}")
+            statusLabel.setText("Story error: ${e.message}")
+            say("Story error: ${e.message}")
             return
         }
-        showStep(step)
+        showStep(step.first, step.second)
     }
 
-    private fun addDialogLine(line: DialogLine) {
-        val prefix = line.speaker?.let { "[#9ecbff]${it.replace("[", "[[")}:[] " } ?: ""
-        addLine(prefix + toMarkup(line.spans))
-        if (!line.tags.isEmpty) addLine("# " + line.tags.raw.joinToString(", "), dim)
-        effectsNote(line)?.let { addLine(it, dim) }
+    /** The engine keeps the lines it built before a failure. Show that partial step with the error in the raw panel. */
+    private fun showFailure(e: StoryStepException) {
+        log.error(e) { "Story error" }
+        var root: Throwable = e
+        while (root.cause != null && root.cause !== root) root = root.cause!!
+        val why = root.message ?: root.toString()
+        showStep(e.step, "STORY ERROR: ${e.message} / cause: $why")
+        // one short line: a long label would widen the whole layout. The raw panel has the full text.
+        statusLabel.setText("Story error: " + why.take(110).replace('\n', ' ') + if (why.length > 110) "..." else "")
+        restartButton.isVisible = true
+        say("Story error: ${e.message}")
     }
 
-    private fun addEvent(event: StoryEvent) {
-        addLine("! event ${event.name}(${event.args.joinToString { show(it) }})", Color.GOLDENROD)
+    /**
+     * Gets the next step. If the game acted on an event (took coin), the choices it was given were checked before
+     * that, so ask the engine for them again. It returns the pending choices without producing lines.
+     */
+    private fun nextStep(): Pair<DialogStep, String?> {
+        stateChanged = false
+        val step = manager.next()
+        if (!stateChanged || step.choices.isEmpty()) return step to null
+        val again = manager.next()
+        return step.copy(choices = again.choices) to "choices read again after the game acted on an event"
     }
 
-    private fun showStep(step: DialogStep) {
-        var next = 0
-        for ((index, line) in step.lines.withIndex()) {
-            while (next < step.events.size && step.events[next].lineIndex <= index) addEvent(step.events[next++])
-            addDialogLine(line)
-        }
-        while (next < step.events.size) addEvent(step.events[next++])
-        if (step.openStyles.isNotEmpty()) addLine("(still open: ${step.openStyles.joinToString { describeStyle(it) }})", dim)
+    private fun showStep(step: DialogStep, note: String? = null, number: Int = ++stepNumber) {
         lastStep = step
-        buildChoices(step)
+        raw.show(step, number, note)
+        rendered.show(step, choiceMode)
         statusLabel.setText(if (step.ended) "Story ended." else "")
         restartButton.isVisible = step.ended
     }
 
-    /** Harness policy: hide, grey out (with the targets shown) or show unavailable choices. The engine blocks none. */
-    private fun buildChoices(step: DialogStep) {
-        choiceTable.clearChildren()
-        for (choice in step.choices) {
-            if (!choice.available && choiceMode == ChoiceMode.HIDE) continue
-            val markup = buildString {
-                append(toMarkup(choice.spans))
-                if (!choice.available) {
-                    val needs = choice.requirements.filterNot { it.met }.joinToString("; ", transform = ::describe)
-                    append("  [#ff8a80](needs ").append(needs.replace("[", "[[")).append(")[]")
-                }
+    private fun applyViewMode() {
+        panelRow.clearChildren()
+        when (viewMode) {
+            ViewMode.SPLIT -> {
+                panelRow.add(raw).grow().uniform().padRight(8f)
+                panelRow.add(rendered).grow().uniform()
             }
-            val button = scene2d.textButton("", CHOICE_STYLE)
-            button.label.setText(markup)
-            button.label.wrap = true
-            if (!choice.available && choiceMode == ChoiceMode.GREY) button.isDisabled = true
-            button.onChange { choose(choice.index) }
-            choiceTable.add(button).growX().padBottom(4f).row()
+            ViewMode.RAW -> panelRow.add(raw).grow()
+            ViewMode.RENDERED -> panelRow.add(rendered).grow()
         }
+        refreshInfo()
     }
 
-    override fun log(message: String) = console.log(message)
+    private fun refreshInfo() {
+        infoLabel.setText(
+            "view: ${viewMode.name.lowercase()} (F2)   choices: ${choiceMode.name.lowercase()}   " +
+                watched.entries.joinToString("  ") { "${it.key}=${it.value}" },
+        )
+    }
+
+    /** Keeps the latest value of an ink variable for the info line, and logs each change to the console. */
+    private fun watch(name: String) {
+        observe(name)
+        watched[name] = show(manager.variable(name))
+        refreshInfo()
+    }
+
+    private fun syncPlayer() {
+        manager.syncStatsToInk("player", PLAYER_SYNCED_STATS)
+    }
+
+    // ---- DialogControl -----------------------------------------------------------------------------------------
+
+    override fun log(message: String) = say(message)
 
     override fun listVariables(): List<String> = manager.variableNames
 
@@ -329,108 +306,149 @@ class DialogScreen(
 
     override fun observe(name: String) {
         if (name in observations) {
-            console.log("Already observing $name")
+            say("Already observing $name")
             return
         }
         try {
-            observations[name] = manager.observe(name) { old, new -> console.log("$name: $old -> $new") }
-            console.log("Observing $name")
+            observations[name] = manager.observe(name) { old, new ->
+                say("$name: $old -> $new")
+                if (name in watched) {
+                    watched[name] = show(new)
+                    refreshInfo()
+                }
+            }
+            say("Observing $name")
         } catch (e: IllegalArgumentException) {
-            console.log(e.message ?: "Cannot observe $name")
+            say(e.message ?: "Cannot observe $name")
         }
     }
 
     override fun unobserve(name: String) {
         val observation = observations.remove(name)
         if (observation == null) {
-            console.log("Not observing $name")
+            say("Not observing $name")
         } else {
             manager.unobserve(observation)
-            console.log("Stopped observing $name")
+            watched.remove(name)
+            refreshInfo()
+            say("Stopped observing $name")
         }
     }
 
     override fun setStat(entity: String, stat: String, value: Any) {
         val name = applyStat(manager, provider, entity, stat, value)
         val synced = manager.variable(name)
-        console.log(if (synced == null) "$entity.$stat = $value (no ink variable $name)" else "$name = $synced")
+        say(if (synced == null) "$entity.$stat = $value (no ink variable $name)" else "$name = $synced")
     }
 
     override fun setNpcStat(entity: String, stat: String, value: Any) {
         provider.setStat(entity, stat, value)
-        console.log("$entity.$stat = $value")
+        say("$entity.$stat = $value")
+    }
+
+    override fun resetStats() {
+        provider.loadShowcaseStats()
+        syncPlayer()
+        say("Stats back to the harness defaults")
     }
 
     override fun talk(knot: String, speaker: String?) {
         try {
             manager.beginScene(knot, speaker)
         } catch (e: Exception) {
-            console.log("Talk failed: ${e.message}")
+            say("Talk failed: ${e.message}")
             return
         }
         advance()
     }
 
     override fun seed(value: Int) {
-        console.log(if (manager.seedRandom(value)) "Seeded $value" else "Seed needs INCLUDE hdgife.ink")
+        rng = Random(value)
+        say(if (manager.seedRandom(value)) "Seeded $value (ink and the game's dice)" else "Seed needs INCLUDE hdgife.ink")
+    }
+
+    override fun fixRoll(value: Int?) {
+        fixedRoll = value
+        say(if (value == null) "roll() is random again" else "roll() now always gives $value")
     }
 
     override fun setNumberFormat(decimals: Int, rounding: Rounding) {
         manager.numberFormat = NumberFormat(decimals, rounding)
-        console.log("Number format: $decimals decimals, $rounding")
+        say("Number format: $decimals decimals, $rounding")
     }
 
     override fun choose(index: Int) {
         val choice = lastStep?.choices?.firstOrNull { it.index == index }
         if (choice == null) {
-            console.log("No choice $index")
+            say("No choice $index")
             return
         }
-        addLine("> " + choice.text, dim)
+        stateChanged = false
         try {
-            showStep(manager.choose(index))
+            val step = manager.choose(index)
+            val refreshed = if (stateChanged && step.choices.isNotEmpty()) manager.next() else null
+            showStep(
+                refreshed?.let { step.copy(choices = it.choices) } ?: step,
+                refreshed?.let { "choices read again after the game acted on an event" },
+            )
+            if (!step.ended) statusLabel.setText("> " + choice.text)
+        } catch (e: StoryStepException) {
+            showFailure(e)
         } catch (e: Exception) {
             log.error(e) { "Story error" }
-            console.log("Story error: ${e.message}")
+            say("Story error: ${e.message}")
         }
     }
 
     override fun setChoiceMode(mode: ChoiceMode) {
         choiceMode = mode
-        lastStep?.let { buildChoices(it) }
-        console.log("Choice mode: ${mode.name.lowercase()}")
+        lastStep?.let { rendered.showChoices(it, mode) }
+        refreshInfo()
+        say("Choice mode: ${mode.name.lowercase()}")
+    }
+
+    override fun setViewMode(mode: ViewMode?) {
+        viewMode = mode ?: ViewMode.entries[(viewMode.ordinal + 1) % ViewMode.entries.size]
+        applyViewMode()
+        say("View: ${viewMode.name.lowercase()}")
     }
 
     override fun save() {
+        val step = lastStep
+        if (step == null) {
+            say("Nothing to save yet")
+            return
+        }
         val json = manager.saveState()
-        snapshot = Snapshot(json, logEntries.toList())
-        console.log("Saved ${json.length} chars in memory. Stat values are not part of it.")
+        snapshot = Snapshot(json, step, stepNumber)
+        say("Saved ${json.length} chars in memory. Stat values are not part of it.")
     }
 
     override fun load() {
         val saved = snapshot
         if (saved == null) {
-            console.log("Nothing saved yet")
+            say("Nothing saved yet")
             return
         }
         try {
             manager.loadState(saved.state)
         } catch (e: Exception) {
-            console.log("Load failed: ${e.message}")
+            say("Load failed: ${e.message}")
             return
         }
-        // the log goes back to what it showed at save time, the engine brings back the story and its open styles
-        restoreLog(saved.log)
-        addLine("(state loaded, speaker is now ${manager.speaker ?: "none"})", dim)
-        advance()
-        console.log("Loaded")
+        // The engine brings back the story, the speaker and the open styles. The lines are not part of a save, so the
+        // game shows the ones it kept, with the choices and open styles read again from the engine.
+        val again = manager.next()
+        val step = saved.step.copy(choices = again.choices, ended = again.ended, openStyles = again.openStyles, events = emptyList())
+        showStep(step, "loaded save: lines kept by the harness, choices and openStyles read again from the engine", saved.number)
+        say("Loaded (speaker is now ${manager.speaker ?: "none"})")
     }
 
     override fun divert(path: String) {
         try {
             manager.story.choosePathString(path)
         } catch (e: Exception) {
-            console.log("Divert failed: ${e.message}")
+            say("Divert failed: ${e.message}")
             return
         }
         advance()
@@ -441,11 +459,12 @@ class DialogScreen(
             try {
                 val story = withContext(Dispatchers.IO) { compileHarnessStory(compiler) }
                 manager.story = story
-                resetLog()
-                console.log("Reloaded")
+                syncPlayer()
+                restartView()
+                say("Reloaded")
             } catch (e: Exception) {
                 log.error(e) { "Reload failed" }
-                console.log("Reload failed: ${e.message}")
+                say("Reload failed: ${e.message}")
             }
         }
     }
@@ -453,12 +472,14 @@ class DialogScreen(
     override fun restart() {
         manager.reset()
         inventory.clear()
-        resetLog()
+        applyStat(manager, provider, "player", "coin", START_COIN)
+        syncPlayer()
+        restartView()
     }
 
-    private fun resetLog() {
-        logTable.clearChildren()
-        logEntries.clear()
+    private fun restartView() {
+        stepNumber = 0
+        lastStep = null
         advance()
     }
 }

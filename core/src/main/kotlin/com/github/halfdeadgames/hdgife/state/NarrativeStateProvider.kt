@@ -27,6 +27,10 @@ fun interface NarrativeStateProvider {
     /**
      * Current value of [statName] on [entityId], or null if the entity has no such stat. Called live from ink,
      * so keep it cheap. Null makes `stat`/`stat_of` give 0, `has_stat` false and requirements unmet.
+     *
+     * Don't throw: the engine does not catch it. A throw while ink runs (`stat`, `stat_text`, requirements)
+     * comes out of `StoryManager.next`/`choose` as a `StoryStepException` that keeps the lines built so far. A throw in
+     * `syncStatsToInk` comes out as it is.
      */
     fun getStat(entityId: String, statName: String): Any?
 }

@@ -98,14 +98,25 @@ class StoryManager(
     /**
      * The wrapped story. Assigning a new one (after a reload, say) binds the stat functions, your [bindFunction]s
      * and your [observe]rs to it, and resets what the manager holds (open styles, pending events, [speaker] is kept).
-     * Throws [IllegalStateException] if the story was built with an old hdgife.ink (it declares `hdgife_speaker` but has no `hdgife_event_seq`).
+     * The old story is unbound from this manager. Assigning the story it already has is allowed and rebinds it.
+     * Throws [IllegalStateException] if the story was built with an old hdgife.ink (it declares `hdgife_speaker` but
+     * has no `hdgife_event_seq`); the manager is then unchanged.
+     *
+     * One story should have one manager. A manager takes over the library names (`stat`, `fmt`, `hdgife_emit0` ...)
+     * and its own [bindFunction] names on the story it gets, replacing any earlier binding, such as the one of a
+     * previous manager. Functions another manager bound under other names stay with that manager.
      */
     var story: Story = story
         set(value) {
+            // Validate first: a refused story leaves the manager exactly as it was.
+            checkEventSupport(value)
+            val old = field
             val keep = speaker
             closeStyles("the story was replaced")
+            detachObservations()
+            unbindOwn(old)
             field = value
-            field.setAllowExternalFunctionFallbacks(allowExternalFunctionFallbacks)
+            value.setAllowExternalFunctionFallbacks(allowExternalFunctionFallbacks)
             bind(value)
             lastSeed = null
             pendingEvents.clear()
@@ -171,6 +182,8 @@ class StoryManager(
     private val pendingEvents = ArrayList<PendingEvent>()
     private val unconfirmedEvents = ArrayList<CandidateEvent>()
     private val userFunctions = LinkedHashMap<String, UserFunction>()
+    /** What this manager bound on the story, by name, so it only ever unbinds its own functions. */
+    private val attached = HashMap<String, Story.ExternalFunction<Any?>>()
     private val observations = ArrayList<VariableObservation>()
 
     /** An event kept by [confirmEvents]. [late] means it happened after the line just added (see [placeLateEvents]). */
@@ -198,6 +211,7 @@ class StoryManager(
 
     init {
         InkNativePatch.apply()
+        checkEventSupport(story)
         this.story.setAllowExternalFunctionFallbacks(allowExternalFunctionFallbacks)
         bind(story)
     }
@@ -205,19 +219,29 @@ class StoryManager(
     // ---- ink binding -------------------------------------------------------------------------------------------
 
     private fun bind(target: Story) {
-        bindOnce(target, "stat", true) { args -> statInk(speaker, args.getOrNull(0)) ?: 0f }
-        bindOnce(target, "stat_of", true) { args -> statInk(args.getOrNull(0)?.toString(), args.getOrNull(1)) ?: 0f }
-        bindOnce(target, "stat_text", true) { args -> statText(speaker, args.getOrNull(0)) }
-        bindOnce(target, "stat_text_of", true) { args -> statText(args.getOrNull(0)?.toString(), args.getOrNull(1)) }
-        bindOnce(target, "fmt", true) { args -> fmtValue(args) }
-        bindOnce(target, "has_stat", true) { args -> statInk(speaker, args.getOrNull(0)) != null }
+        bindLibrary(target, "stat") { args -> statInk(speaker, args.getOrNull(0)) ?: 0f }
+        bindLibrary(target, "stat_of") { args -> statInk(args.getOrNull(0)?.toString(), args.getOrNull(1)) ?: 0f }
+        bindLibrary(target, "stat_text") { args -> statText(speaker, args.getOrNull(0)) }
+        bindLibrary(target, "stat_text_of") { args -> statText(args.getOrNull(0)?.toString(), args.getOrNull(1)) }
+        bindLibrary(target, "fmt") { args -> fmtValue(args) }
+        bindLibrary(target, "has_stat") { args -> statInk(speaker, args.getOrNull(0)) != null }
         // Events may run during lookahead and run again after it is undone. next() keeps each one once (see record).
-        bindOnce(target, "hdgife_emit0", true) { args -> record(args); null }
-        bindOnce(target, "hdgife_emit1", true) { args -> record(args); null }
-        bindOnce(target, "hdgife_emit2", true) { args -> record(args); null }
-        bindOnce(target, "hdgife_emit3", true) { args -> record(args); null }
-        for ((name, def) in userFunctions) bindUser(target, name, def)
-        checkEventSupport(target)
+        bindLibrary(target, "hdgife_emit0") { args -> record(args); null }
+        bindLibrary(target, "hdgife_emit1") { args -> record(args); null }
+        bindLibrary(target, "hdgife_emit2") { args -> record(args); null }
+        bindLibrary(target, "hdgife_emit3") { args -> record(args); null }
+        for ((name, def) in userFunctions) {
+            if (target.getExternalFunction(name) != null) target.unbindExternalFunction(name)
+            bindUser(target, name, def)
+        }
+    }
+
+    /** Unbinds the functions this manager bound on [target], leaving anything else alone. */
+    private fun unbindOwn(target: Story) {
+        for ((name, function) in attached) {
+            if (target.getExternalFunction(name) === function) target.unbindExternalFunction(name)
+        }
+        attached.clear()
     }
 
     /** Stories compiled with an old hdgife.ink declare `hdgife_speaker` but have no `hdgife_event_seq`: every event would be lost. */
@@ -232,14 +256,16 @@ class StoryManager(
         }
     }
 
-    private fun bindOnce(target: Story, name: String, safe: Boolean, block: (Array<out Any?>) -> Any?) {
-        if (target.getExternalFunction(name) != null) return
-        attach(target, name, safe, Story.ExternalFunction<Any?> { args -> block(args) })
+    /** Library functions are always rebound to this manager, replacing whatever was bound under the name. */
+    private fun bindLibrary(target: Story, name: String, block: (Array<out Any?>) -> Any?) {
+        if (target.getExternalFunction(name) != null) target.unbindExternalFunction(name)
+        attach(target, name, true, Story.ExternalFunction<Any?> { args -> block(args) })
     }
 
     private fun attach(target: Story, name: String, safe: Boolean, function: Story.ExternalFunction<Any?>) {
         if (safe && target is HdgifeStory) target.bindLookaheadSafe(name, function)
         else target.bindExternalFunction(name, function, false)
+        attached[name] = function
     }
 
     private fun bindUser(target: Story, name: String, def: UserFunction) {
@@ -262,7 +288,7 @@ class StoryManager(
      * on first use with a clear message when a binding is missing). Ink checks this on the first `Continue`.
      *
      * The result is mapped to an ink value (see [NarrativeStateProvider]); null gives ink no value, for a function
-     * used as a statement. Exceptions from [function] propagate out of [next].
+     * used as a statement. An exception from [function] comes out of [next] as a [StoryStepException].
      *
      * [lookaheadSafe] says the function may be called early or twice because ink runs ahead for glue. Leave it false
      * (default) for anything with a side effect, and know it then ends glue lookahead. Make it true only for
@@ -279,7 +305,9 @@ class StoryManager(
 
     /** Removes a function bound with [bindFunction]. Does nothing if there is none. */
     fun unbindFunction(name: String) {
-        if (userFunctions.remove(name) != null && story.getExternalFunction(name) != null) story.unbindExternalFunction(name)
+        if (userFunctions.remove(name) == null) return
+        val own = attached.remove(name)
+        if (own != null && story.getExternalFunction(name) === own) story.unbindExternalFunction(name)
     }
 
     /**
@@ -434,12 +462,14 @@ class StoryManager(
     /**
      * The last seed set through this manager, or null if none since the story was assigned or [loadState]
      * was called (the seed itself still lives in the loaded state). Setting calls [seedRandom] and throws
-     * if the story doesn't include hdgife.ink.
+     * [IllegalStateException] if the story doesn't include hdgife.ink, and [IllegalArgumentException] for null
+     * (there is no way to unseed; call [reset] and don't seed).
      */
     var seed: Int?
         get() = lastSeed
         set(value) {
-            if (value != null) check(seedRandom(value)) { "Seeding needs INCLUDE hdgife.ink in the story" }
+            requireNotNull(value) { "The seed can't be set to null" }
+            check(seedRandom(value)) { "Seeding needs INCLUDE hdgife.ink in the story" }
         }
 
     /**
@@ -559,54 +589,81 @@ class StoryManager(
     /**
      * Continues until the next choice or the end and returns the cleaned result.
      * With choices pending it returns them again with no lines.
+     *
+     * If ink fails while continuing (a bound function throws, or an ink runtime error), the lines built so far are
+     * not lost: a [StoryStepException] is thrown that carries them as a partial [DialogStep] (no choices, not
+     * ended) and has the original exception as its cause. The manager stays consistent with those lines: open
+     * styles and events cover exactly what the partial step holds, and the events of the failed Continue are dropped.
+     * The ink story itself is in whatever state ink left it in, so after a failure the usual move is [loadState] or [reset].
      */
     fun next(): DialogStep {
         val s = story
         val lines = ArrayList<DialogLine>()
         val stepTags = ArrayList<String>()
         var carried: ArrayList<String>? = null
-        while (s.canContinue()) {
+        val choices = ArrayList<DialogChoice>()
+        try {
+            while (s.canContinue()) {
+                eventLine = lines.size
+                val raw = s.Continue().trimEnd('\n', '\r')
+                confirmEvents(raw)
+                val lineTags = s.currentTags
+                stepTags.addAll(lineTags)
+                val styled = parseStyles(raw, openStyles, textCleaner, log)
+                openStyles = styled.open
+                if (styled.text.isBlank()) {
+                    // a line with no text hands its tags to the next line, as ink does
+                    placeLateEvents(false)
+                    if (lineTags.isNotEmpty()) (carried ?: ArrayList<String>().also { carried = it }).addAll(lineTags)
+                    continue
+                }
+                val tags = Tags.parse(carried?.let { it + lineTags } ?: lineTags)
+                carried = null
+                val tagSpeaker = tags[speakerTagKey]?.ifBlank { null }
+                lines += DialogLine(styled.text, tagSpeaker ?: speaker, tags, styled.spans, styled.markers)
+                placeLateEvents(true)
+            }
+            confirmEvents("")
+            placeLateEvents(false)
             eventLine = lines.size
-            val raw = s.Continue().trimEnd('\n', '\r')
-            confirmEvents(raw)
-            val lineTags = s.currentTags
-            stepTags.addAll(lineTags)
-            val styled = parseStyles(raw, openStyles, textCleaner, log)
-            openStyles = styled.open
-            if (styled.text.isBlank()) {
-                // a line with no text hands its tags to the next line, as ink does
-                placeLateEvents(false)
-                if (lineTags.isNotEmpty()) (carried ?: ArrayList<String>().also { carried = it }).addAll(lineTags)
-                continue
+            val rawChoices = s.currentChoices
+            for (i in rawChoices.indices) {
+                val c = rawChoices[i]
+                val styled = parseStyles(c.text, emptyList(), textCleaner, log)
+                if (styled.open.isNotEmpty()) {
+                    log?.log("Style: <${styled.open.joinToString("> <") { it.name }}> never closed in choice \"${c.text}\"")
+                }
+                val tags = Tags.parse(c.tags ?: emptyList())
+                choices += DialogChoice(c.index, styled.text, styled.spans, tags, requirementsOf(tags), styled.markers)
             }
-            val tags = Tags.parse(carried?.let { it + lineTags } ?: lineTags)
-            carried = null
-            val tagSpeaker = tags[speakerTagKey]?.ifBlank { null }
-            lines += DialogLine(styled.text, tagSpeaker ?: speaker, tags, styled.spans, styled.markers)
-            placeLateEvents(true)
-        }
-        confirmEvents("")
-        placeLateEvents(false)
-        eventLine = lines.size
-        val rawChoices = s.currentChoices
-        val choices = ArrayList<DialogChoice>(rawChoices.size)
-        for (i in rawChoices.indices) {
-            val c = rawChoices[i]
-            val styled = parseStyles(c.text, emptyList(), textCleaner, log)
-            if (styled.open.isNotEmpty()) {
-                log?.log("Style: <${styled.open.joinToString("> <") { it.name }}> never closed in choice \"${c.text}\"")
-            }
-            val tags = Tags.parse(c.tags ?: emptyList())
-            choices += DialogChoice(c.index, styled.text, styled.spans, tags, requirementsOf(tags), styled.markers)
+        } catch (e: Exception) {
+            // Keep what was built. Events from the failed Continue are unconfirmed and dropped; the styles and
+            // events that belong to the returned lines are kept and handed over, so nothing is half-applied.
+            unconfirmedEvents.clear()
+            placeLateEvents(false)
+            eventLine = lines.size
+            val events = takeEvents()
+            val partial = DialogStep(lines, Tags.parse(stepTags), emptyList(), false, events, openStyles)
+            notifyEvents(events)
+            throw StoryStepException("The story failed while continuing: ${e.message}", e, partial)
         }
         val ended = choices.isEmpty()
         if (ended) closeStyles("the story ended")
+        val events = takeEvents()
+        val step = DialogStep(lines, Tags.parse(stepTags), choices, ended, events, openStyles)
+        notifyEvents(events)
+        return step
+    }
+
+    private fun takeEvents(): List<StoryEvent> {
         val events = if (pendingEvents.isEmpty()) emptyList() else pendingEvents.map { it.event }
         pendingEvents.clear()
-        val step = DialogStep(lines, Tags.parse(stepTags), choices, ended, events, openStyles)
-        val listener = onEvent
-        if (listener != null) for (event in events) listener(event)
-        return step
+        return events
+    }
+
+    private fun notifyEvents(events: List<StoryEvent>) {
+        val listener = onEvent ?: return
+        for (event in events) listener(event)
     }
 
     /** Picks choice [index] (as in [DialogChoice.index]) and returns the following [DialogStep]. Open styles carry over. */
@@ -633,7 +690,7 @@ class StoryManager(
         val result = ArrayList<ChoiceRequirement>()
         val current = speaker
         for (value in clauses) {
-            for (part in value.split(',')) {
+            for (part in splitClauses(value)) {
                 val raw = part.trim()
                 if (raw.isEmpty()) continue
                 result += evaluateRequirement(raw, current)
@@ -645,13 +702,13 @@ class StoryManager(
     private fun evaluateRequirement(raw: String, currentSpeaker: String?): ChoiceRequirement {
         val match = REQUIREMENT.matchEntire(raw)
         val op = match?.let { Comparison.parse(it.groupValues[3]) }
-        val text = match?.groupValues?.get(4)?.trim()?.removeSurrounding("\"")?.removeSurrounding("'")
+        val text = match?.groupValues?.get(4)?.trim()?.let(::unquote)
         if (match == null || op == null || text.isNullOrEmpty()) {
             log?.log("Requirement: cannot read '$raw'")
             return ChoiceRequirement(null, "", null, null, null, false, raw)
         }
-        val entity = match.groupValues[1].ifEmpty { null } ?: currentSpeaker
-        val stat = match.groupValues[2]
+        val entity = match.groupValues[1].ifEmpty { null }?.let(::unquote) ?: currentSpeaker
+        val stat = unquote(match.groupValues[2])
         val number = text.toDoubleOrNull()?.takeIf { it.isFinite() }
         val numberTarget: Any? = number?.let { text.toIntOrNull() ?: it.toFloat() }
         if (entity == null) {
@@ -772,6 +829,11 @@ class StoryManager(
         for (observation in observations.filter { it.name == name }) unobserve(observation)
     }
 
+    /** Removes our observers from the current story, before it is replaced. */
+    private fun detachObservations() {
+        for (observation in observations) story.removeVariableObserver(observation.observer, observation.name)
+    }
+
     private fun reattachObservations() {
         for (observation in observations.toList()) {
             if (variable(observation.name) == null) {
@@ -795,7 +857,39 @@ class StoryManager(
         private const val EVENT_SEQ_VARIABLE = "hdgife_event_seq"
         private const val SAVE_VERSION = 1
         private val NOT_NAME = Regex("[^A-Za-z0-9_]")
-        private val REQUIREMENT = Regex("""(?:([\w-]+)\.)?([\w-]+)\s*(>=|<=|==|!=|>|<)\s*(.+)""")
+        // A name is a plain word (letters, digits, _ and -) or quoted ('...' or "..."), so it can hold spaces, dots and commas.
+        private const val NAME = """\x22[^\x22]+\x22|'[^']+'|[\w-]+"""
+        private val REQUIREMENT = Regex("""(?:($NAME)\.)?($NAME)\s*(>=|<=|==|!=|>|<)\s*(.+)""")
+
+        private fun unquote(text: String): String =
+            if (text.length >= 2 && (text.first() == '"' || text.first() == '\'') && text.last() == text.first()) text.substring(1, text.length - 1) else text
+
+        /**
+         * Splits a requirement tag on commas that are outside quotes. A quote opens at the start or after one of
+         * `= < > ! . ,` (so an apostrophe inside a word, `O'Brien`, is not a quote) and ends at the same quote
+         * character. An unterminated quote runs to the end.
+         */
+        internal fun splitClauses(value: String): List<String> {
+            val parts = ArrayList<String>()
+            var start = 0
+            var quote = NO_CHAR
+            var previous = NO_CHAR
+            for ((i, c) in value.withIndex()) {
+                if (quote != NO_CHAR) {
+                    if (c == quote) quote = NO_CHAR
+                } else if ((c == '"' || c == '\'') && (previous == NO_CHAR || previous in "=<>!.,")) {
+                    quote = c
+                } else if (c == ',') {
+                    parts += value.substring(start, i)
+                    start = i + 1
+                }
+                if (!c.isWhitespace()) previous = c
+            }
+            parts += value.substring(start)
+            return parts
+        }
+
+        private const val NO_CHAR = '\u0000'
 
         /** Builds `entityId_statName`, replacing characters outside `[A-Za-z0-9_]` with `_`. */
         fun defaultVariableName(entityId: String, statName: String): String =

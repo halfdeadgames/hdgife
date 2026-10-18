@@ -4,7 +4,8 @@ eclipse.project.name = appName + '-core'
 dependencies {
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
   api "com.bladecoder.ink:blade-ink:$bladeInkVersion"
-  api "com.bladecoder.ink:blade-ink-compiler:$bladeInkVersion"
+  // Not in any public signature, so consumers get it at runtime only.
+  implementation "com.bladecoder.ink:blade-ink-compiler:$bladeInkVersion"
   api "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
 
   // Tests only. Not part of the published pom.
@@ -14,7 +15,29 @@ dependencies {
 
 test {
   useJUnitPlatform()
+  systemProperty 'hdgife.projectVersion', project.version.toString()
 }
+
+// Hdgife.VERSION comes from projectVersion in gradle.properties, the single source of truth.
+def generatedVersionDir = layout.buildDirectory.dir('generated/hdgife/kotlin')
+def generateVersion = tasks.register('generateVersion') {
+  def outDir = generatedVersionDir
+  def versionText = project.version.toString()
+  inputs.property('version', versionText)
+  outputs.dir(outDir)
+  doLast {
+    def dir = outDir.get().asFile.toPath().resolve('com/github/halfdeadgames/hdgife')
+    java.nio.file.Files.createDirectories(dir)
+    dir.resolve('Hdgife.kt').toFile().text = """package com.github.halfdeadgames.hdgife
+
+/** Library version. Generated from projectVersion in gradle.properties. */
+object Hdgife {
+    const val VERSION = "${versionText}"
+}
+"""
+  }
+}
+sourceSets.main.kotlin.srcDir(generateVersion)
 
 apply plugin: 'maven-publish'
 

@@ -15,8 +15,10 @@ package com.bladecoder.ink.runtime
  * glue lookahead, so `<>` after a line that calls it may not join.
  *
  * Fix: this subclass sits in Blade Ink's own package, so it can override the package-private method. Functions
- * bound through [bindLookaheadSafe] are run here, directly, with no guard at all: they are safe by contract, so
- * they can run in lookahead and in strings. Everything else goes to the original code unchanged.
+ * bound as lookahead safe (through [bindLookaheadSafe] or `bindExternalFunction(..., true)`) are run here,
+ * directly, with no guard at all: they are safe by contract, so they can run in lookahead and in strings.
+ * A function bound as not safe gets the upstream rule: calling it while ink builds a string (choice text or
+ * `"{...}"`) is a story error, as in upstream ink. Everything else goes to the original code unchanged.
  * No reflection. A story built any other way is a plain [Story] and keeps the old behavior, so use
  * [from] to get one (the compiler service already does).
  */
@@ -26,10 +28,13 @@ class HdgifeStory(json: String) : Story(json) {
     /**
      * Binds [function] for the ink EXTERNAL [name], safe to call during lookahead and inside strings.
      * Only do this for functions that read and have no side effects. Throws if [name] is already bound.
+     * Same as `bindExternalFunction(name, function, true)`.
      */
-    fun bindLookaheadSafe(name: String, function: ExternalFunction<*>) {
-        super.bindExternalFunction(name, function, true)
-        safeFunctions[name] = function
+    fun bindLookaheadSafe(name: String, function: ExternalFunction<*>) = bindExternalFunction(name, function, true)
+
+    override fun bindExternalFunction(funcName: String, func: ExternalFunction<*>, lookaheadSafe: Boolean) {
+        super.bindExternalFunction(funcName, func, lookaheadSafe)
+        if (lookaheadSafe) safeFunctions[funcName] = func
     }
 
     /** The text ink has in its output stream right now, newline included. For a lookahead safe function that is asking where it was called. */
@@ -43,6 +48,16 @@ class HdgifeStory(json: String) : Story(json) {
     override fun callExternalFunction(funcName: String, numberOfArguments: Int) {
         val function = safeFunctions[funcName]
         if (function == null) {
+            // Upstream rule, which 1.3.2 got inverted: a function that is not lookahead safe can't run while ink builds a string.
+            if (getExternalFunction(funcName) != null && state.inStringEvaluation()) {
+                error(
+                    "External function $funcName could not be called because 1) it wasn't marked as lookaheadSafe when it was bound " +
+                        "and 2) the story is in the middle of string generation, either because choice text is being generated, " +
+                        "or because you have ink like \"hello {func()}\". Generate the result into a temporary variable before " +
+                        "the string or choice: ~ temp x = $funcName()",
+                )
+                return
+            }
             super.callExternalFunction(funcName, numberOfArguments)
             return
         }

@@ -108,3 +108,10 @@ data class ChoiceRequirement(
 ) {
     val valid: Boolean get() = op != null
 }
+
+/**
+ * Thrown by `StoryManager.next` (and `choose`) when ink fails while continuing: a bound function threw, or ink
+ * hit a runtime error. [step] holds what was built before the failure (the lines so far, their events and the
+ * open styles; no choices, not ended). The original exception is the [cause].
+ */
+class StoryStepException(message: String, cause: Throwable, val step: DialogStep) : RuntimeException(message, cause)

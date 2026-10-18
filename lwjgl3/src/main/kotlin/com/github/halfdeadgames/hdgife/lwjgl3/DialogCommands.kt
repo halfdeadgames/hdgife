@@ -13,6 +13,8 @@ class MapStateProvider : NarrativeStateProvider {
         stats["$entityId.$statName"] = value
     }
 
+    fun clear() = stats.clear()
+
     override fun getStat(entityId: String, statName: String): Any? = stats["$entityId.$statName"]
 }
 
@@ -49,6 +51,11 @@ interface DialogControl {
     fun reload()
     fun restart()
     fun setChoiceMode(mode: ChoiceMode)
+    /** Null cycles to the next layout. */
+    fun setViewMode(mode: ViewMode?)
+    /** Makes the bound `roll(sides)` return [value] every time, or random again when null. */
+    fun fixRoll(value: Int?)
+    fun resetStats()
     fun save()
     fun load()
 }
@@ -170,6 +177,28 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
         val parsed = ChoiceMode.entries.firstOrNull { it.name.equals(mode, ignoreCase = true) }
         if (parsed == null) control.log("Mode must be hide, grey or show") else control.setChoiceMode(parsed)
     }
+
+    /** Cycles the layout: split, raw, rendered. The F2 key does the same. */
+    fun view() = control.setViewMode(null)
+
+    /** Sets the layout: split (raw and rendered side by side), raw or rendered. */
+    fun view(mode: String) {
+        val parsed = ViewMode.entries.firstOrNull { it.name.equals(mode, ignoreCase = true) }
+        if (parsed == null) control.log("Mode must be split, raw or rendered") else control.setViewMode(parsed)
+    }
+
+    /** Makes the game's `roll(sides)` always give this number, or `off` for random again. */
+    fun fixroll(value: String) {
+        val n = value.toIntOrNull()
+        when {
+            value.equals("off", ignoreCase = true) -> control.fixRoll(null)
+            n == null -> control.log("fixroll takes a number or off")
+            else -> control.fixRoll(n)
+        }
+    }
+
+    /** Puts every stat back to the harness defaults (the story's cast and the player). */
+    fun resetstats() = control.resetStats()
 
     /** Keeps the story state (JSON) in memory. */
     fun save() = control.save()

@@ -1,27 +1,26 @@
-// Demo scenes for the stat functions, speakers, styles, events and choice requirements.
-// Stats are 0..100 except strength, rank (int), faction (string) and is_injured (bool). Nothing here is built
-// into the engine, these names are just this story's.
-//
-// Markers in text, written without '#' because '#' starts an ink tag:
-//   <em>..</em>  <b>..</b>                   the harness colors these
-//   <color=red>..</color>                    a color name, resolved by the harness
-//   <color=ff5555>..</color>                 hex (also 0xRRGGBB, RGB, RRGGBBAA), see Style.hexColor()
-//   <color=\#66ccff>..</color>               "\#" is ink's escape for a literal '#', also accepted
-//   <shake amp=2>..</shake>, <wave=2,0.5>    effects: the harness only logs them
-//   <pause=0.5/>, <slam/>                    point markers: logged with their character offset
-// A style stays open across lines until its closing marker.
-// Choice requirements go INSIDE the brackets: [Text # requires: strength >= 12, faction == crown].
-// ~ emit("give_item", "pass") tells the game something happened. The harness logs it and acts on it.
-//
-// Declared here, bound by the harness (DialogScreen), with an ink fallback for when nothing is bound.
-EXTERNAL inventory_count(item)
+// Debug scenes. The older test scenes, kept so their coverage stays: a guard and a merchant (the "guard" and
+// "merchant" entities of the harness), glue across a stat call, two speakers, style spans, effects and markers,
+// requirement choices (greater/less, string, bool, speaker default), events, a style left open over a choice,
+// and requirements that are mismatched, unreadable, missing or have no entity. Reach them with: divert debug_menu
+// Nothing here is built into the engine, these names are just this story's.
+// player_hp is synced from the harness. strain() is declared in main.ink.
 
-// one combined metric: tiredness plus low mood plus low sanity
-=== function strain() ===
-~ return avg3(stat("tiredness"), invert(stat("mood")), invert(stat("sanity")))
+=== debug_menu ===
+~ speak("")
+Debug scenes.
++ [Guard chat] -> guard_chat
++ [Gate exchange] -> gate_exchange
++ [Open rumor] -> rumor_open
++ [Odd requirements] -> debug_requirements
++ [Health] -> debug_status
++ [Coverage lab] -> coverage_lab
++ [Unsafe function in choice text] -> unsafe_lab
+* [Leave the debug menu] -> lodge
 
-=== function inventory_count(item) ===
-~ return 0
+=== debug_status ===
+You have {player_hp} hp.
+{player_hp <= 0: You feel awful.|You feel fine.}
+-> debug_menu
 
 === guard_chat ===
 ~ speak("guard")
@@ -48,8 +47,8 @@ He serves the {stat("faction")} and you carry {inventory_count("pass")} pass.
   -> guard_chat
 + [Walk past him # requires: player.is_injured == false, faction == crown]
   He lets you through. <slam/>
-  -> hub
-+ [Leave] -> hub
+  -> debug_menu
++ [Leave] -> debug_menu
 
 // Two speakers. The first line names itself with a tag (that line only), the others use speak().
 === gate_exchange ===
@@ -65,29 +64,67 @@ A voice from the queue: "<color=0x66ccff>Hurry</color> up!" # speaker: crowd
   ~ speak("merchant")
   "Told you," she says. "You owe me a <em>drink</em>."
   ~ emit("give_item", "pass")
-  -> hub
+  -> debug_menu
 + [Pull rank # requires: player.rank >= 3]
   The guard salutes.
-  -> hub
+  -> debug_menu
 + [Call his bluff # requires: mood < 50, strength <= 12]
   He flinches. Just a little.
-  -> hub
-+ [Stand aside # requires: player.hp >= 5]
+  -> debug_menu
++ [Stand aside # requires: player.hp >= 15]
   You step back and let them argue.
   ~ emit2("reputation", "guard", 5)
-  -> hub
+  -> debug_menu
 + [Show your papers # requires: player.is_injured == false, player.faction == rebels]
   He squints at them. <b>Forged</b>, obviously, but he waves you on.
   ~ emit("give_item", "pass")
-  -> hub
-+ [Leave] -> hub
+  -> debug_menu
++ [Leave] -> debug_menu
 
 // An emit between a line and its glue line still joins, and fires once. The red style stays open over the choice,
 // so a save made here brings it back on load.
-=== rumor ===
+=== rumor_open ===
 Word has it
 ~ emit("rumor_heard", "gate")
 <> that the gate falls tonight.
 A man leans in and <color=ff5555>speaks low.
 + [Listen] "Run," he says, <b>fast</b> and quiet.</color> Then he is gone.
-  -> hub
+  -> debug_menu
+
+// Requirements the engine reports as problems: a value that does not fit the stat's type (mismatch), a clause
+// it cannot read (invalid), a missing stat, and no entity with no speaker.
+=== debug_requirements ===
+~ speak("")
+Odd requirements. The raw panel shows what the engine made of each one.
++ [Number against a word # requires: guard.strength >= high]
+  -> debug_requirements
++ [Order on a string # requires: guard.faction > 3]
+  -> debug_requirements
++ [Boolean against a number # requires: player.is_injured == 4]
+  -> debug_requirements
++ [Unreadable # requires: this is not a clause]
+  -> debug_requirements
++ [Missing stat # requires: guard.luck > 0]
+  -> debug_requirements
++ [No entity, no speaker # requires: mood > 1]
+  -> debug_requirements
++ [Two tags in one choice # requires: guard.mood > 10 # requires: guard.sanity > 10]
+  -> debug_requirements
++ [Back] -> debug_menu
+
+// Small engine functions the showcase skipped: has_stat true, floor_text, round_text, the ceiling and truncate
+// aliases of fmt, and an fmt mode that does not exist (the engine logs it and rounds).
+=== coverage_lab ===
+~ speak("guard")
+Has mood {has_stat("mood")}, has luck {has_stat("luck")}.
+Floor {floor_text(12.9)}, round {round_text(12.346, 2)}.
+Ceiling {fmt(12.1, 0, "ceiling")}, truncate {fmt(-12.9, 0, "truncate")}.
+Sideways {fmt(12.5, 0, "sideways")}.
++ [Back] -> debug_menu
+
+// roll() is bound by the harness without lookaheadSafe, because it rolls dice. Ink evaluates choice text ahead of
+// time, so this step fails. The engine throws StoryStepException with the line built before it.
+=== unsafe_lab ===
+~ speak("")
+This line is built before the failure.
++ [Take the roll of {roll(6)}] -> debug_menu

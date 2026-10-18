@@ -150,8 +150,12 @@ class InkCompilerService {
         fun prepare(source: InkSource, text: String): String {
             loaded += source.name
             val dir = source.name.substringBeforeLast('/', "")
+            val blocks = blockComments(text)
             return INCLUDE_LINE.replace(text) { match ->
-                val target = match.groupValues[2].trim()
+                // an INCLUDE inside a /* */ block is text, and a trailing // or /* comment is not part of the name
+                if (blocks.any { match.range.first in it }) return@replace match.value
+                val target = match.groupValues[2].substringBefore("//").substringBefore("/*").trim()
+                if (target.isEmpty()) return@replace match.value
                 if (target == BUILTIN_NAME) return@replace match.value
                 val full = normalizePath("$dir/$target")
                 if (full !in listed) source.sibling?.invoke(target)?.let { listed[full] = it }
@@ -187,6 +191,27 @@ class InkCompilerService {
     }
 
     private companion object {
+        // Character ranges of the block comments in the text. Line comments are skipped so a block opener in one is ignored.
+        fun blockComments(text: String): List<IntRange> {
+            val ranges = ArrayList<IntRange>()
+            var i = 0
+            while (i < text.length) {
+                if (text.startsWith("//", i)) {
+                    val end = text.indexOf("\n", i)
+                    if (end < 0) break
+                    i = end + 1
+                } else if (text.startsWith("/*", i)) {
+                    val close = text.indexOf("*/", i + 2)
+                    val end = if (close < 0) text.length else close + 2
+                    ranges += i until end
+                    i = end
+                } else {
+                    i++
+                }
+            }
+            return ranges
+        }
+
         const val BUILTIN_NAME = "hdgife.ink"
         const val BUILTIN_PATH = "hdgife/hdgife.ink"
         val INCLUDE_LINE = Regex("(?m)^([ \\t]*INCLUDE[ \\t]+)([^\\r\\n]+)")
