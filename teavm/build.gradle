@@ -1,0 +1,68 @@
+// Web test module: the same harness as lwjgl3 and android, compiled to JavaScript by gdx-teavm (not GWT, which cannot
+// run Kotlin). Not published. See the README "Web" section.
+import org.teavm.gradle.api.OptimizationLevel
+
+plugins {
+  id 'java'
+  id 'com.github.xpenatan.gdx-teavm' version "$gdxTeaVMVersion"
+}
+
+eclipse.project.name = appName + '-teavm'
+
+// TeaVM needs Java 17 or newer class files for its own tooling; this only affects this module.
+java.sourceCompatibility = 17
+java.targetCompatibility = 17
+
+dependencies {
+  implementation project(':harness')
+}
+
+gdxTeaVM {
+  assets.from(rootProject.files('assets'))
+  // the console loads its skin from the classpath, which the browser does not have, so it is shipped as an asset
+  classpathAssets('default_skin')
+  // the bundled ink libraries (INCLUDE hdgife.ink), read by runtime compiling
+  classpathAssets('hdgife')
+
+  // sjInGameConsole finds the console commands with libGDX's ClassReflection (getMethods on the CommandExecutor, then
+  // invoke), so the command class and the console package need reflection metadata. The libGDX defaults (scene2d,
+  // collections) come with reflectionDefaults.
+  reflection('com.github.halfdeadgames.hdgife.harness.DialogCommands', 'com.strongjoshua.console.**')
+
+  webDefaults {
+    mainClass.set('com.github.halfdeadgames.hdgife.teavm.TeaVMLauncher')
+    htmlTitle.set('hdgife harness')
+  }
+
+  // development build: readable output, no optimization, served by gdx_teavm_web_js_run (port 8080)
+  js {
+    optimization.set(OptimizationLevel.NONE)
+    obfuscated.set(false)
+  }
+
+  // release build, written to build/dist/js/release/webapp by gdx_teavm_web_js_release_build
+  js('release') {
+    optimization.set(OptimizationLevel.BALANCED)
+    obfuscated.set(true)
+    serverPort.set(8180)
+  }
+}
+
+// ./gradlew :teavm:build makes the release web app, ./gradlew :teavm:run serves the development build.
+build.dependsOn 'gdx_teavm_web_js_release_build'
+tasks.register('run') {
+  group = 'application'
+  description = 'Builds the harness for the browser and serves it at http://localhost:8080.'
+  dependsOn 'gdx_teavm_web_js_run'
+}
+
+// Precompiled ink, the same option as the android module. By default the browser compiles ink/main.ink at startup
+// (blade-ink-compiler runs under TeaVM). With -PprecompiledInk the story is compiled at build time by
+// :harness:compileInk and shipped as ink/main.ink.json, which the harness prefers and which starts faster.
+if (project.hasProperty('precompiledInk')) {
+  gdxTeaVM {
+    assets.from(files(project(':harness').layout.buildDirectory.dir('precompiled')) {
+      builtBy ':harness:compileInk'
+    })
+  }
+}

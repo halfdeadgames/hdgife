@@ -335,7 +335,7 @@ After a `StoryStepException` the ink story is in whatever state ink left it. The
 
 ### Threading
 
-`Story` is not thread-safe, and neither is `StoryManager`. Use a manager and its story from one thread at a time, and every callback runs on the thread that called in: the state provider, bound functions, `onEvent`, observers and `HdgifeLog` all run inside `next`, `choose`, `setVariable` or whichever call triggered them. Compiling is plain blocking and CPU work, so run `InkCompilerService` calls on any thread or coroutine context you like (the harness compiles on `Dispatchers.IO` and uses the manager on the render thread). The finished `HdgifeStory` is then handed over to the thread that uses it. `InkNativePatch` is applied once, synchronized.
+`Story` is not thread-safe, and neither is `StoryManager`. Use a manager and its story from one thread at a time, and every callback runs on the thread that called in: the state provider, bound functions, `onEvent`, observers and `HdgifeLog` all run inside `next`, `choose`, `setVariable` or whichever call triggered them. Compiling is plain blocking and CPU work, so run `InkCompilerService` calls on any thread or coroutine context you like (the harness compiles on a background thread and uses the manager on the render thread; in the browser build there are no threads, so it compiles on the render thread). The finished `HdgifeStory` is then handed over to the thread that uses it. `InkNativePatch` is applied once, synchronized.
 
 ## The ink library reference
 
@@ -693,6 +693,29 @@ In Android Studio, open the project, pick the `android` run configuration and st
 `installDebug` installs the app (`com.github.halfdeadgames.hdgife.harness`) and `run` starts it with adb. The layout stacks the panels in portrait and puts them side by side in landscape. The View button replaces F2 and the Console button replaces the backtick key; the console has a Submit button. When the app is paused it saves the story to `autosave.json` in the app's files and restores it on the next start (the lines are not part of a save, so only the choices show).
 
 By default the harness compiles `ink/main.ink` on the device at startup, which is what a game with mods would do. To ship the story precompiled instead, build with `-PprecompiledInk` (for example `./gradlew -PprecompiledInk :android:installDebug`). `:harness:compileInk` writes `ink/main.ink.json` and the harness loads it when no `extra/` files exist. The log line `Story ready in ... ms` says which path ran.
+
+### Web
+
+The `teavm` module runs the same harness in a browser. It uses [gdx-teavm](https://github.com/xpenatan/gdx-teavm), which compiles the JVM bytecode (so Kotlin works) to JavaScript. GWT is not an option, because it cannot compile Kotlin. The module is left out with `-PskipWeb`. JitPack skips both the web and android modules (`jitpack.yml` passes `-PskipAndroid -PskipWeb`) and builds only `:core`. It needs JDK 17 or newer and a browser with WebGL (only Chrome has been tried).
+
+```
+./gradlew :teavm:run
+./gradlew :teavm:build
+```
+
+`run` builds the readable development build and serves it at http://localhost:8080 (stop it with Ctrl+C). `build` makes the optimized, obfuscated release app in `teavm/build/dist/js/release/webapp`; serve that folder from any static web server, or run `./gradlew :teavm:gdx_teavm_web_js_release_run` (port 8180). Open the page over http, not from a `file:` URL. Add `-PprecompiledInk` to ship the story compiled at build time (`ink/main.ink.json`, as on Android) instead of compiling it in the page.
+
+What works: the whole harness, including the Blade Ink runtime, the split-package patch classes, number formatting, saving, the console commands and `reload`. Compiling ink in the page works too (about 0.5 s for `main.ink`).
+
+What differs or does not work:
+
+- There is no `extra/` folder, because the browser has no local files, so mods cannot be added.
+- There are no threads. The harness compiles on the render thread, and it uses plain threads instead of coroutines on the other platforms, because kotlinx.coroutines does not run under TeaVM. Keep `ktx-async` and `kotlinx-coroutines` out of code the web build reaches.
+- The console finds its commands by reflection. `teavm/build.gradle` lists the command class and the console package for gdx-teavm's reflection metadata. TeaVM's `Method.invoke` rejects a null argument array, so the web build uses `BrowserConsole`, which passes an empty array.
+- `teavm/src/main/java/com/strongjoshua/console/ConsoleContext.java` is a copy of that class from sjInGameConsole 1.0.1, rebuilt against libGDX 1.14 (the library calls `Label.getText()` as it was in 1.12 and TeaVM refuses to link the call). Delete it when the console is released for libGDX 1.14.
+- The ink libraries bundled in core and the console skin are shipped as classpath assets (`classpathAssets` in `teavm/build.gradle`), since the browser has no class loader resources.
+- Only the JavaScript target is set up. gdx-teavm can also build Wasm, which is untested here.
+- The first load downloads the assets listed in the generated `assets.txt`. The dev build's `app.js` is about 6 MB, the release build about 1.5 MB.
 
 ### UI test
 

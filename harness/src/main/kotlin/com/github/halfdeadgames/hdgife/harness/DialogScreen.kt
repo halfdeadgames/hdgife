@@ -1,5 +1,6 @@
 package com.github.halfdeadgames.hdgife.harness
 
+import com.badlogic.gdx.Application
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
 import com.badlogic.gdx.InputMultiplexer
@@ -21,14 +22,10 @@ import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.github.halfdeadgames.hdgife.story.StoryStepException
 import com.github.halfdeadgames.hdgife.story.VariableObservation
 import com.strongjoshua.console.GUIConsole
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import ktx.app.KtxInputAdapter
 import ktx.app.KtxScreen
 import ktx.app.Platform
 import ktx.app.clearScreen
-import ktx.async.KtxAsync
 import ktx.log.logger
 import ktx.scene2d.Scene2DSkin
 import ktx.scene2d.label
@@ -139,7 +136,12 @@ class DialogScreen(
         // the console needs fonts and drawables that uiskin.json lacks, so it gets its bundled skin
         // (its stage counts in pixels, so on a phone the font is scaled up instead)
         if (mobile) consoleSkin.getFont("default-font").data.setScale(uiScale)
-        console = GUIConsole(consoleSkin, false, Input.Keys.GRAVE)
+        // the browser build gets a console that avoids a TeaVM reflection limit, see BrowserConsole
+        console = if (Gdx.app.type == Application.ApplicationType.WebGL) {
+            BrowserConsole(consoleSkin, Input.Keys.GRAVE)
+        } else {
+            GUIConsole(consoleSkin, false, Input.Keys.GRAVE)
+        }
         // a phone has no Enter key you can count on, so the console gets a Submit button
         if (mobile) console.enableSubmitButton(true)
         console.setCommandExecutor(DialogCommands(this))
@@ -546,10 +548,9 @@ class DialogScreen(
     }
 
     override fun reload() {
-        KtxAsync.launch {
+        runInBackground({ compileHarnessStory(compiler) }) { outcome ->
             try {
-                val story = withContext(Dispatchers.IO) { compileHarnessStory(compiler) }
-                manager.replaceStory(story)
+                manager.replaceStory(outcome.getOrThrow())
                 syncPlayer()
                 restartView()
                 say("Reloaded")

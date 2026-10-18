@@ -8,6 +8,7 @@ import com.bladecoder.ink.runtime.HdgifeStory
 import com.bladecoder.ink.runtime.InkNativePatch
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.HdgifeLog
+import com.badlogic.gdx.Gdx
 import java.io.FileNotFoundException
 
 /**
@@ -150,9 +151,7 @@ public class InkCompilerService {
             val builtinPath = BUILTIN_PATHS[fullFilename]
             if (builtinPath != null) {
                 if (!loaded.add(fullFilename)) return ""
-                val stream = InkCompilerService::class.java.classLoader.getResourceAsStream(builtinPath)
-                    ?: throw FileNotFoundException("Bundled $builtinPath is missing")
-                return stream.use { String(it.readBytes(), Charsets.UTF_8) }
+                return readBundled(builtinPath) ?: throw FileNotFoundException("Bundled $builtinPath is missing")
             }
             val source = listed[fullFilename] ?: run {
                 failures += "Unlisted ink source: $fullFilename"
@@ -164,6 +163,19 @@ public class InkCompilerService {
     }
 
     private companion object {
+        /**
+         * The text of a bundled resource, or null when it is not there. The class loader serves it on the JVM and on
+         * Android. A platform with no class loader resources (the browser, through TeaVM) can ship the folder as a
+         * libGDX classpath asset instead, so that is the fallback.
+         */
+        fun readBundled(path: String): String? {
+            val stream = InkCompilerService::class.java.classLoader?.getResourceAsStream(path)
+            if (stream != null) return stream.use { String(it.readBytes(), Charsets.UTF_8) }
+            val files = Gdx.files ?: return null
+            val handle = files.classpath(path)
+            return if (handle.exists()) handle.readString("UTF-8") else null
+        }
+
         // Character ranges of the block comments in the text. Line comments are skipped so a block opener in one is ignored.
         fun blockComments(text: String): List<IntRange> {
             val ranges = ArrayList<IntRange>()

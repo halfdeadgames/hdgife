@@ -190,6 +190,8 @@ fun main(args: Array<String>) {
     var ui: Ui? = null
     game = TestGame(
         onReady = { screen ->
+            // the harness itself uses no coroutines (so it runs under TeaVM), the test script does
+            KtxAsync.initiate()
             KtxAsync.launch {
                 try {
                     // assign first so a crash still prints the screenshot summary
