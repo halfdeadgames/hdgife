@@ -3,7 +3,7 @@
 // The stat, number-format and event functions are EXTERNAL: StoryManager binds them to your
 // NarrativeStateProvider, number format settings and event channel. The ink bodies below are fallbacks that run
 // when nothing is bound (no StoryManager), so a story using this library still runs on its own:
-// stats read as 0, has_stat is false and emit does nothing.
+// stats read as 0, has_stat and has_stat_of are false and emit does nothing.
 //
 // stat and stat_of give the type the game stores: an int stat is an ink int, a float stat a float, and a
 // string, bool or enum stat a string or bool. Missing stats give 0.0. Ink integer division truncates, so use
@@ -23,6 +23,7 @@ VAR hdgife_event_seq = 0
 EXTERNAL stat(hdg_name)
 EXTERNAL stat_of(hdg_entity, hdg_name)
 EXTERNAL has_stat(hdg_name)
+EXTERNAL has_stat_of(hdg_entity, hdg_name)
 EXTERNAL stat_text(hdg_name)
 EXTERNAL stat_text_of(hdg_entity, hdg_name)
 EXTERNAL fmt(hdg_x, hdg_decimals, hdg_mode)
@@ -144,6 +145,10 @@ EXTERNAL hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c)
 
 // True if the current speaker has this stat.
 === function has_stat(hdg_name) ===
+~ return false
+
+// True if the entity has this stat.
+=== function has_stat_of(hdg_entity, hdg_name) ===
 ~ return false
 
 // True with a pct percent chance (0 or less never, 100 or more always).

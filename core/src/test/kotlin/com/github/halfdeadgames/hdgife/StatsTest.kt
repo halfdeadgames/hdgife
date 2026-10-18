@@ -140,6 +140,32 @@ class StatsTest {
     }
 
     @Test
+    fun `has_stat_of reads any entity and is false for a missing stat or entity`() {
+        val stats = MapStats().also { it["guard", "mood"] = 60; it["ilse", "luck"] = 0 }
+        val m = managerOf(
+            "{has_stat_of(\"guard\", \"mood\")} {has_stat_of(\"guard\", \"luck\")} {has_stat_of(\"ilse\", \"luck\")} {has_stat_of(\"nobody\", \"mood\")}",
+            stats,
+        )
+        m.speaker = "ilse"
+        assertEquals("true false true false", m.next().texts().single())
+    }
+
+    @Test
+    fun `has_stat_of is false without a provider and in the ink fallback`() {
+        assertEquals("false", managerOf("{has_stat_of(\"p\", \"s\")}").next().texts().single())
+        assertEquals("false", compileLib("{has_stat_of(\"p\", \"s\")}").Continue().trim())
+    }
+
+    @Test
+    fun `has_stat_of is lookahead safe so glue still joins and it works in choice text`() {
+        val stats = MapStats().also { it["p", "s"] = 1 }
+        val m = managerOf("Has {has_stat_of(\"p\", \"s\")} <>\n now\n* [Own {has_stat_of(\"p\", \"s\")}] -> END", stats)
+        val step = m.next()
+        assertEquals(listOf("Has true now"), step.texts())
+        assertEquals("Own true", step.choices.single().text)
+    }
+
+    @Test
     fun `stats are read live each time`() {
         val stats = MapStats().also { it["p", "hp"] = 1 }
         val m = managerOf("{stat_of(\"p\", \"hp\")}\n* [Go] {stat_of(\"p\", \"hp\")} -> END", stats)

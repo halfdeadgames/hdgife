@@ -75,7 +75,6 @@ class DialogScreen(
     private val watched = LinkedHashMap<String, String>()
     private var rng = Random(1)
     private var fixedRoll: Int? = null
-    private var stateChanged = false
 
     /** Everything written to the console, in order, so the UI test can read it. Includes the engine's own log lines. */
     val consoleLines = ArrayList<String>()
@@ -132,7 +131,7 @@ class DialogScreen(
         manager.formatOverride = ::harnessFormatOverride
         // The engine reports events and never acts on them. This is the harness acting on them.
         manager.onEvent = { event ->
-            say("event ${event.name}(${event.args.joinToString { show(it) }}) before line ${event.lineIndex}")
+            say("event #${event.id} ${event.name}(${event.args.joinToString { show(it) }}) before line ${event.lineIndex}")
             val first = event.args.firstOrNull()?.toString()
             when (event.name) {
                 "give_item" -> if (first != null) inventory.merge(first, 1, Int::plus)
@@ -141,7 +140,6 @@ class DialogScreen(
                     if (first != null && amount != null) {
                         val have = manager.stateProvider?.getStat("player", first) as? Int ?: 0
                         applyStat(manager, provider, "player", first, have - amount)
-                        stateChanged = true
                     }
                 }
             }
@@ -216,18 +214,20 @@ class DialogScreen(
 
     /** Continues the story and shows what comes out. */
     private fun advance() {
-        val step = try {
-            nextStep()
-        } catch (e: StoryStepException) {
-            showFailure(e)
-            return
-        } catch (e: Exception) {
-            log.error(e) { "Story error" }
-            statusLabel.setText("Story error: ${e.message}")
-            say("Story error: ${e.message}")
-            return
-        }
-        showStep(step.first, step.second)
+        showStep(readNext() ?: return)
+    }
+
+    /** [StoryManager.next], with a failure shown on screen (a StoryStepException with its partial step) and null returned. */
+    private fun readNext(): DialogStep? = try {
+        manager.next()
+    } catch (e: StoryStepException) {
+        showFailure(e)
+        null
+    } catch (e: Exception) {
+        log.error(e) { "Story error" }
+        statusLabel.setText("Story error: ${e.message}")
+        say("Story error: ${e.message}")
+        null
     }
 
     /** The engine keeps the lines it built before a failure. Show that partial step with the error in the raw panel. */
@@ -241,18 +241,6 @@ class DialogScreen(
         statusLabel.setText("Story error: " + why.take(110).replace('\n', ' ') + if (why.length > 110) "..." else "")
         restartButton.isVisible = true
         say("Story error: ${e.message}")
-    }
-
-    /**
-     * Gets the next step. If the game acted on an event (took coin), the choices it was given were checked before
-     * that, so ask the engine for them again. It returns the pending choices without producing lines.
-     */
-    private fun nextStep(): Pair<DialogStep, String?> {
-        stateChanged = false
-        val step = manager.next()
-        if (!stateChanged || step.choices.isEmpty()) return step to null
-        val again = manager.next()
-        return step.copy(choices = again.choices) to "choices read again after the game acted on an event"
     }
 
     private fun showStep(step: DialogStep, note: String? = null, number: Int = ++stepNumber) {
@@ -383,14 +371,9 @@ class DialogScreen(
             say("No choice $index")
             return
         }
-        stateChanged = false
         try {
             val step = manager.choose(index)
-            val refreshed = if (stateChanged && step.choices.isNotEmpty()) manager.next() else null
-            showStep(
-                refreshed?.let { step.copy(choices = it.choices) } ?: step,
-                refreshed?.let { "choices read again after the game acted on an event" },
-            )
+            showStep(step)
             if (!step.ended) statusLabel.setText("> " + choice.text)
         } catch (e: StoryStepException) {
             showFailure(e)
@@ -438,10 +421,16 @@ class DialogScreen(
         }
         // The engine brings back the story, the speaker and the open styles. The lines are not part of a save, so the
         // game shows the ones it kept, with the choices and open styles read again from the engine.
-        val again = manager.next()
+        val again = readNext() ?: return
         val step = saved.step.copy(choices = again.choices, ended = again.ended, openStyles = again.openStyles, events = emptyList())
         showStep(step, "loaded save: lines kept by the harness, choices and openStyles read again from the engine", saved.number)
         say("Loaded (speaker is now ${manager.speaker ?: "none"})")
+    }
+
+    override fun validate() {
+        val report = manager.validateStory()
+        say("Validation: ${report.errors.size} errors, ${report.warnings.size} warnings, ${report.infos.size} infos")
+        for (issue in report.issues) say("  ${issue.severity.name.lowercase()} ${issue.kind.name.lowercase()}: ${issue.message}")
     }
 
     override fun divert(path: String) {

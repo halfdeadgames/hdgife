@@ -76,7 +76,7 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
             "speaker   : ilse", "tags.map  : {speaker=ilse, shout=}", "speaker   : null",
             "styles: b + em", "styles: color=ff8800 (hex ff8800ff)", "styles: color=#9ecbff (hex 9ecbffff)", "styles: color=orange",
             "pause=0.6 @66",
-            "STEP TAGS", "door_opened()  lineIndex=3",
+            "STEP TAGS", "door_opened()  lineIndex=3  id=1",
             "OPEN STYLES (0)", "CHOICES (6)",
             // the requirements of the "Pay the toll" choice: an Int against an Int, a String against an enum name
             "target=3 (Int) actual=12 (Int)", "target=HOSTILE (String) actual=WARY (String)", "met=true mismatch=false valid=true",
@@ -182,7 +182,7 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expectRaw("duel(varga (String), 21 (Int), true (Boolean))")
     }
 
-    ui.scenario(report, "ilse: coin spent by an event, choices read again, the side door, the ending, restart") {
+    ui.scenario(report, "ilse: coin spent by an event is seen by the choices, the side door, the ending, restart") {
         for (c in listOf("npc ilse sanity 100", "divert ilse_talk")) command(c)
         val first = log[0]
         expect(first.startsWith("ilse: Ilse pours something amber into a chipped cup. She winces and shifts her bandaged arm. \"Sit, sit.\" The fire ")) { "Opening: $first" }
@@ -212,7 +212,10 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         val buy = button("Buy a flask")
         expect(buy.isDisabled) { "With 2 coin left the choices must be read again and Buy greyed" }
         expect("(needs player.coin >= 3 (have 2))" in buttonText(buy)) { "Needs note: ${buttonText(buy)}" }
-        expectRaw("note      : choices read again after the game acted on an event", "spend(coin (String), 3 (Int))", "give_item(rum (String))", "target=3 (Int) actual=2 (Int)")
+        // the engine delivered the spend event before it read the choices, so no second next() was needed
+        expectRaw("spend(coin (String), 3 (Int))  lineIndex=", "id=2", "give_item(rum (String))", "id=3", "target=3 (Int) actual=2 (Int)")
+        expect("note      :" !in raw) { "The harness no longer reads the choices again: $raw" }
+        expect(screen.consoleLines.any { it.startsWith("event #2 spend(coin, 3)") } && screen.consoleLines.any { it.startsWith("event #3 give_item(rum)") }) { "Event ids in the console: ${screen.consoleLines.takeLast(8)}" }
         shot("08-ilse-bought")
 
         // the side door: a Boolean argument, an observed variable, then a choice that ink shows because of it
@@ -299,6 +302,7 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
             "Plain ink on her trust: FLOOR 60.0, CEILING 61.0, INT 60.",
             "Game formats: Ilse 60.3, Varga 25.5, Tobin 10, your charm 5, your faction drifter, injured true.",
             "Average of all three moods: 46.67.",
+            "Stat check: Wren has charm, Ilse has no luck.",
         )
         expectRaw("text      : \"A debt of -2.5, no decimals: floor -3, ceil -2, round -3, trunc -2.\"", "STEP 2", "text      : \"The common room smells of wet wool and lamp oil.\"")
         shot("13-ledger")
@@ -530,6 +534,15 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         shot("23-unsafe-error")
         click(screen.restartButton)
         expect(log[0].startsWith("The storm hits")) { "Restart after a failure: $log" }
+    }
+
+    ui.scenario(report, "validate: the console report on the showcase story") {
+        val before = screen.consoleLines.size
+        command("validate")
+        val out = screen.consoleLines.drop(before)
+        expect(out.firstOrNull()?.startsWith("Validation: 0 errors") == true) { "validate: $out" }
+        // every EXTERNAL of the harness is bound, so nothing is reported as missing
+        expect(out.none { it.contains("unbound_external") }) { "validate: $out" }
     }
 
     ui.scenario(report, "console: vars, var and reload") {

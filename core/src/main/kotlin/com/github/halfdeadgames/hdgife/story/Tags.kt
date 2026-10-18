@@ -1,5 +1,7 @@
 package com.github.halfdeadgames.hdgife.story
 
+import java.util.Locale
+
 /**
  * Ink tags, raw and parsed. [raw] is every tag as ink gave it, in order, trimmed.
  *
@@ -18,6 +20,40 @@ data class Tags(val raw: List<String>, val map: Map<String, String>) {
 
     val isEmpty: Boolean get() = raw.isEmpty()
 
+    /** The value for [key] as written (a bare tag gives an empty string), or null if there is no such tag. Same as [get]. */
+    fun string(key: String): String? = map[key]
+
+    fun string(key: String, default: String): String = map[key] ?: default
+
+    /**
+     * The value for [key] as an `Int`: optional sign and ASCII digits, nothing else. Null when the tag is missing,
+     * empty or not a whole number that fits. Not affected by the default locale.
+     */
+    fun int(key: String): Int? = map[key]?.takeIf { INT.matches(it) }?.toIntOrNull()
+
+    fun int(key: String, default: Int): Int = int(key) ?: default
+
+    /**
+     * The value for [key] as a `Float`: optional sign, ASCII digits with `.` as the decimal point, optional exponent
+     * (`4`, `-0.5`, `.25`, `1e3`). Null when missing or anything else, including `1,5`, `NaN`, `Infinity`, `1f` and
+     * a number too large for a `Float`. Not affected by the default locale.
+     */
+    fun float(key: String): Float? = map[key]?.takeIf { FLOAT.matches(it) }?.toFloatOrNull()?.takeIf { it.isFinite() }
+
+    fun float(key: String, default: Float): Float = float(key) ?: default
+
+    /**
+     * The value for [key] as a `Boolean`: `true` or `false` in any case, or `1` / `0`. Null when missing or anything
+     * else. A bare tag (`# shout`) has an empty value and gives null here, so ask [has] for flags.
+     */
+    fun bool(key: String): Boolean? = when (map[key]?.lowercase(Locale.ROOT)) {
+        "true", "1" -> true
+        "false", "0" -> false
+        else -> null
+    }
+
+    fun bool(key: String, default: Boolean): Boolean = bool(key) ?: default
+
     /** All values given for [key] in order, from [raw]. */
     fun all(key: String): List<String> = raw.mapNotNull { tag ->
         val (k, v) = splitTag(tag)
@@ -25,6 +61,9 @@ data class Tags(val raw: List<String>, val map: Map<String, String>) {
     }
 
     companion object {
+        private val INT = Regex("[+-]?[0-9]+")
+        private val FLOAT = Regex("""[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?""")
+
         val EMPTY = Tags(emptyList(), emptyMap())
 
         /** Parses [raw] ink tags. Blank tags are dropped. */

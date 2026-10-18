@@ -228,7 +228,7 @@ fun formatRaw(step: DialogStep, number: Int, note: String? = null): String = bui
     for (event in step.events) {
         append("  ").append(esc(event.name)).append('(')
         event.args.joinTo(this) { typed(it) }
-        append(")  lineIndex=").append(event.lineIndex).append('\n')
+        append(")  lineIndex=").append(event.lineIndex).append("  id=").append(event.id).append('\n')
     }
     append('\n')
     title("OPEN STYLES (${step.openStyles.size})")

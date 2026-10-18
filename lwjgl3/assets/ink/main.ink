@@ -178,6 +178,7 @@ A debt of -2.5, no decimals: floor {fmt(debt, 0, "floor")}, ceil {fmt(debt, 0, "
 Plain ink on her trust: FLOOR {FLOOR(t)}, CEILING {CEILING(t)}, INT {INT(t)}.
 Game formats: Ilse {stat_text_of("ilse", "trust")}, Varga {stat_text_of("varga", "trust")}, Tobin {stat_text_of("tobin", "trust")}, your charm {stat_text_of("player", "charm")}, your faction {stat_text_of("player", "faction")}, injured {stat_text_of("ilse", "is_injured")}.
 Average of all three moods: {fmt(avg3(stat_of("varga", "mood"), stat_of("ilse", "mood"), stat_of("tobin", "mood")), 2, "round")}.
+Stat check: Wren {has_stat_of("player", "charm"): has charm|has no charm}, Ilse {has_stat_of("ilse", "luck"): has luck|has no luck}.
 -> lodge
 
 // A glue line after an emit: the event fires once, the lines join.

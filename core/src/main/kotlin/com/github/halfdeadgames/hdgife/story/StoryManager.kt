@@ -27,9 +27,9 @@ fun cleanLine(raw: String): String =
  *
  * ### Stats
  * With `INCLUDE hdgife.ink` in the story, ink can call `stat(name)` (current speaker), `stat_of(entity, name)`
- * and `has_stat(name)`. They read [stateProvider] live. A stat can be any Kotlin value, see
+ * `has_stat(name)` and `has_stat_of(entity, name)`. They read [stateProvider] live. A stat can be any Kotlin value, see
  * [NarrativeStateProvider] for the mapping to ink types. Without a provider (or with a missing stat) `stat`
- * gives 0 and `has_stat` false. These functions are lookahead safe, see "Glue and lookahead" below.
+ * gives 0 and `has_stat` / `has_stat_of` false. These functions are lookahead safe, see "Glue and lookahead" below.
  *
  * ### Speakers
  * [speaker] is the persistent speaker. Ink changes it with `speak("guard")`, a line can name a speaker for itself
@@ -55,10 +55,15 @@ fun cleanLine(raw: String): String =
  * ### Game functions and events
  * [bindFunction] binds a Kotlin lambda to an ink `EXTERNAL` function. `~ emit("name", arg)` (hdgife.ink) is an event
  * channel that needs no `EXTERNAL` of your own: the calls come back on [DialogStep.events] and through [onEvent].
+ * [onEvent] runs for each event before the step's choices are read, so what the game changes in it (spending a coin)
+ * is seen by the requirements of that step's choices. Each event has a stable [StoryEvent.id].
  * Events are lookahead safe: each one is reported exactly once and in order, also across glue (see "Glue and lookahead").
  *
  * ### Variables
  * [variable], [setVariable], [observe], [variableNames].
+ *
+ * ### Checking a story
+ * [validateStory] lists what is wrong or risky in the story and its bindings, without throwing.
  *
  * ### Glue and lookahead
  * Ink runs ahead past a line break to see if glue (`<>`) joins the next line. A function that is not lookahead
@@ -170,8 +175,12 @@ class StoryManager(
     var valueConverter: ((value: Any) -> Any?)? = null
 
     /**
-     * Called for each `emit` event, in order, after [next] has built the step. The same events are on
-     * [DialogStep.events]. Default null. The engine does nothing with events itself.
+     * Called for each `emit` event, in order, while [next] builds a step: after the story has run to the next choice
+     * or the end, and before the choices are read. A requirement on a choice therefore sees what the game changed
+     * here. (A condition that ink itself evaluates, like `{coin >= 3} [Buy]`, is decided inside the story before the
+     * event arrives, so keep such state in ink variables or use `# requires:`.) The same events are on
+     * [DialogStep.events]. Default null. The engine does nothing with events itself. An exception thrown here comes
+     * out of [next] as a [StoryStepException] whose step holds the lines and events so far.
      */
     var onEvent: ((StoryEvent) -> Unit)? = null
 
@@ -225,6 +234,7 @@ class StoryManager(
         bindLibrary(target, "stat_text_of") { args -> statText(args.getOrNull(0)?.toString(), args.getOrNull(1)) }
         bindLibrary(target, "fmt") { args -> fmtValue(args) }
         bindLibrary(target, "has_stat") { args -> statInk(speaker, args.getOrNull(0)) != null }
+        bindLibrary(target, "has_stat_of") { args -> statInk(args.getOrNull(0)?.toString(), args.getOrNull(1)) != null }
         // Events may run during lookahead and run again after it is undone. next() keeps each one once (see record).
         bindLibrary(target, "hdgife_emit0") { args -> record(args); null }
         bindLibrary(target, "hdgife_emit1") { args -> record(args); null }
@@ -316,7 +326,7 @@ class StoryManager(
      */
     private fun record(args: Array<out Any?>) {
         val seq = args.getOrNull(0) as? Int ?: return
-        val event = StoryEvent(args.getOrNull(1)?.toString() ?: "", args.drop(2), eventLine)
+        val event = StoryEvent(args.getOrNull(1)?.toString() ?: "", args.drop(2), eventLine, seq)
         unconfirmedEvents += CandidateEvent(seq, event, (story as? HdgifeStory)?.outputText().orEmpty())
     }
 
@@ -602,6 +612,8 @@ class StoryManager(
         val stepTags = ArrayList<String>()
         var carried: ArrayList<String>? = null
         val choices = ArrayList<DialogChoice>()
+        var events: List<StoryEvent>? = null
+        var notified = false
         try {
             while (s.canContinue()) {
                 eventLine = lines.size
@@ -626,6 +638,11 @@ class StoryManager(
             confirmEvents("")
             placeLateEvents(false)
             eventLine = lines.size
+            // The game hears every event first, so the requirements below see the state it changed.
+            val confirmed = takeEvents()
+            events = confirmed
+            notified = true
+            notifyEvents(confirmed)
             val rawChoices = s.currentChoices
             for (i in rawChoices.indices) {
                 val c = rawChoices[i]
@@ -642,17 +659,14 @@ class StoryManager(
             unconfirmedEvents.clear()
             placeLateEvents(false)
             eventLine = lines.size
-            val events = takeEvents()
-            val partial = DialogStep(lines, Tags.parse(stepTags), emptyList(), false, events, openStyles)
-            notifyEvents(events)
+            val kept = events ?: takeEvents()
+            val partial = DialogStep(lines, Tags.parse(stepTags), emptyList(), false, kept, openStyles)
+            if (!notified) notifyEvents(kept)
             throw StoryStepException("The story failed while continuing: ${e.message}", e, partial)
         }
         val ended = choices.isEmpty()
         if (ended) closeStyles("the story ended")
-        val events = takeEvents()
-        val step = DialogStep(lines, Tags.parse(stepTags), choices, ended, events, openStyles)
-        notifyEvents(events)
-        return step
+        return DialogStep(lines, Tags.parse(stepTags), choices, ended, events.orEmpty(), openStyles)
     }
 
     private fun takeEvents(): List<StoryEvent> {
@@ -746,6 +760,25 @@ class StoryManager(
     }
 
     // ---- variables ---------------------------------------------------------------------------------------------
+
+    /**
+     * How many `emit` calls the story has made so far: the [StoryEvent.id] of the latest event, 0 before the first.
+     * Part of the ink state, so [loadState] sets it back. Save it next to your own handled-events mark if you dedupe by id.
+     */
+    val eventCount: Int get() = variable(EVENT_SEQ_VARIABLE) as? Int ?: 0
+
+    /**
+     * Checks the story and this manager's bindings and returns what it found, without throwing (see [StoryReport]).
+     * Run it after binding your functions and observers, for example in a debug build or a test. The unbound
+     * `EXTERNAL`s it reports are only those the story calls. The report also covers [observe]d variable names and
+     * the `requires` tags of [requirementsTagKey].
+     */
+    fun validateStory(): StoryReport = validateStory(
+        story,
+        boundFunctions = attached.keys + userFunctions.keys,
+        observedVariables = observations.map { it.name },
+        requirementsTagKey = requirementsTagKey,
+    )
 
     /**
      * Names of all global variables declared in the story (`VAR` and `CONST` are not distinguished), sorted.
@@ -860,6 +893,12 @@ class StoryManager(
         // A name is a plain word (letters, digits, _ and -) or quoted ('...' or "..."), so it can hold spaces, dots and commas.
         private const val NAME = """\x22[^\x22]+\x22|'[^']+'|[\w-]+"""
         private val REQUIREMENT = Regex("""(?:($NAME)\.)?($NAME)\s*(>=|<=|==|!=|>|<)\s*(.+)""")
+
+        /** True when [clause] (one comma-separated part of a requirement tag) has the shape `[entity.]stat op value`. */
+        internal fun isReadableRequirement(clause: String): Boolean {
+            val match = REQUIREMENT.matchEntire(clause.trim()) ?: return false
+            return Comparison.parse(match.groupValues[3]) != null && match.groupValues[4].trim().let(::unquote).isNotEmpty()
+        }
 
         private fun unquote(text: String): String =
             if (text.length >= 2 && (text.first() == '"' || text.first() == '\'') && text.last() == text.first()) text.substring(1, text.length - 1) else text

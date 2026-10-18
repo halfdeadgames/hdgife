@@ -58,6 +58,7 @@ interface DialogControl {
     fun resetStats()
     fun save()
     fun load()
+    fun validate()
 }
 
 /** Console commands. `help` comes from the base class. Args arrive as strings and are parsed here. */
@@ -205,6 +206,9 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
 
     /** Restores the last `save`. */
     fun load() = control.load()
+
+    /** Checks the story and its bindings and lists what is wrong or risky. */
+    fun validate() = control.validate()
 
     fun reload() = control.reload()
 
