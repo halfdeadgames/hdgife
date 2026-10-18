@@ -30,7 +30,23 @@ fun compileHarnessStory(compiler: InkCompilerService): Story {
 private fun inkFiles(dir: FileHandle): List<FileHandle> =
     dir.list().flatMap { if (it.isDirectory) inkFiles(it) else listOfNotNull(it.takeIf { f -> f.extension() == "ink" }) }
 
-class TestGame : KtxGame<KtxScreen>() {
+/**
+ * The harness. [onReady] is the script mode hook: it is called on the render thread once the story is compiled
+ * and the dialog screen is showing. The UI test uses it to drive the screen; a normal run leaves it null.
+ * [onFailure] gets the error when the story fails to compile or the screen fails to start, so a test can fail fast.
+ */
+class TestGame(
+    private val onReady: ((DialogScreen) -> Unit)? = null,
+    private val onFailure: ((Throwable) -> Unit)? = null,
+) : KtxGame<KtxScreen>() {
+    /** Called after each frame is drawn, before the buffers swap. The only place a screenshot sees the frame. */
+    var afterRender: (() -> Unit)? = null
+
+    override fun render() {
+        super.render()
+        afterRender?.invoke()
+    }
+
     override fun create() {
         KtxAsync.initiate()
         val compiler = InkCompilerService().apply { log = HdgifeLog { logger.info { it } } }
@@ -54,10 +70,13 @@ class TestGame : KtxGame<KtxScreen>() {
                     speaker = "guard"
                     log = HdgifeLog { logger.info { it } }
                 }
-                addScreen(DialogScreen(manager, provider, compiler))
+                val screen = DialogScreen(manager, provider, compiler)
+                addScreen(screen)
                 setScreen<DialogScreen>()
+                onReady?.invoke(screen)
             } catch (e: Exception) {
                 logger.error(e) { "Ink compile failed" }
+                onFailure?.invoke(e)
             }
         }
     }

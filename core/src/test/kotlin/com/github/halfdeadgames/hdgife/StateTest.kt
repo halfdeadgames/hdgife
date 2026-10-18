@@ -1,5 +1,7 @@
 package com.github.halfdeadgames.hdgife
 
+import com.bladecoder.ink.runtime.SimpleJson
+import com.github.halfdeadgames.hdgife.story.Style
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -178,5 +180,97 @@ class StateTest {
     fun `library parameter names do not clash with story variables`() {
         val m = managerOf("VAR hdg = 1\n{clamp(15, 0, 10)} {avg2(2, 4)} {fmt(2.5, 0, \"floor\")}")
         assertEquals(listOf("10 3.0 2"), m.next().texts())
+    }
+
+    // ---- saved styles ----
+
+    private val styledInk = "He said <color=red>stop\n* [Wait] and <b>go</b> now</color> then.\n-> END"
+
+    @Test
+    fun `a style open at save time continues after load`() {
+        val m = managerOf(styledInk)
+        val first = m.next()
+        assertEquals(listOf(Style("color", "red")), first.openStyles)
+        val saved = m.saveState()
+        val expected = m.choose(0)
+
+        val other = managerOf(styledInk)
+        other.loadState(saved)
+        val again = other.choose(0)
+        assertEquals(expected.lines, again.lines)
+        assertEquals(Style("color", "red"), again.lines.first().spans.first().styles.single())
+    }
+
+    @Test
+    fun `saving and loading in the same manager restores open styles`() {
+        val m = managerOf(styledInk)
+        m.next()
+        val saved = m.saveState()
+        val expected = m.choose(0)
+        m.loadState(saved)
+        assertEquals(expected, m.choose(0))
+    }
+
+    @Test
+    fun `style values and params survive a save`() {
+        val ink = "<shake amp=2 speed=\"0.5 fast\">a\n<color=ff0000>b\n* [Go] c -> END"
+        val m = managerOf(ink)
+        val open = m.next().openStyles
+        assertEquals(2, open.size)
+        val other = managerOf(ink)
+        other.loadState(m.saveState())
+        assertEquals(open, other.choose(0).lines.single().spans.single().styles)
+    }
+
+    @Test
+    fun `load of an older save without styles closes open ones`() {
+        val m = managerOf(styledInk)
+        m.next()
+        m.loadState(m.story.state.toJson())
+        val line = m.choose(0).lines.single()
+        assertEquals("and go now then.", line.text)
+        assertTrue(line.spans.none { span -> span.styles.any { it.name == "color" } })
+    }
+
+    @Test
+    fun `the save is a versioned envelope around the ink state`() {
+        val m = managerOf(styledInk)
+        m.next()
+        val parsed = SimpleJson.textToDictionary(m.saveState())
+        assertEquals(1, parsed["v"])
+        assertTrue(parsed["ink"] is String)
+        assertEquals(1, (parsed["styles"] as List<*>).size)
+    }
+
+    @Test
+    fun `an unsupported save version is refused and nothing changes`() {
+        val m = managerOf(styledInk)
+        m.next()
+        val saved = m.saveState().replace("\"v\":1", "\"v\":2")
+        assertFailsWith<IllegalArgumentException> { m.loadState(saved) }
+        val line = m.choose(0).lines.single()
+        assertEquals("and go now then.", line.text)
+        assertEquals(Style("color", "red"), line.spans.first().styles.single())
+    }
+
+    @Test
+    fun `a plain ink state json still loads`() {
+        val m = managerOf("Hello\n* [Go] Gone -> END", lib = false)
+        m.next()
+        val plain = m.story.state.toJson()
+        m.choose(0)
+        m.loadState(plain)
+        assertEquals(listOf("Gone"), m.choose(0).texts())
+    }
+
+    @Test
+    fun `the fallback speaker is saved without the library`() {
+        val m = managerOf("Hi\n* [Go] Bye -> END", lib = false)
+        m.speaker = "guard"
+        m.next()
+        val saved = m.saveState()
+        m.speaker = "other"
+        m.loadState(saved)
+        assertEquals("guard", m.speaker)
     }
 }

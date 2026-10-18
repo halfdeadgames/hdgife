@@ -3,6 +3,7 @@ package com.github.halfdeadgames.hdgife.story
 import com.bladecoder.ink.runtime.HdgifeStory
 import com.bladecoder.ink.runtime.InkList
 import com.bladecoder.ink.runtime.InkNativePatch
+import com.bladecoder.ink.runtime.SimpleJson
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.HdgifeLog
 import com.github.halfdeadgames.hdgife.state.NarrativeStateProvider
@@ -54,6 +55,7 @@ fun cleanLine(raw: String): String =
  * ### Game functions and events
  * [bindFunction] binds a Kotlin lambda to an ink `EXTERNAL` function. `~ emit("name", arg)` (hdgife.ink) is an event
  * channel that needs no `EXTERNAL` of your own: the calls come back on [DialogStep.events] and through [onEvent].
+ * Events are lookahead safe: each one is reported exactly once and in order, also across glue (see "Glue and lookahead").
  *
  * ### Variables
  * [variable], [setVariable], [observe], [variableNames].
@@ -64,11 +66,16 @@ fun cleanLine(raw: String): String =
  * fail inside choice text and `"{...}"` strings. [HdgifeStory] fixes it. Stories made by `InkCompilerService` are
  * [HdgifeStory]s. If you pass a plain [Story] (built another way), the stat functions are bound as not lookahead
  * safe instead, which works everywhere except that they end glue lookahead. [lookaheadSafe] tells which one you got.
+ * Events are the exception: they may run in lookahead either way. Ink counts them in `hdgife_event_seq`, which ink
+ * undoes together with the lookahead, and [next] only keeps events that the count still includes.
+ * A story built with an old hdgife.ink (declares `hdgife_speaker` but has no `hdgife_event_seq`) is refused with an [IllegalStateException]
+ * (and a [log] message), because its events could never be kept.
  *
  * ### Saving and resetting
- * [saveState] and [loadState] cover everything ink holds, including [speaker] and the random seed, in one string.
- * That needs `INCLUDE hdgife.ink`, which keeps the speaker in an ink variable. Your own stat values live in your
- * game, so save those yourself. Styles open at save time are not saved, they are closed on [loadState]. [reset]
+ * [saveState] and [loadState] cover everything ink holds, including [speaker] and the random seed, plus the open
+ * styles, in one opaque string. Ink state needs `INCLUDE hdgife.ink`, which keeps the speaker in an ink variable.
+ * Your own stat values live in your game, so save those yourself. [loadState] also reads a plain ink state JSON
+ * (styles are then closed). [reset]
  * restarts the story. To run different sources, compile a new story and make a new manager (or assign [story]).
  *
  * ### Defaults
@@ -91,6 +98,7 @@ class StoryManager(
     /**
      * The wrapped story. Assigning a new one (after a reload, say) binds the stat functions, your [bindFunction]s
      * and your [observe]rs to it, and resets what the manager holds (open styles, pending events, [speaker] is kept).
+     * Throws [IllegalStateException] if the story was built with an old hdgife.ink (it declares `hdgife_speaker` but has no `hdgife_event_seq`).
      */
     var story: Story = story
         set(value) {
@@ -101,6 +109,7 @@ class StoryManager(
             bind(value)
             lastSeed = null
             pendingEvents.clear()
+            unconfirmedEvents.clear()
             speaker = keep
             reattachObservations()
         }
@@ -159,9 +168,15 @@ class StoryManager(
     private var lastSeed: Int? = null
     private var openStyles: List<Style> = emptyList()
     private var eventLine = 0
-    private val pendingEvents = ArrayList<StoryEvent>()
+    private val pendingEvents = ArrayList<PendingEvent>()
+    private val unconfirmedEvents = ArrayList<CandidateEvent>()
     private val userFunctions = LinkedHashMap<String, UserFunction>()
     private val observations = ArrayList<VariableObservation>()
+
+    /** An event kept by [confirmEvents]. [late] means it happened after the line just added (see [placeLateEvents]). */
+    private class PendingEvent(val event: StoryEvent, val late: Boolean)
+
+    private class CandidateEvent(val seq: Int, val event: StoryEvent, val textAtEmit: String)
 
     private class UserFunction(val lookaheadSafe: Boolean, val block: (FunctionArgs) -> Any?)
 
@@ -196,12 +211,25 @@ class StoryManager(
         bindOnce(target, "stat_text_of", true) { args -> statText(args.getOrNull(0)?.toString(), args.getOrNull(1)) }
         bindOnce(target, "fmt", true) { args -> fmtValue(args) }
         bindOnce(target, "has_stat", true) { args -> statInk(speaker, args.getOrNull(0)) != null }
-        // Events must not be safe: they have a side effect, so ink must not run them during lookahead.
-        bindOnce(target, "emit0", false) { args -> record(args); null }
-        bindOnce(target, "emit", false) { args -> record(args); null }
-        bindOnce(target, "emit2", false) { args -> record(args); null }
-        bindOnce(target, "emit3", false) { args -> record(args); null }
+        // Events may run during lookahead and run again after it is undone. next() keeps each one once (see record).
+        bindOnce(target, "hdgife_emit0", true) { args -> record(args); null }
+        bindOnce(target, "hdgife_emit1", true) { args -> record(args); null }
+        bindOnce(target, "hdgife_emit2", true) { args -> record(args); null }
+        bindOnce(target, "hdgife_emit3", true) { args -> record(args); null }
         for ((name, def) in userFunctions) bindUser(target, name, def)
+        checkEventSupport(target)
+    }
+
+    /** Stories compiled with an old hdgife.ink declare `hdgife_speaker` but have no `hdgife_event_seq`: every event would be lost. */
+    private fun checkEventSupport(target: Story) {
+        val hasEmit = target.hasFunction("emit") || target.hasFunction("emit0")
+        // Only a story that clearly includes hdgife.ink (it declares hdgife_speaker) is checked; a user's own `emit` is left alone.
+        val fromHdgifeInk = target.variablesState.get(SPEAKER_VARIABLE) != null
+        if (hasEmit && fromHdgifeInk && target.variablesState.get(EVENT_SEQ_VARIABLE) == null) {
+            val message = "The story's hdgife.ink is out of date (no hdgife_event_seq), so emit events would be lost. Recompile it with the current hdgife.ink."
+            log?.log(message)
+            throw IllegalStateException(message)
+        }
     }
 
     private fun bindOnce(target: Story, name: String, safe: Boolean, block: (Array<out Any?>) -> Any?) {
@@ -254,8 +282,43 @@ class StoryManager(
         if (userFunctions.remove(name) != null && story.getExternalFunction(name) != null) story.unbindExternalFunction(name)
     }
 
+    /**
+     * Called by the bound emit functions with `(seq, name, args...)`. The event is only a candidate until
+     * [confirmEvents] sees that ink kept the state it was emitted in.
+     */
     private fun record(args: Array<out Any?>) {
-        pendingEvents += StoryEvent(args.getOrNull(0)?.toString() ?: "", args.drop(1), eventLine)
+        val seq = args.getOrNull(0) as? Int ?: return
+        val event = StoryEvent(args.getOrNull(1)?.toString() ?: "", args.drop(2), eventLine)
+        unconfirmedEvents += CandidateEvent(seq, event, (story as? HdgifeStory)?.outputText().orEmpty())
+    }
+
+    /**
+     * Each emit counts up the ink variable `hdgife_event_seq` just before it calls Kotlin. Ink variables are part of
+     * the state that ink restores when it undoes a glue lookahead, so after a Continue the variable only counts
+     * emits that are really behind us. Candidates above it were run in undone lookahead and will run again, in the
+     * right place, on the next Continue. The rest are final. This keeps each event exactly once, in order, with
+     * the line index of the Continue that really produced it.
+     */
+    private fun confirmEvents(produced: String) {
+        if (unconfirmedEvents.isEmpty()) return
+        val seq = story.variablesState.get(EVENT_SEQ_VARIABLE) as? Int ?: Int.MAX_VALUE
+        for (candidate in unconfirmedEvents) {
+            if (candidate.seq > seq) continue
+            // Ink can keep a lookahead that ran past the end of the line. An event that saw the whole produced
+            // text already happened after that line, so it belongs before the next one.
+            val seen = candidate.textAtEmit
+            pendingEvents += PendingEvent(candidate.event, seen.endsWith('\n') && seen.trimEnd('\n', '\r') == produced)
+        }
+        unconfirmedEvents.clear()
+    }
+
+    /** Moves the events that happened after the line just added to the index of the line after it. */
+    private fun placeLateEvents(lineAdded: Boolean) {
+        for (i in pendingEvents.indices) {
+            val p = pendingEvents[i]
+            if (!p.late) continue
+            pendingEvents[i] = PendingEvent(if (lineAdded) p.event.copy(lineIndex = p.event.lineIndex + 1) else p.event, false)
+        }
     }
 
     // ---- stats -------------------------------------------------------------------------------------------------
@@ -380,22 +443,92 @@ class StoryManager(
         }
 
     /**
-     * The whole story state as one JSON string: variables, position, visit counts, the random seed and
-     * [speaker] (with hdgife.ink). Store it as is. Only load it into the same compiled story. Open styles are not
-     * part of it.
+     * The whole story state as one JSON string: variables, position, visit counts, the random seed, [speaker]
+     * (with hdgife.ink) and the styles that are open. Store it as is and only load it into the same compiled
+     * story. It is a small versioned envelope around ink's own state JSON:
+     * `{"v":1,"ink":"<ink state>","styles":[{"name":"color","value":"red","params":{}}]}`, plus `"speaker"` when the
+     * speaker is kept outside ink (no hdgife.ink). Treat the format as opaque.
      */
-    fun saveState(): String = story.state.toJson()
+    fun saveState(): String {
+        val writer = SimpleJson.Writer()
+        writer.writeObjectStart()
+        writer.writeProperty("v", SAVE_VERSION)
+        writer.writeProperty("ink", story.state.toJson())
+        writer.writePropertyStart("styles")
+        writer.writeArrayStart()
+        for (style in openStyles) {
+            writer.writeObjectStart()
+            writer.writeProperty("name", style.name)
+            style.value?.let { writer.writeProperty("value", it) }
+            if (style.params.isNotEmpty()) {
+                writer.writePropertyStart("params")
+                writer.writeObjectStart()
+                for ((key, value) in style.params) writer.writeProperty(key, value)
+                writer.writeObjectEnd()
+                writer.writePropertyEnd()
+            }
+            writer.writeObjectEnd()
+        }
+        writer.writeArrayEnd()
+        writer.writePropertyEnd()
+        fallbackSpeaker?.let { writer.writeProperty("speaker", it) }
+        writer.writeObjectEnd()
+        return writer.toString()
+    }
 
     /**
-     * Restores a string from [saveState]. Output continues from there. Throws if the state doesn't match
-     * the story. Stat values are not part of it. Styles that were open are closed, pending events are dropped.
+     * Restores a string from [saveState], or a plain ink state JSON (an older save). Output continues from there,
+     * and styles that were open at save time are open again. A plain ink JSON has no style information, so open
+     * styles are closed. Throws [IllegalArgumentException] for a save from a newer version or a broken envelope,
+     * and ink's exception if the state doesn't match the story. Stat values are not part of it. Pending events
+     * are dropped.
      */
     fun loadState(json: String) {
-        story.state.loadJson(json)
+        var inkJson = json
+        var styles = emptyList<Style>()
+        var savedSpeaker: String? = null
+        val envelope = readEnvelope(json)
+        if (envelope != null) {
+            val version = (envelope["v"] as? Number)?.toInt() ?: throw IllegalArgumentException("Save has no version")
+            require(version in 1..SAVE_VERSION) { "Save version $version is not supported (this engine reads up to $SAVE_VERSION)" }
+            inkJson = envelope["ink"] as? String ?: throw IllegalArgumentException("Save has no ink state")
+            styles = readStyles(envelope["styles"])
+            savedSpeaker = envelope["speaker"] as? String
+        }
+        story.state.loadJson(inkJson)
         lastSeed = null
-        closeStyles("state was loaded")
+        if (envelope == null) {
+            closeStyles("state was loaded")
+        } else {
+            openStyles = styles
+            fallbackSpeaker = savedSpeaker
+        }
         pendingEvents.clear()
+        unconfirmedEvents.clear()
         rebaseObservations()
+    }
+
+    /** The parsed envelope, or null when [json] is a plain ink state (it has no `v` and `ink` keys). */
+    private fun readEnvelope(json: String): Map<String, Any?>? {
+        val parsed = try {
+            SimpleJson.textToDictionary(json)
+        } catch (e: Exception) {
+            return null // not ours; ink reports the problem when it loads it
+        }
+        return if (parsed.containsKey("v") && parsed.containsKey("ink")) parsed else null
+    }
+
+    private fun readStyles(raw: Any?): List<Style> {
+        val list = raw as? List<*> ?: return emptyList()
+        return list.map { item ->
+            val map = item as? Map<*, *> ?: throw IllegalArgumentException("Save has a broken style entry")
+            val params = (map["params"] as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value.toString() }
+            Style(
+                map["name"] as? String ?: throw IllegalArgumentException("Save has a style without a name"),
+                map["value"] as? String,
+                params ?: emptyMap(),
+            )
+        }
     }
 
     /**
@@ -410,6 +543,7 @@ class StoryManager(
         fallbackSpeaker = null
         closeStyles("the story was reset")
         pendingEvents.clear()
+        unconfirmedEvents.clear()
         rebaseObservations()
     }
 
@@ -434,12 +568,14 @@ class StoryManager(
         while (s.canContinue()) {
             eventLine = lines.size
             val raw = s.Continue().trimEnd('\n', '\r')
+            confirmEvents(raw)
             val lineTags = s.currentTags
             stepTags.addAll(lineTags)
             val styled = parseStyles(raw, openStyles, textCleaner, log)
             openStyles = styled.open
             if (styled.text.isBlank()) {
                 // a line with no text hands its tags to the next line, as ink does
+                placeLateEvents(false)
                 if (lineTags.isNotEmpty()) (carried ?: ArrayList<String>().also { carried = it }).addAll(lineTags)
                 continue
             }
@@ -447,7 +583,10 @@ class StoryManager(
             carried = null
             val tagSpeaker = tags[speakerTagKey]?.ifBlank { null }
             lines += DialogLine(styled.text, tagSpeaker ?: speaker, tags, styled.spans, styled.markers)
+            placeLateEvents(true)
         }
+        confirmEvents("")
+        placeLateEvents(false)
         eventLine = lines.size
         val rawChoices = s.currentChoices
         val choices = ArrayList<DialogChoice>(rawChoices.size)
@@ -462,7 +601,7 @@ class StoryManager(
         }
         val ended = choices.isEmpty()
         if (ended) closeStyles("the story ended")
-        val events = if (pendingEvents.isEmpty()) emptyList() else pendingEvents.toList()
+        val events = if (pendingEvents.isEmpty()) emptyList() else pendingEvents.map { it.event }
         pendingEvents.clear()
         val step = DialogStep(lines, Tags.parse(stepTags), choices, ended, events, openStyles)
         val listener = onEvent
@@ -653,6 +792,8 @@ class StoryManager(
     companion object {
         private const val SEED_FUNCTION = "hdgife_seed"
         private const val SPEAKER_VARIABLE = "hdgife_speaker"
+        private const val EVENT_SEQ_VARIABLE = "hdgife_event_seq"
+        private const val SAVE_VERSION = 1
         private val NOT_NAME = Regex("[^A-Za-z0-9_]")
         private val REQUIREMENT = Regex("""(?:([\w-]+)\.)?([\w-]+)\s*(>=|<=|==|!=|>|<)\s*(.+)""")
 

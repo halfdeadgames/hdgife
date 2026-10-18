@@ -79,6 +79,33 @@ dependencies {
 
 def os = System.properties['os.name'].toLowerCase(Locale.ROOT)
 
+// UI test: a separate source set, so it is not part of the harness jar and does not run with :core:test.
+// It opens a real window (hidden unless -PuiShow), drives the harness and writes screenshots to build/ui-shots.
+sourceSets {
+  uiTest {}
+}
+
+configurations {
+  uiTestImplementation.extendsFrom implementation
+  uiTestRuntimeOnly.extendsFrom runtimeOnly
+}
+
+dependencies {
+  uiTestImplementation sourceSets.main.output
+}
+
+tasks.register('uiTest', JavaExec) {
+  group = 'verification'
+  description = 'Plays the harness through its UI in a real window and checks what is on screen. Needs a display.'
+  classpath = sourceSets.uiTest.runtimeClasspath
+  mainClass = 'com.github.halfdeadgames.hdgife.lwjgl3.UiTest'
+  workingDir = file('assets')
+  systemProperty 'hdgife.shots', layout.buildDirectory.dir('ui-shots').get().asFile.absolutePath
+  jvmArgs '--enable-native-access=ALL-UNNAMED', '--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED'
+  if (os.contains('mac')) jvmArgs '-XstartOnFirstThread'
+  if (project.hasProperty('uiShow')) args '--show'
+}
+
 run {
   workingDir = file('assets').path
 // You can uncomment the next line if your IDE claims a build failure even when the app closed properly.

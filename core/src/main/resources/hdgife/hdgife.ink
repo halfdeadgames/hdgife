@@ -17,6 +17,8 @@
 // Current speaker, kept here so it is part of the saved ink state. Set it with StoryManager.speaker or
 // speak() below.
 VAR hdgife_speaker = ""
+// Counts emit calls. It lets StoryManager keep each event once when ink runs ahead for glue. Leave it alone.
+VAR hdgife_event_seq = 0
 
 EXTERNAL stat(hdg_name)
 EXTERNAL stat_of(hdg_entity, hdg_name)
@@ -25,26 +27,44 @@ EXTERNAL stat_text(hdg_name)
 EXTERNAL stat_text_of(hdg_entity, hdg_name)
 EXTERNAL fmt(hdg_x, hdg_decimals, hdg_mode)
 EXTERNAL speak(hdg_name)
-EXTERNAL emit0(hdg_name)
-EXTERNAL emit(hdg_name, hdg_a)
-EXTERNAL emit2(hdg_name, hdg_a, hdg_b)
-EXTERNAL emit3(hdg_name, hdg_a, hdg_b, hdg_c)
+EXTERNAL hdgife_emit0(hdg_seq, hdg_name)
+EXTERNAL hdgife_emit1(hdg_seq, hdg_name, hdg_a)
+EXTERNAL hdgife_emit2(hdg_seq, hdg_name, hdg_a, hdg_b)
+EXTERNAL hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c)
 
 // Events for the game. Use as statements: ~ emit("give_item", "sword")
 // The name and arguments come back, in order, on DialogStep.events and StoryManager.onEvent. The engine does
 // nothing with them, the game decides. emit0 takes no argument, emit one, emit2 two, emit3 three (ink has no
-// overloads). Each call is reported once: StoryManager binds them so ink does not run them during glue lookahead.
-// Don't call them inside "{...}" strings or choice text. Without a StoryManager they do nothing.
+// overloads). Each call is reported exactly once, also between a line and a `<>` glue line, and also inside a
+// function. Without a StoryManager they do nothing. In choice text they fire when the choice is created,
+// which is not a good place for them, so keep them in statements.
 === function emit0(hdg_name) ===
-~ return 0
+~ hdgife_event_seq++
+~ hdgife_emit0(hdgife_event_seq, hdg_name)
 
 === function emit(hdg_name, hdg_a) ===
-~ return 0
+~ hdgife_event_seq++
+~ hdgife_emit1(hdgife_event_seq, hdg_name, hdg_a)
 
 === function emit2(hdg_name, hdg_a, hdg_b) ===
-~ return 0
+~ hdgife_event_seq++
+~ hdgife_emit2(hdgife_event_seq, hdg_name, hdg_a, hdg_b)
 
 === function emit3(hdg_name, hdg_a, hdg_b, hdg_c) ===
+~ hdgife_event_seq++
+~ hdgife_emit3(hdgife_event_seq, hdg_name, hdg_a, hdg_b, hdg_c)
+
+// Fallbacks for the externals above, used when nothing is bound.
+=== function hdgife_emit0(hdg_seq, hdg_name) ===
+~ return 0
+
+=== function hdgife_emit1(hdg_seq, hdg_name, hdg_a) ===
+~ return 0
+
+=== function hdgife_emit2(hdg_seq, hdg_name, hdg_a, hdg_b) ===
+~ return 0
+
+=== function hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c) ===
 ~ return 0
 
 // Stat of the current speaker (see StoryManager.beginScene). 0 if missing.

@@ -81,3 +81,13 @@ A voice from the queue: "<color=0x66ccff>Hurry</color> up!" # speaker: crowd
   ~ emit("give_item", "pass")
   -> hub
 + [Leave] -> hub
+
+// An emit between a line and its glue line still joins, and fires once. The red style stays open over the choice,
+// so a save made here brings it back on load.
+=== rumor ===
+Word has it
+~ emit("rumor_heard", "gate")
+<> that the gate falls tonight.
+A man leans in and <color=ff5555>speaks low.
++ [Listen] "Run," he says, <b>fast</b> and quiet.</color> Then he is gone.
+  -> hub

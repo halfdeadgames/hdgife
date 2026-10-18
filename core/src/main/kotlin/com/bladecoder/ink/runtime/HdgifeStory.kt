@@ -32,6 +32,9 @@ class HdgifeStory(json: String) : Story(json) {
         safeFunctions[name] = function
     }
 
+    /** The text ink has in its output stream right now, newline included. For a lookahead safe function that is asking where it was called. */
+    fun outputText(): String = state.currentText
+
     override fun unbindExternalFunction(funcName: String) {
         super.unbindExternalFunction(funcName)
         safeFunctions.remove(funcName)

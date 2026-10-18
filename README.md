@@ -148,7 +148,7 @@ fun unobserve(name: String)
 
 `beginScene` sets `speaker` and diverts to the knot (`knot` or `knot.stitch`). `next` continues until a choice or the end. `choose` picks a choice and then does the same. `seedRandom` makes ink's RANDOM and shuffles repeatable. It needs `INCLUDE hdgife.ink` (returns false without it) and a reset reseeds randomly, so call it again after that.
 
-`saveState()` and `loadState(json)` wrap ink's own state JSON. With `INCLUDE hdgife.ink` the speaker lives in the ink variable `hdgife_speaker` and the seed is in the ink state (ink's `SEED_RANDOM` plus the position in the random sequence), so one string is all the game stores. After `loadState`, ink continues with the same random results. Load it only into the same compiled story. Without the library, `speaker` is a plain field that you keep yourself. Your own stat values aren't included, and neither are open styles (they are closed on load). blade-ink's seed setter is package-private, so `seed = n` (same as `seedRandom`) goes through ink and needs the library. The `seed` getter only returns the last value set through this manager.
+`saveState()` and `loadState(json)` wrap ink's own state JSON. With `INCLUDE hdgife.ink` the speaker lives in the ink variable `hdgife_speaker` and the seed is in the ink state (ink's `SEED_RANDOM` plus the position in the random sequence), so one string is all the game stores. After `loadState`, ink continues with the same random results. Load it only into the same compiled story. Without the library, `speaker` is a plain field that you keep yourself. Your own stat values aren't included. Open styles are: the string is a small versioned JSON envelope (`{"v":1,"ink":...,"styles":[...]}`, plus the speaker when it is kept outside ink) around ink's state, so after `loadState` the next line continues in the same styles. Treat it as opaque. `loadState` also accepts a plain ink state JSON (an older save); the styles are closed then. A save from a newer format version is refused. blade-ink's seed setter is package-private, so `seed = n` (same as `seedRandom`) goes through ink and needs the library. The `seed` getter only returns the last value set through this manager.
 
 #### Choosing sources, resetting
 
@@ -253,7 +253,9 @@ For a style with a named parameter use `style.hexColor("color")`. 3, 6 and 8 dig
 
 `emit0(name)`, `emit(name, a)`, `emit2(name, a, b)`, `emit3(name, a, b, c)`: ink has no overloads, so the number is in the name. Arguments are plain `Int`, `Float`, `Boolean` or `String`. Events come back in order on `DialogStep.events` (`StoryEvent(name, args, lineIndex)`) and, if set, through `manager.onEvent`, which is called after `next()` has built the step. `lineIndex` is the index in `DialogStep.lines` of the line produced right after the call: the event happened just before that line is shown (`lines.size` if no line follows). The engine never acts on an event. Tags (`# kind: value`) are the other way to attach data to a line and need nothing special.
 
-Each call is reported exactly once. The functions are bound as not lookahead safe, so ink never runs them during its glue lookahead (it stops before the call and runs it for real afterwards). The price: an `emit` that sits between a line and a glue line (`<>`) that joins to it ends the lookahead, so the glue does not join. Put the `emit` before the first line, or after the glued text. Use `emit` as a statement, not inside `"{...}"` or choice text.
+Breaking change: stories compiled with an older hdgife.ink (it declares `hdgife_speaker` but has no `hdgife_event_seq`) would lose every event, so `StoryManager` throws an `IllegalStateException` (and writes to `log`) when it gets one. Recompile them with the current hdgife.ink.
+
+Each call is reported exactly once, in order, also between a line and a glue line (`<>`) and inside ink functions. Ink may run an `emit` early while it looks ahead for glue, and run it again after it undoes that lookahead. Each `emit` counts up the ink variable `hdgife_event_seq` first. Ink undoes that variable together with the lookahead, so after every `Continue` the manager keeps only the events the count still includes. `lineIndex` is then the line of the `Continue` that really produced the event. A plain `Story` that is not an `HdgifeStory` binds `emit` as not lookahead safe, so each event is still reported once but an `emit` between a line and its glue line ends the lookahead and the glue does not join. In choice text (`* [Buy {cost()}]` where `cost` emits) an `emit` fires once when the choice is created, and its `lineIndex` is the index of the last line before the choices. That works but is not a good place for it: use it as a statement.
 
 **Game-defined functions.** Bind a lambda to an ink `EXTERNAL` function:
 
@@ -468,7 +470,7 @@ To run a different set of sources, compile them again and build a new `StoryMana
 ## Not done yet
 
 - Ink can't override an existing knot. Ink rejects duplicate knot names, so replacing content means the game choosing which source to feed.
-- A tag speaker covers one line only. Open styles are not part of `saveState`.
+- A tag speaker covers one line only.
 - The `emit` functions are numbered by argument count because ink has no overloads.
 - There's no reusable UI in the library. That's on purpose, though I might add some optional helpers later.
 - Web/TeaVM is untested.
@@ -515,7 +517,7 @@ The `lwjgl3` module is a small desktop app I use for poking at things. It isn't 
 ./gradlew lwjgl3:run
 ```
 
-It opens a dialog tester for `lwjgl3/assets/ink/main.ink`. The hub has a gate scene with two speakers (guard and merchant), colored spans (`em`, `b` and `color` are mapped to libGDX color markup in the harness only, names and hex alike) and choices with requirements, including string and boolean ones (`faction == crown`, `player.is_injured == false`). Effects (`shake`, `wave`) and point markers (`pause`, `slam`) are not drawn: the harness prints them in a dim `fx:` line under the dialog line, with their offsets. A `<em>` spans two lines in the gate scene. A glue line in the guard chat has a stat call between the line break and the glue. `emit` events show as gold `!` lines and in the console, and the harness acts on `give_item` (it keeps an inventory that ink reads back through a bound `inventory_count`). Unavailable choices follow the harness's own policy, set with `choicemode`. The backtick key toggles the console. Commands:
+It opens a dialog tester for `lwjgl3/assets/ink/main.ink`. The hub has a gate scene with two speakers (guard and merchant), colored spans (`em`, `b` and `color` are mapped to libGDX color markup in the harness only, names and hex alike) and choices with requirements, including string and boolean ones (`faction == crown`, `player.is_injured == false`). Effects (`shake`, `wave`) and point markers (`pause`, `slam`) are not drawn: the harness prints them in a dim `fx:` line under the dialog line, with their offsets. A `<em>` spans two lines in the gate scene. A glue line in the guard chat has a stat call between the line break and the glue. `emit` events show as gold `!` lines and in the console, and the harness acts on `give_item` (it keeps an inventory that ink reads back through a bound `inventory_count`). Unavailable choices follow the harness's own policy, set with `choicemode`. The hub also has a rumor scene: an `emit` between a line and its glue line (it joins, and the event fires once), and a red `<color>` left open over the choice. `save` keeps the log as well as the engine state, and `load` puts both back, so the next line is red again. The backtick key toggles the console. Commands:
 
 | Command | What it does |
 | --- | --- |
@@ -536,6 +538,12 @@ It opens a dialog tester for `lwjgl3/assets/ink/main.ink`. The hub has a gate sc
 | `reload` | Recompiles `main.ink` plus any `.ink` files in `lwjgl3/assets/extra/`, swaps in the new story and clears the log. Story state starts fresh. |
 | `restart` | `manager.reset()`: resets the story state and the harness inventory and clears the log. Doesn't recompile. |
 | `choicemode <hide\|grey\|show>` | How choices with unmet requirements are shown. `grey` (default) disables them and lists what is missing, `show` keeps them clickable with the same note, `hide` removes them. `choose <n>` ignores the mode, the engine never blocks. |
-| `save` | Keeps the current story state (`saveState` JSON) in memory. Stat values are not part of it. |
-| `load` | Restores the last `save` and shows the pending choices again. Speaker comes back with it. |
+| `save` | Keeps the current story state (`saveState` string, open styles included) and the log in memory. Stat values are not part of it. |
+| `load` | Restores the last `save`: the log as it was, the story state, the speaker and the open styles, and shows the pending choices again. |
 | `help` | Lists the commands. Comes from the console library. |
+
+### UI test
+
+`./gradlew :lwjgl3:uiTest` plays the harness through its real UI and checks what is on screen. It starts `TestGame` in a real LWJGL3 window (hidden by default, add `-PuiShow` to watch it), reads the log labels, clicks the choice buttons with real touch events at their stage coordinates, and uses the console (`hp`, `npc`, `set`, `divert`, `talk`, `choicemode`, `save`, `load`, `restart`, `seed`) to set things up. It covers the intro, the health check, guard scenes that change with stats (and glue across a stat call), colored spans, greyed and hidden requirement choices, events, an `emit` before a glue line, save and load with an open style, and restart.
+
+It takes screenshots at key steps into `lwjgl3/build/ui-shots/` and fails if one is blank. On a failure it prints the reason per scenario, saves a `FAILED-...png` and exits non-zero; on success it prints a summary and exits 0. It needs a display and the GPU driver, so it is not part of `:core:test`, `build` or the JitPack build. The code is in `lwjgl3/src/uiTest`, a separate source set that is not in the harness jar.

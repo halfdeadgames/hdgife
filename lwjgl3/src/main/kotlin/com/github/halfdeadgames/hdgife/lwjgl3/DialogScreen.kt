@@ -45,6 +45,8 @@ private val log = logger<DialogScreen>()
 /** How this harness treats choices whose requirements are not met. The engine leaves that to the game. */
 enum class ChoiceMode { HIDE, GREY, SHOW }
 
+private const val CHOICE_STYLE = "choice"
+
 /** Style names this harness draws itself. Everything else is an "effect" that the harness only reports. */
 private val DRAWN = setOf("em", "b", "color")
 
@@ -122,7 +124,17 @@ private fun Actor.onChange(block: () -> Unit) {
     })
 }
 
-/** Test UI for the ink story: log, choice buttons and a debug console. */
+/** One line of the on-screen log. [color] tints the whole label, null leaves it plain. */
+private class LogEntry(val text: String, val color: Color?)
+
+/** What `save` keeps: the engine's state string plus the log, so `load` can bring back what was on screen. */
+private class Snapshot(val state: String, val log: List<LogEntry>)
+
+/**
+ * Test UI for the ink story: log, choice buttons and a debug console. The read-only members below
+ * ([stage], [logLabels], [choiceButtons], [restartButton], [runCommand]) are what the UI test (`:lwjgl3:uiTest`)
+ * uses to look at the screen and drive it.
+ */
 class DialogScreen(
     private val manager: StoryManager,
     private val provider: MapStateProvider,
@@ -130,21 +142,23 @@ class DialogScreen(
 ) : KtxScreen, DialogControl {
     private val skin = Skin(Gdx.files.internal("ui/uiskin.json"))
     private val consoleSkin = Skin(Gdx.files.classpath("default_skin/uiskin.json"))
-    private val stage = Stage(ScreenViewport())
+    val stage = Stage(ScreenViewport())
     private val console: GUIConsole
-    private val logTable = Table().apply { top().left() }
+    // a little side padding: the scroll pane clips at its edge and some glyphs reach left of their origin
+    private val logTable = Table().apply { top().left().pad(0f, 4f, 0f, 4f) }
     private val logPane = ScrollPane(logTable, skin).apply {
         setScrollingDisabled(true, false)
         setFadeScrollBars(false)
     }
     private val choiceTable = Table()
-    private val statusLabel: Label
-    private val restartButton: TextButton
+    val statusLabel: Label
+    val restartButton: TextButton
     private val dim = Color(0.6f, 0.6f, 0.6f, 1f)
     private var scrollPending = false
     private var lastStep: DialogStep? = null
     private var choiceMode = ChoiceMode.GREY
-    private var savedState: String? = null
+    private var snapshot: Snapshot? = null
+    private val logEntries = ArrayList<LogEntry>()
     private val observations = mutableMapOf<String, VariableObservation>()
 
     /** The harness's own game state, driven by ink: `emit("give_item", x)` adds to it, ink reads it back. */
@@ -153,6 +167,10 @@ class DialogScreen(
     init {
         // ktx-scene2d builders read the default skin
         Scene2DSkin.defaultSkin = skin
+        // the skin's disabled text is dark on dark, too dim to read a greyed-out choice and what it needs
+        skin.add(CHOICE_STYLE, TextButton.TextButtonStyle(skin.get(TextButton.TextButtonStyle::class.java)).apply {
+            disabledFontColor = Color(0.72f, 0.72f, 0.72f, 1f)
+        })
         // spans are drawn with libGDX color markup, so every skin font needs it on
         for (font in skin.getAll(BitmapFont::class.java).values()) font.data.markupEnabled = true
         statusLabel = scene2d.label("")
@@ -187,6 +205,15 @@ class DialogScreen(
         manager.bindFunction("inventory_count", lookaheadSafe = true) { args -> inventory[args.string(0)] ?: 0 }
     }
 
+    /** The log labels, top to bottom. */
+    val logLabels: List<Label> get() = logTable.children.filterIsInstance<Label>()
+
+    /** The choice buttons on screen, top to bottom. */
+    val choiceButtons: List<TextButton> get() = choiceTable.children.filterIsInstance<TextButton>()
+
+    /** Runs a console command line exactly as if it was typed into the console. */
+    fun runCommand(line: String) = console.execCommand(line)
+
     override fun show() {
         // console first, so it takes keys when open
         Gdx.input.inputProcessor = InputMultiplexer(console.inputProcessor, stage)
@@ -218,12 +245,19 @@ class DialogScreen(
     }
 
     private fun addLine(text: String, color: Color? = null) {
+        logEntries += LogEntry(text, color)
         val line = Label(text, skin).apply {
             wrap = true
             if (color != null) this.color.set(color)
         }
         logTable.add(line).growX().padBottom(4f).row()
         scrollPending = true
+    }
+
+    private fun restoreLog(entries: List<LogEntry>) {
+        logTable.clearChildren()
+        logEntries.clear()
+        for (entry in entries) addLine(entry.text, entry.color)
     }
 
     /** Continues the story, appends output and rebuilds the choice buttons. */
@@ -276,7 +310,7 @@ class DialogScreen(
                     append("  [#ff8a80](needs ").append(needs.replace("[", "[[")).append(")[]")
                 }
             }
-            val button = scene2d.textButton("")
+            val button = scene2d.textButton("", CHOICE_STYLE)
             button.label.setText(markup)
             button.label.wrap = true
             if (!choice.available && choiceMode == ChoiceMode.GREY) button.isDisabled = true
@@ -369,22 +403,24 @@ class DialogScreen(
 
     override fun save() {
         val json = manager.saveState()
-        savedState = json
+        snapshot = Snapshot(json, logEntries.toList())
         console.log("Saved ${json.length} chars in memory. Stat values are not part of it.")
     }
 
     override fun load() {
-        val json = savedState
-        if (json == null) {
+        val saved = snapshot
+        if (saved == null) {
             console.log("Nothing saved yet")
             return
         }
         try {
-            manager.loadState(json)
+            manager.loadState(saved.state)
         } catch (e: Exception) {
             console.log("Load failed: ${e.message}")
             return
         }
+        // the log goes back to what it showed at save time, the engine brings back the story and its open styles
+        restoreLog(saved.log)
         addLine("(state loaded, speaker is now ${manager.speaker ?: "none"})", dim)
         advance()
         console.log("Loaded")
@@ -422,6 +458,7 @@ class DialogScreen(
 
     private fun resetLog() {
         logTable.clearChildren()
+        logEntries.clear()
         advance()
     }
 }

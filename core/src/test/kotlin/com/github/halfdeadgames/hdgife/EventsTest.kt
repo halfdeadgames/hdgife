@@ -1,6 +1,7 @@
 package com.github.halfdeadgames.hdgife
 
 import com.bladecoder.ink.runtime.InkList
+import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.story.StoryEvent
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import kotlin.test.Test
@@ -22,6 +23,58 @@ class EventsTest {
         ~ emit3("fourth", 1, 2.5, "z")
         -> END
     """.trimIndent()
+
+    @Test
+    fun `a story from an old hdgife ink is refused loudly`() {
+        val old = compileInk("""
+            VAR hdgife_speaker = ""
+            EXTERNAL emit(name, a)
+            ~ emit("x", 1)
+            Hi
+            -> END
+            === function emit(name, a) ===
+            ~ return 0
+        """.trimIndent())
+        val ex = assertFailsWith<IllegalStateException> { StoryManager(old) }
+        assertContains(ex.message.orEmpty(), "hdgife_event_seq")
+    }
+
+    @Test
+    fun `a user story with its own emit and no hdgife ink runs untouched`() {
+        val story = compileInk("""
+            VAR count = 0
+            ~ emit("x", 1)
+            Hi
+            -> END
+            === function emit(name, a) ===
+            ~ count++
+            ~ return 0
+        """.trimIndent())
+        val step = StoryManager(story).next()
+        assertEquals(listOf("Hi"), step.texts())
+        assertTrue(step.events.isEmpty())
+    }
+
+    @Test
+    fun `reset after a throwing textCleaner drops late events`() {
+        val m = managerOf("""
+            Line
+            ~ emit0("a")
+            Next
+            ~ emit0("b")
+            End
+        """.trimIndent())
+        var calls = 0
+        val cleaner = m.textCleaner
+        m.textCleaner = { if (++calls == 2) throw IllegalStateException("boom") else cleaner(it) }
+        assertFailsWith<IllegalStateException> { m.next() }
+        m.textCleaner = cleaner
+        m.reset()
+        val step = m.next()
+        assertEquals(listOf("a", "b"), step.events.map { it.name })
+        assertEquals(listOf("Line", "Next", "End"), step.texts())
+        assertEquals(listOf(1, 2), step.events.map { it.lineIndex })
+    }
 
     // ---- events ----
 
@@ -48,6 +101,95 @@ class EventsTest {
         val step = m.next()
         assertEquals(listOf("x", "y"), step.events.map { it.name })
         assertEquals(listOf("A B", "C"), step.texts())
+    }
+
+    @Test
+    fun `glue joins across an emit between a line and the glue line`() {
+        val step = managerOf("You have\n~ emit(\"seen\", 1)\n<> 5 hp.\nNext").next()
+        assertEquals(listOf("You have 5 hp.", "Next"), step.texts())
+        assertEquals(listOf("seen" to 0), step.events.map { it.name to it.lineIndex })
+    }
+
+    @Test
+    fun `an emit that glue does not join is reported before the line after it`() {
+        val step = managerOf("A\n~ emit0(\"x\")\nB").next()
+        assertEquals(listOf("A", "B"), step.texts())
+        assertEquals(listOf("x" to 1), step.events.map { it.name to it.lineIndex })
+    }
+
+    @Test
+    fun `several emits around glue and breaks keep order and line index`() {
+        val m = managerOf(
+            "One\n~ emit0(\"a\")\n<> two\n~ emit0(\"b\")\n~ emit0(\"c\")\nThree <>\n~ emit0(\"d\")\n<> four\n~ emit0(\"e\")\n-> END",
+        )
+        val step = m.next()
+        assertEquals(listOf("One two", "Three four"), step.texts())
+        assertEquals(listOf("a" to 0, "b" to 1, "c" to 1, "d" to 1, "e" to 2), step.events.map { it.name to it.lineIndex })
+    }
+
+    @Test
+    fun `an emit inside an ink function is reported once across glue`() {
+        val m = managerOf("Gold\n~ reward(3)\n<> up.\nDone\n=== function reward(n) ===\n~ emit(\"gold\", n)\n~ return n")
+        val step = m.next()
+        assertEquals(listOf("Gold up.", "Done"), step.texts())
+        assertEquals(listOf("gold"), step.events.map { it.name })
+        assertEquals(listOf<Any?>(3), step.events.single().args)
+    }
+
+    @Test
+    fun `events are exactly once over a whole run with choices`() {
+        val m = managerOf(
+            """
+            Start
+            ~ emit0("s")
+            <> here
+            * [Left] Went left
+                ~ emit0("l")
+                <> fully
+                -> done
+            * [Right] -> done
+            = done
+            ~ emit0("d")
+            End
+            -> END
+            """.trimIndent(),
+        )
+        val seen = ArrayList<String>()
+        m.onEvent = { seen += it.name }
+        val first = m.next()
+        assertEquals(listOf("Start here"), first.texts())
+        assertEquals(listOf("s"), first.events.map { it.name })
+        val second = m.choose(0)
+        assertEquals(listOf("Went left fully", "End"), second.texts())
+        assertEquals(listOf("l", "d"), second.events.map { it.name })
+        assertEquals(listOf("s", "l", "d"), seen)
+    }
+
+    @Test
+    fun `a plain story reports events once but its emit ends glue lookahead`() {
+        val plain = Story(compileLib("A\n~ emit0(\"x\")\n<> B\n~ emit0(\"y\")\nC").toJson())
+        val step = StoryManager(plain).next()
+        assertEquals(listOf("A", "B", "C"), step.texts())
+        assertEquals(listOf("x" to 1, "y" to 2), step.events.map { it.name to it.lineIndex })
+    }
+
+    @Test
+    fun `an emit in choice text fires once when the choice is created`() {
+        val m = managerOf("Pick\n* [Buy {cost()}] -> END\n=== function cost() ===\n~ emit(\"shown\", 1)\n~ return 5")
+        val step = m.next()
+        assertEquals("Buy 5", step.choices.single().text)
+        assertEquals(listOf("shown" to 0), step.events.map { it.name to it.lineIndex })
+        assertTrue(m.next().events.isEmpty())
+    }
+
+    @Test
+    fun `events after a load are reported once`() {
+        val m = managerOf("A\n* [Go]\n  ~ emit0(\"go\")\n  B\n  -> END")
+        m.next()
+        val saved = m.saveState()
+        assertEquals(listOf("go"), m.choose(0).events.map { it.name })
+        m.loadState(saved)
+        assertEquals(listOf("go"), m.choose(0).events.map { it.name })
     }
 
     @Test

@@ -17,6 +17,7 @@ What now?
 + [Check my health] -> status
 + [Talk to the guard] -> guard_chat
 + [Watch the gate exchange] -> gate_exchange
++ [Hear a rumor] -> rumor
 * [Leave] -> farewell
 
 === status ===
