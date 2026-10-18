@@ -18,8 +18,8 @@ dependencies {
 // dump. After an intended API change, rewrite the dump and commit it with the change:
 //   ./gradlew :core:updateKotlinAbi    writes core/api/core.api
 //   ./gradlew :core:checkKotlinAbi     compares the code with the dump (also part of :core:check)
-// jitpack.yml runs :core:test and :core:publishToMavenLocal only, and excludes checkKotlinAbi, so a stale dump never
-// fails a JitPack build.
+// jitpack.yml runs :core:test and :core:publishToMavenLocal only, which do not run checkKotlinAbi, so a stale dump
+// never fails a JitPack build.
 //
 // Every public declaration says so (`public`) and names its type, so nothing becomes API by accident.
 // The experimental marker is opted into for this module's own code and tests; consumers choose for themselves.
@@ -61,7 +61,9 @@ sourceSets.main.kotlin.srcDir(generateVersion)
 
 // HdgifeInk (the library version and the reserved function names) is read from the two bundled ink files, so the
 // Kotlin side can never drift from them: the version is `CONST hdgife_version` in hdgife.ink, the reserved names are
-// every `=== function` and `EXTERNAL` of hdgife.ink and hdgife_util.ink.
+// every `=== function` (two or more `=`) and `EXTERNAL` of hdgife.ink and hdgife_util.ink.
+// If you add, remove or change a function there, bump `CONST hdgife_version` in hdgife.ink and update the pinned
+// hash in LibraryPinTest: that test fails with "library changed: bump hdgife_version" until you do.
 def generatedInkDir = layout.buildDirectory.dir('generated/hdgifeInk/kotlin')
 def generateInkLibrary = tasks.register('generateInkLibrary') {
   def coreFile = file('src/main/resources/hdgife/hdgife.ink')
@@ -73,7 +75,7 @@ def generateInkLibrary = tasks.register('generateInkLibrary') {
     def functionNames = { File f ->
       def found = new LinkedHashSet<String>()
       f.eachLine('UTF-8') { line ->
-        def m = (line =~ /^(?:===\s*function|EXTERNAL)\s+(\w+)/)
+        def m = (line =~ /^(?:={2,}\s*function|EXTERNAL)\s+(\w+)/)
         if (m.find()) found << m.group(1)
       }
       found

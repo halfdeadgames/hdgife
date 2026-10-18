@@ -1,6 +1,5 @@
 package com.github.halfdeadgames.hdgife.story
 
-import com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi
 import com.github.halfdeadgames.hdgife.HdgifeException
 
 /**
@@ -20,7 +19,7 @@ public class DialogStep internal constructor(
     public val choices: List<DialogChoice>,
     public val isEnded: Boolean,
     public val events: List<StoryEvent> = emptyList(),
-    @property:ExperimentalHdgifeApi public val openStyles: List<Style> = emptyList(),
+    public val openStyles: List<Style> = emptyList(),
 ) {
     public val text: String = lines.joinToString("\n") { it.text }
 
@@ -46,8 +45,8 @@ public class DialogLine internal constructor(
     public val text: String,
     public val speaker: String?,
     public val tags: Tags,
-    @property:ExperimentalHdgifeApi public val spans: List<TextSpan>,
-    @property:ExperimentalHdgifeApi public val markers: List<TextMarker> = emptyList(),
+    public val spans: List<TextSpan>,
+    public val markers: List<TextMarker> = emptyList(),
 ) {
     override fun equals(other: Any?): Boolean = this === other || other is DialogLine &&
         text == other.text && speaker == other.speaker && tags == other.tags && spans == other.spans && markers == other.markers
@@ -68,13 +67,12 @@ public class DialogLine internal constructor(
 public class DialogChoice internal constructor(
     public val index: Int,
     public val text: String,
-    @property:ExperimentalHdgifeApi public val spans: List<TextSpan>,
+    public val spans: List<TextSpan>,
     public val tags: Tags,
-    @property:ExperimentalHdgifeApi public val requirements: List<RequirementResult>,
-    @property:ExperimentalHdgifeApi public val markers: List<TextMarker> = emptyList(),
+    public val requirements: List<RequirementResult>,
+    public val markers: List<TextMarker> = emptyList(),
 ) {
     /** True when every requirement is met, or there are none. */
-    @OptIn(ExperimentalHdgifeApi::class)
     public val isAvailable: Boolean = requirements.all { it.isMet }
 
     override fun equals(other: Any?): Boolean = this === other || other is DialogChoice &&

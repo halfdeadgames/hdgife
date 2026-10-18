@@ -1,6 +1,7 @@
 package com.github.halfdeadgames.hdgife.story
 
 import com.bladecoder.ink.runtime.Container
+import com.bladecoder.ink.runtime.ControlCommand
 import com.bladecoder.ink.runtime.IntValue
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.HdgifeInk
@@ -25,9 +26,18 @@ internal fun coreLibraryVersion(story: Story): Int {
     return firstInt(knot) ?: 0
 }
 
+/** The IntValue right before the `~ret` control command (past the closing `/ev`), searched through nested containers. */
 private fun firstInt(container: Container): Int? {
-    for (item in container.content) {
-        if (item is IntValue) return item.value
+    val items = container.content
+    for (i in items.indices) {
+        val item = items[i]
+        if (item is ControlCommand && item.commandType == ControlCommand.CommandType.PopFunction) {
+            var j = i - 1
+            val end = items.getOrNull(j)
+            if (end is ControlCommand && end.commandType == ControlCommand.CommandType.EvalEnd) j--
+            val prev = items.getOrNull(j)
+            if (prev is IntValue) return prev.value
+        }
         if (item is Container) firstInt(item)?.let { return it }
     }
     return null

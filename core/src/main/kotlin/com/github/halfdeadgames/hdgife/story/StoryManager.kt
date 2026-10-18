@@ -188,7 +188,6 @@ public class StoryManager private constructor(
     public var speakerTagKey: String = "speaker"
 
     /** Tag key that declares choice requirements. Default `"requires"`. */
-    @ExperimentalHdgifeApi
     public var requirementsTagKey: String = "requires"
 
     /**

@@ -1,6 +1,5 @@
 package com.github.halfdeadgames.hdgife.story
 
-import com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi
 import com.github.halfdeadgames.hdgife.HdgifeLog
 
 /**
@@ -10,7 +9,6 @@ import com.github.halfdeadgames.hdgife.HdgifeLog
  * [value] is the text after the first `=`, as written (quotes removed). [params] are the `key=value` pairs
  * that follow. Both are raw strings, the game reads them as it likes.
  */
-@ExperimentalHdgifeApi
 public class Style internal constructor(
     public val name: String,
     public val value: String? = null,
@@ -41,7 +39,6 @@ public class Style internal constructor(
  * index in the line's plain text where it sits (the marker comes before the character at [offset], and
  * `offset == text.length` means after the last one). The engine doesn't interpret it.
  */
-@ExperimentalHdgifeApi
 public class TextMarker internal constructor(
     public val name: String,
     public val offset: Int,
@@ -70,7 +67,6 @@ public class TextMarker internal constructor(
 private fun splitValues(value: String?): List<String> = value?.split(',')?.map(String::trim).orEmpty()
 
 /** A run of plain [text] with the [styles] active over it, outermost first. Empty list means unstyled. */
-@ExperimentalHdgifeApi
 public class TextSpan internal constructor(public val text: String, public val styles: List<Style> = emptyList()) {
     override fun equals(other: Any?): Boolean = this === other || other is TextSpan && text == other.text && styles == other.styles
 

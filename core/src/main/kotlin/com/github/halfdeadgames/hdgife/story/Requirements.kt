@@ -43,7 +43,6 @@ public enum class Comparison(public val symbol: String) {
  * requirement read as the type of [actual] (a number is an `Int` or `Float`). More cases may be added in a later
  * version, so a `when` over it should have an `else`.
  */
-@ExperimentalHdgifeApi
 public sealed interface RequirementResult {
     /** The requirement text as written. */
     public val raw: String

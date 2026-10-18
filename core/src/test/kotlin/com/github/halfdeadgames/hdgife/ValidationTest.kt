@@ -212,3 +212,12 @@ class ValidationTest {
         assertEquals("Hi 1", m.next().texts().single())
     }
 }
+
+class LibraryVersionJsonTest {
+    @Test
+    fun `the library version is read from a story loaded from compiled JSON`() {
+        val loaded = compiler.loadCompiled(compileLib("Hi\n-> END").toJson())
+        assertEquals(HdgifeInk.VERSION, coreLibraryVersion(loaded))
+        assertEquals(0, coreLibraryVersion(compiler.loadCompiled(compileInk("Hi").toJson())))
+    }
+}

@@ -1,4 +1,4 @@
 jdk:
   - openjdk17
 install:
-  - ./gradlew :core:test :core:publishToMavenLocal -x checkKotlinAbi
+  - ./gradlew :core:test :core:publishToMavenLocal
