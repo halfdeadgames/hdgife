@@ -564,7 +564,7 @@ This is Blade Ink's own package, because the patch needs package-private access.
 
 ## Writing stat-driven ink
 
-A trimmed version of `lwjgl3/assets/ink/main.ink`. The stats live in the game. Ink reads them with `stat()`, builds combined metrics with the util functions, scales flavor text by them, and tells the game things with `emit`.
+A trimmed version of `assets/ink/main.ink`. The stats live in the game. Ink reads them with `stat()`, builds combined metrics with the util functions, scales flavor text by them, and tells the game things with `emit`.
 
 ```ink
 INCLUDE hdgife.ink
@@ -626,7 +626,7 @@ When a Blade Ink upgrade fixes one, a canary fails. That is the signal to revisi
 
 ## Test harness
 
-The `lwjgl3` module is a small desktop app for poking at things. It isn't published. It owns the KTX, scene2d and console dependencies, its own `lwjgl3/assets/` (UI skin and the demo ink) and its own load policy: `ink/main.ink` plus any `.ink` files under `lwjgl3/assets/extra/`, sorted by path. Run it with:
+The harness is a small app for poking at things. None of it is published. The UI lives in the `harness` module (KTX, scene2d, the console, the load policy: `ink/main.ink` plus any `.ink` files under `assets/extra/`, sorted by path). `lwjgl3` runs it on the desktop and `android` runs the same UI on a phone or emulator. Both use the shared root `assets/` folder (UI skin and the demo ink). Run it on the desktop with:
 
 ```
 ./gradlew lwjgl3:run
@@ -639,7 +639,7 @@ The harness shows only the latest `DialogStep`, in two panels:
 - RAW (left): the exact engine output as text, in a small monospace-ish font, scrollable with the mouse wheel. Every field is there: each line with text, speaker, raw and parsed tags, spans with their styles (hex colors also as `hexColor()` reads them) and markers with offsets; the step tags; each choice with `available`, tags, spans, markers and every requirement (`raw`, entity, stat, op, target and actual with their types, the result class and `isMet`); events with `lineIndex` and `id`; `openStyles`; `ended`. After a `StoryStepException` it shows the partial step with the error. After a `load` a note says the lines were kept by the harness.
 - RENDERED (right): the same step the way a game might draw it. Speaker names get a color, spans are colored (names through libGDX's `Colors` table, hex through `hexColor()`, `em` and `b` fixed colors), an effect span is followed by a dim `~name` (a `shake` line shakes for a moment, `wave` and `bounce` bob), point markers are written as `|name=value|` where they sit, tags are dim under their line, events are gold `!` rows where they happened, a style still open is noted, and choices are buttons that follow `choicemode`, with unmet requirements and the current values.
 
-F2 or the `view` command changes the layout: split, raw only, rendered only. An info line under the panels shows the layout, the choice mode and the latest value of the observed ink variables (`suspicion`, `door_open`, `player_coin`). When the story ends a Restart button appears. The backtick key toggles the console. Engine log lines go to the console prefixed `engine:`.
+F2 or the `view` command changes the layout: split, raw only, rendered only. An info line under the panels shows the layout, the choice mode and the latest value of the observed ink variables (`suspicion`, `door_open`, `player_coin`). When the story ends a Restart button appears. The backtick key toggles the console. The View and Console buttons at the top do the same by touch. Engine log lines go to the console prefixed `engine:`.
 
 The harness acts on events (the engine never does): `give_item` fills an inventory that ink reads back through the bound `inventory_count`, and `spend` takes coin from the player and mirrors it to the ink variable. `roll(sides)` is bound without `lookaheadSafe` (dice are a side effect), `player_name()` and `inventory_count(item)` with it. Trust has a per-stat number format (one decimal, not for Tobin).
 
@@ -677,6 +677,22 @@ The harness acts on events (the engine never does): `give_item` fills an invento
 `ink/main.ink` is "The Lantern Pass", a short story that uses the engine's features. Three NPCs (`varga`, `ilse`, `tobin`) have `sanity`, `tiredness`, `mood`, `trust` (a float, an int for Tobin), `faction` (string), `is_injured` (bool) and `stance` (an enum). The player has `grit`, `wits`, `charm`, `coin` and `hp`. It covers combined metrics, `chance()` flavor, `stat_text`, `stat_text_of` and `fmt` in every mode, glue across a stat call and across an `emit`, `speak()` and `# speaker:` tags, requirements of every kind, styles, effects and point markers, events with 0 to 3 arguments, the bound functions, and two endings.
 
 `ink/debug.ink` holds the older test scenes. Reach the menu with `divert debug_menu`. It has a guard chat, a gate exchange (two speakers, a tag speaker, styles spanning lines), an open rumor (an `emit` before a glue line and a style left open over a choice, for save and load), odd requirements (mismatch, unreadable, missing stat, no entity, two `requires` tags), a health check, a coverage lab (`has_stat`, the `fmt` aliases and an unknown `fmt` mode that logs), and an unsafe function lab (`roll(6)` in choice text, which fails: the raw panel shows the line built before the failure and the error).
+
+### Android
+
+The `android` module needs the Android SDK (`sdk.dir` in `local.properties`, or `ANDROID_HOME`). Without it the module is left out of the build, and `-PskipAndroid` leaves it out on purpose. JitPack builds only `:core`.
+
+In Android Studio, open the project, pick the `android` run configuration and start an emulator or device. From the command line:
+
+```
+./gradlew :android:assembleDebug
+./gradlew :android:installDebug
+./gradlew :android:run
+```
+
+`installDebug` installs the app (`com.github.halfdeadgames.hdgife.harness`) and `run` starts it with adb. The layout stacks the panels in portrait and puts them side by side in landscape. The View button replaces F2 and the Console button replaces the backtick key; the console has a Submit button. When the app is paused it saves the story to `autosave.json` in the app's files and restores it on the next start (the lines are not part of a save, so only the choices show).
+
+By default the harness compiles `ink/main.ink` on the device at startup, which is what a game with mods would do. To ship the story precompiled instead, build with `-PprecompiledInk` (for example `./gradlew -PprecompiledInk :android:installDebug`). `:harness:compileInk` writes `ink/main.ink.json` and the harness loads it when no `extra/` files exist. The log line `Story ready in ... ms` says which path ran.
 
 ### UI test
 

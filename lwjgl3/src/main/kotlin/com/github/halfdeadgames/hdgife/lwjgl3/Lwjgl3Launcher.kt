@@ -4,6 +4,7 @@ package com.github.halfdeadgames.hdgife.lwjgl3
 
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration
+import com.github.halfdeadgames.hdgife.harness.TestGame
 
 /** Launches the desktop (LWJGL3) application. */
 fun main() {

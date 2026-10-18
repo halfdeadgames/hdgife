@@ -1,4 +1,4 @@
-package com.github.halfdeadgames.hdgife.lwjgl3
+package com.github.halfdeadgames.hdgife.harness
 
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.g2d.BitmapFont

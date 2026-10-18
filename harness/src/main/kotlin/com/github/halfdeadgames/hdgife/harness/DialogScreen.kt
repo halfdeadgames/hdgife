@@ -1,4 +1,4 @@
-package com.github.halfdeadgames.hdgife.lwjgl3
+package com.github.halfdeadgames.hdgife.harness
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ktx.app.KtxInputAdapter
 import ktx.app.KtxScreen
+import ktx.app.Platform
 import ktx.app.clearScreen
 import ktx.async.KtxAsync
 import ktx.log.logger
@@ -39,6 +40,9 @@ private val log = logger<DialogScreen>()
 
 /** Ink variables the harness watches from the start. Their latest value is in the info line under the panels. */
 private val WATCHED = listOf("suspicion", "door_open", "player_coin")
+
+/** Where a phone run keeps the story between launches. Written in [DialogScreen.pause], the one place Android promises. */
+private const val AUTOSAVE = "autosave.json"
 
 /** What `save` keeps: the engine's state string and the step that was on screen, so `load` can show it again. */
 private class Snapshot(val state: String, val step: DialogStep, val number: Int)
@@ -57,7 +61,12 @@ class DialogScreen(
     private val skin = Skin(Gdx.files.internal("ui/uiskin.json"))
     private val consoleSkin = Skin(Gdx.files.classpath("default_skin/uiskin.json"))
     private val mono: BitmapFont
-    val stage = Stage(ScreenViewport())
+    // On a phone one pixel is tiny. Dividing by the density (dpi / 160) makes the stage units about dp. On the desktop
+    // the stage stays one unit per pixel, as before.
+    private val mobile = Platform.isMobile
+    private val uiScale = if (mobile) Gdx.graphics.density.coerceAtLeast(1f) else 1f
+    private val screenViewport = ScreenViewport().apply { unitsPerPixel = 1f / uiScale }
+    val stage = Stage(screenViewport)
     private val console: GUIConsole
     private val raw: RawPanel
     private val rendered: RenderedPanel
@@ -65,6 +74,11 @@ class DialogScreen(
     val statusLabel: Label
     val infoLabel: Label
     val restartButton: TextButton
+
+    /** The touch way in to what the keyboard does on the desktop: F2 for the layout, backtick for the console. */
+    val viewButton: TextButton
+    val consoleButton: TextButton
+    private val toolbar = Table()
 
     private var lastStep: DialogStep? = null
     private var stepNumber = 0
@@ -101,16 +115,21 @@ class DialogScreen(
 
         raw = RawPanel(skin, mono)
         rendered = RenderedPanel(skin, ::choose)
-        statusLabel = scene2d.label("")
-        infoLabel = scene2d.label("").apply { color.set(0.62f, 0.62f, 0.62f, 1f) }
+        statusLabel = scene2d.label("").apply { wrap = true }
+        infoLabel = scene2d.label("").apply { wrap = true; color.set(0.62f, 0.62f, 0.62f, 1f) }
         restartButton = scene2d.textButton("Restart").apply { onChange { restart() } }
+        viewButton = scene2d.textButton("View").apply { onChange { setViewMode(null) } }
+        consoleButton = scene2d.textButton("Console").apply { onChange { toggleConsole() } }
+        toolbar.add(viewButton).minWidth(96f).minHeight(if (mobile) 40f else 24f).padRight(8f)
+        toolbar.add(consoleButton).minWidth(96f).minHeight(if (mobile) 40f else 24f)
 
         val root = Table().apply {
             setFillParent(true)
             pad(8f)
+            add(toolbar).left().padBottom(4f).row()
             add(panelRow).grow().row()
-            add(infoLabel).left().padTop(4f).row()
-            add(statusLabel).left().padTop(2f).row()
+            add(infoLabel).left().growX().padTop(4f).row()
+            add(statusLabel).left().growX().padTop(2f).row()
             add(restartButton).left().padTop(4f)
         }
         stage.addActor(root)
@@ -118,10 +137,17 @@ class DialogScreen(
         applyViewMode()
 
         // the console needs fonts and drawables that uiskin.json lacks, so it gets its bundled skin
+        // (its stage counts in pixels, so on a phone the font is scaled up instead)
+        if (mobile) consoleSkin.getFont("default-font").data.setScale(uiScale)
         console = GUIConsole(consoleSkin, false, Input.Keys.GRAVE)
+        // a phone has no Enter key you can count on, so the console gets a Submit button
+        if (mobile) console.enableSubmitButton(true)
         console.setCommandExecutor(DialogCommands(this))
         console.isVisible = false
-        say("Console ready. Type help. F2 changes the layout.")
+        say(
+            if (mobile) "Console ready. Type help. The View button changes the layout."
+            else "Console ready. Type help. F2 changes the layout.",
+        )
 
         // the engine's warnings go to the console too, next to wherever the game already sent them
         val engineLog = manager.log
@@ -186,13 +212,72 @@ class DialogScreen(
             }
         }
         Gdx.input.inputProcessor = InputMultiplexer(console.inputProcessor, keys, stage)
-        if (lastStep == null) advance()
+        if (lastStep == null && !restoreAutosave()) advance()
     }
 
     override fun resize(width: Int, height: Int) {
         stage.viewport.update(width, height, true)
         console.refresh()
+        // portrait stacks the two panels, landscape puts them side by side
+        if (stacked != isPortrait()) applyViewMode()
+        if (mobile) placeConsole(width, height)
     }
+
+    /**
+     * Android calls this when the app goes to the background, and it may kill the process afterwards, so this is where
+     * a phone run saves its story. The GL side needs nothing here: when the context is lost and made again, libGDX
+     * reloads the managed textures and shaders (the skins, fonts and both stages' batches) by itself. The harness
+     * creates no FrameBuffers or Pixmap-backed textures, which would be the things to rebuild in [resume].
+     */
+    override fun pause() {
+        log.info { "pause" }
+        if (mobile && lastStep != null) {
+            try {
+                // write aside and move over, so a process killed in the middle never leaves a half-written save
+                val temp = Gdx.files.local("$AUTOSAVE.tmp")
+                temp.writeString(manager.saveState(), false, "UTF-8")
+                temp.moveTo(Gdx.files.local(AUTOSAVE))
+            } catch (e: Exception) {
+                log.error(e) { "Autosave failed" }
+            }
+        }
+    }
+
+    override fun resume() {
+        log.info { "resume" }
+    }
+
+    /** Brings back the story saved by [pause], if there is one. The lines are not part of a save, so only the choices show. */
+    private fun restoreAutosave(): Boolean {
+        val file = Gdx.files.local(AUTOSAVE)
+        if (!mobile || !file.exists()) return false
+        try {
+            manager.loadState(file.readString("UTF-8"))
+        } catch (e: Exception) {
+            log.error(e) { "Autosave could not be loaded" }
+            file.delete()
+            return false
+        }
+        val step = readNext() ?: return true
+        showStep(step, "restored from the autosave: the lines are not part of a save, so only the choices and open styles are shown")
+        say("Restored the story saved when the app was last paused. Stat values are not part of it.")
+        return true
+    }
+
+    /** Console size and place on a phone, in pixels: under the toolbar, in the top part of the screen, clear of the soft keyboard. */
+    private fun placeConsole(width: Int, height: Int) {
+        val toolbarPixels = ((toolbar.prefHeight + 16f) / screenViewport.unitsPerPixel).toInt()
+        val consoleHeight = height * 45 / 100
+        console.setSize(width, consoleHeight)
+        console.setPosition(0, height - toolbarPixels - consoleHeight)
+    }
+
+    private fun toggleConsole() {
+        console.isVisible = !console.isVisible
+        if (mobile) Gdx.input.setOnscreenKeyboardVisible(console.isVisible)
+    }
+
+    private fun isPortrait() = stage.viewport.worldWidth < stage.viewport.worldHeight
 
     override fun render(delta: Float) {
         clearScreen(red = 0.1f, green = 0.1f, blue = 0.12f)
@@ -257,10 +342,17 @@ class DialogScreen(
         restartButton.isVisible = step.isEnded
     }
 
+    /** Whether the panels are stacked (portrait) or side by side. Set by [applyViewMode]. */
+    private var stacked = false
+
     private fun applyViewMode() {
         panelRow.clearChildren()
+        stacked = isPortrait()
         when (viewMode) {
-            ViewMode.SPLIT -> {
+            ViewMode.SPLIT -> if (stacked) {
+                panelRow.add(raw).grow().uniform().padBottom(8f).row()
+                panelRow.add(rendered).grow().uniform()
+            } else {
                 panelRow.add(raw).grow().uniform().padRight(8f)
                 panelRow.add(rendered).grow().uniform()
             }
@@ -272,7 +364,7 @@ class DialogScreen(
 
     private fun refreshInfo() {
         infoLabel.setText(
-            "view: ${viewMode.name.lowercase()} (F2)   choices: ${choiceMode.name.lowercase()}   " +
+            "view: ${viewMode.name.lowercase()} (${if (mobile) "View button" else "F2"})   choices: ${choiceMode.name.lowercase()}   " +
                 watched.entries.joinToString("  ") { "${it.key}=${it.value}" },
         )
     }

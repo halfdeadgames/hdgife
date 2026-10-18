@@ -5,4 +5,20 @@ plugins {
 // A list of which subprojects to load as part of the same larger project.
 // You can remove Strings from the list and reload the Gradle project
 // if you want to temporarily disable a subproject.
-include 'lwjgl3', 'core'
+include 'core', 'harness', 'lwjgl3'
+
+// The android test module needs the Android SDK and the Android Gradle plugin. It is only included when the SDK is
+// found (sdk.dir in local.properties, or ANDROID_HOME / ANDROID_SDK_ROOT), so a machine without it (JitPack, CI) can
+// still build core. Pass -PskipAndroid to leave it out even when the SDK is there.
+def androidSdkFound = {
+  def local = new File(settingsDir, 'local.properties')
+  if (local.exists()) {
+    def props = new Properties()
+    local.withInputStream { props.load(it) }
+    if (props.getProperty('sdk.dir')) return true
+  }
+  return System.getenv('ANDROID_HOME') != null || System.getenv('ANDROID_SDK_ROOT') != null
+}
+def includeAndroid = !settings.startParameter.projectProperties.containsKey('skipAndroid') && androidSdkFound()
+gradle.ext.includeAndroid = includeAndroid
+if (includeAndroid) include 'android'

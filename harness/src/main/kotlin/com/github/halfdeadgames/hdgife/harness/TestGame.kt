@@ -1,7 +1,8 @@
-package com.github.halfdeadgames.hdgife.lwjgl3
+package com.github.halfdeadgames.hdgife.harness
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.files.FileHandle
+import com.badlogic.gdx.utils.TimeUtils
 import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
 import com.github.halfdeadgames.hdgife.compiler.compile
 import com.bladecoder.ink.runtime.HdgifeStory
@@ -21,11 +22,23 @@ private val logger = logger<TestGame>()
  * The harness's own load policy: ink/main.ink plus any .ink files under the local extra/ folder, sorted by
  * path. The game (here, the harness) decides which sources to feed and in what order; the engine just compiles
  * the list as given. Blocking, so call it off the render thread.
+ *
+ * One exception, for the Android build made with `-PprecompiledInk`: when a shipped ink/main.ink.json exists and there
+ * are no extra files, that story is loaded without compiling. Any extra file makes the harness compile as usual.
  */
 fun compileHarnessStory(compiler: InkCompilerService): HdgifeStory {
     val extra = Gdx.files.local("extra/")
     val extras = if (extra.isDirectory) inkFiles(extra).sortedBy { it.path() } else emptyList()
-    return compiler.compile(Gdx.files.internal("ink/main.ink"), extras)
+    val precompiled = Gdx.files.internal("ink/main.ink.json")
+    val usePrecompiled = extras.isEmpty() && precompiled.exists()
+    val started = TimeUtils.millis()
+    val story = if (usePrecompiled) {
+        compiler.loadCompiled(precompiled.readString("UTF-8"))
+    } else {
+        compiler.compile(Gdx.files.internal("ink/main.ink"), extras)
+    }
+    logger.info { "Story ready in ${TimeUtils.timeSinceMillis(started)} ms (${if (usePrecompiled) "loaded precompiled json" else "compiled ink"})" }
+    return story
 }
 
 private fun inkFiles(dir: FileHandle): List<FileHandle> =

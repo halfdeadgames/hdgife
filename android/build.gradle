@@ -1,0 +1,121 @@
+// Android test module for the harness. It is never published and not part of the JitPack build.
+// Based on the gdx-liftoff android template, adapted to Android Gradle plugin 9 (built-in Kotlin, no kotlin-android plugin).
+apply plugin: 'com.android.application'
+
+android {
+  namespace = 'com.github.halfdeadgames.hdgife.android'
+  compileSdk = androidSdkVersion.toInteger()
+  sourceSets {
+    main {
+      // The same root assets/ folder the desktop module runs from. Kotlin sources use the default src/main/kotlin.
+      manifest.srcFile 'AndroidManifest.xml'
+      res.directories.add('res')
+      assets.directories.add('../assets')
+      jniLibs.directories.add('libs')
+    }
+  }
+  packaging {
+    resources {
+      excludes += ['META-INF/robovm/ios/robovm.xml', 'META-INF/DEPENDENCIES.txt', 'META-INF/DEPENDENCIES',
+                   'META-INF/dependencies.txt', '**/*.gwt.xml']
+      pickFirsts += ['META-INF/LICENSE.txt', 'META-INF/LICENSE', 'META-INF/license.txt', 'META-INF/LGPL2.1',
+                     'META-INF/NOTICE.txt', 'META-INF/NOTICE', 'META-INF/notice.txt']
+    }
+  }
+  defaultConfig {
+    applicationId = 'com.github.halfdeadgames.hdgife.harness'
+    // 21 is the libGDX / liftoff default. Core uses no java.nio. The ink compiler only touches java.nio.file in a file
+    // handler class the engine never uses (it gives the compiler its own), so runtime compiling works below API 26 too.
+    minSdk = 21
+    targetSdk = androidSdkVersion.toInteger()
+    versionCode = 1
+    versionName = project.version.toString()
+  }
+  compileOptions {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+    // blade-ink and core use Java 8+ library APIs that old devices lack
+    coreLibraryDesugaringEnabled = true
+  }
+  buildTypes {
+    release {
+      // a test harness: no shrinking, the console finds its commands by reflection
+      minifyEnabled = false
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+    }
+  }
+}
+
+repositories {
+  // needed for AAPT2, may be needed for other tools
+  google()
+}
+
+configurations { natives }
+
+dependencies {
+  coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:$androidDesugaringLibraryVersion"
+  implementation project(':harness')
+  implementation "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
+  natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
+  natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
+  natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86"
+  natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"
+}
+
+// Precompiled ink. By default the harness compiles ink/main.ink on the device at startup (runtime compile, the case
+// mods need). With -PprecompiledInk the story is compiled at build time by :harness:compileInk and shipped as
+// ink/main.ink.json, which the harness prefers when no extra/ mods are present.
+if (project.hasProperty('precompiledInk')) {
+  android.sourceSets.main.assets.directories.add(project(':harness').layout.buildDirectory.dir('precompiled').get().asFile.absolutePath)
+  tasks.configureEach { task ->
+    if (task.name.matches('merge.*Assets')) task.dependsOn ':harness:compileInk'
+  }
+}
+
+// Called every time gradle gets executed, takes the native dependencies of the natives configuration, and extracts
+// them to the proper libs/ folders so they get packed with the APK.
+tasks.register('copyAndroidNatives') {
+  doFirst {
+    file("libs/armeabi-v7a/").mkdirs()
+    file("libs/arm64-v8a/").mkdirs()
+    file("libs/x86_64/").mkdirs()
+    file("libs/x86/").mkdirs()
+
+    configurations.natives.copy().files.each { jar ->
+      def outputDir = null
+      if (jar.name.endsWith("natives-armeabi-v7a.jar")) outputDir = file("libs/armeabi-v7a")
+      if (jar.name.endsWith("natives-arm64-v8a.jar")) outputDir = file("libs/arm64-v8a")
+      if (jar.name.endsWith("natives-x86_64.jar")) outputDir = file("libs/x86_64")
+      if (jar.name.endsWith("natives-x86.jar")) outputDir = file("libs/x86")
+      if (outputDir != null) {
+        copy {
+          from zipTree(jar)
+          into outputDir
+          include "*.so"
+        }
+      }
+    }
+  }
+}
+
+tasks.matching { it.name.contains("merge") && it.name.contains("JniLibFolders") }.configureEach { packageTask ->
+  packageTask.dependsOn 'copyAndroidNatives'
+}
+
+// Starts the installed harness on the connected device or emulator: ./gradlew :android:run
+tasks.register('run', Exec) {
+  def path
+  def localProperties = project.file("../local.properties")
+  if (localProperties.exists()) {
+    Properties properties = new Properties()
+    localProperties.withInputStream { instr -> properties.load(instr) }
+    path = properties.getProperty('sdk.dir') ?: System.env.ANDROID_SDK_ROOT
+  } else {
+    path = System.env.ANDROID_SDK_ROOT
+  }
+  def adb = path + "/platform-tools/adb"
+  commandLine adb, 'shell', 'am', 'start', '-n', 'com.github.halfdeadgames.hdgife.harness/com.github.halfdeadgames.hdgife.android.AndroidLauncher'
+}
+
+eclipse.project.name = appName + "-android"

@@ -13,6 +13,7 @@ import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.utils.BufferUtils
 import com.badlogic.gdx.utils.ScreenUtils
+import com.github.halfdeadgames.hdgife.harness.*
 import kotlinx.coroutines.launch
 import ktx.async.KtxAsync
 import ktx.async.skipFrame

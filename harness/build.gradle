@@ -1,0 +1,29 @@
+// The harness: the dialog test UI that lwjgl3 (desktop) and android both run. It is never published.
+// Everything here has to be platform agnostic, because the same code runs on the desktop and on Android.
+eclipse.project.name = appName + '-harness'
+
+dependencies {
+  api project(':core')
+  api "io.github.quillraven.libktx:ktx-app:$ktxVersion"
+  api "io.github.quillraven.libktx:ktx-async:$ktxVersion"
+  api "io.github.quillraven.libktx:ktx-log:$ktxVersion"
+  api "io.github.quillraven.libktx:ktx-scene2d:$ktxVersion"
+  api "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinxCoroutinesVersion"
+  api "com.github.tommyettinger:sjInGameConsole:$inGameConsoleVersion"
+}
+
+// Precompiled story. `:harness:compileInk` compiles assets/ink/main.ink on the JVM (the same compiler and the same
+// bundled libraries as at runtime) and writes the story JSON to build/precompiled/ink/main.ink.json. The android
+// module ships that file when built with -PprecompiledInk, and the harness then loads it instead of compiling.
+def precompiledDir = layout.buildDirectory.dir('precompiled')
+tasks.register('compileInk', JavaExec) {
+  group = 'build'
+  description = 'Compiles assets/ink/main.ink to JSON for the android harness (see -PprecompiledInk).'
+  classpath = sourceSets.main.runtimeClasspath
+  mainClass = 'com.github.halfdeadgames.hdgife.harness.CompileInk'
+  def inkDir = rootProject.file('assets/ink')
+  def out = precompiledDir.map { it.file('ink/main.ink.json') }
+  inputs.dir(inkDir)
+  outputs.file(out)
+  args inkDir.absolutePath, out.get().asFile.absolutePath
+}

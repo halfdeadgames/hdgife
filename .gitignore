@@ -6,6 +6,7 @@ gradle-app.setting
 /core/build/
 /lwjgl2/build/
 /lwjgl3/build/
+/harness/build/
 /html/build/
 /teavm/build/
 /ios/build/
@@ -153,7 +154,7 @@ Thumbs.db
 *.*#
 *#*#
 /.kotlin/
-/lwjgl3/assets/assets.txt
+/assets/assets.txt
 
 ## Special cases:
 
@@ -163,3 +164,6 @@ Thumbs.db
 ## You should delete or comment out the next line if you have configuration in a different resource-config.json .
 **/resource-config.json
 
+
+## Android test module: natives extracted by copyAndroidNatives
+/android/libs/

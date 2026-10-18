@@ -3,6 +3,7 @@ package com.github.halfdeadgames.hdgife.lwjgl3
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton
+import com.github.halfdeadgames.hdgife.harness.*
 import ktx.async.skipFrame
 
 /*
