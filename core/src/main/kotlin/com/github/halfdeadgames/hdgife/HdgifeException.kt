@@ -12,6 +12,6 @@ package com.github.halfdeadgames.hdgife
  * - `StoryPathException`: `StoryManager.beginScene` was given a path ink cannot find.
  *
  * Mistakes in how the API is called (a bad argument, an unknown choice index, an undeclared variable) are not
- * [HdgifeException]s. Those are `IllegalArgumentException` or `IllegalStateException`, as usual in Kotlin.
+ * [HdgifeException]s. Those are plain `IllegalArgumentException`.
  */
 public abstract class HdgifeException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)

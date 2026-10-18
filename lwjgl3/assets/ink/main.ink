@@ -1,5 +1,5 @@
 // THE LANTERN PASS: a short showcase story for the hdgife harness. A storm, a toll lodge and three people who
-// all want something. It uses every feature of the engine; the coverage matrix is in the README.
+// all want something. It uses every feature of the engine.
 //
 // Cast (stats live in the game, ink reads them with stat(), stat_of(), has_stat(), stat_text()):
 //   varga  customs sergeant   sanity tiredness mood (0..100), trust (float), faction (string), is_injured (bool), stance (enum)
@@ -37,7 +37,7 @@ VAR player_coin = 0
 === function inventory_count(item) ===
 ~ return 0
 
-// Combined metrics. avg3, blend, invert, scale100 and clamp come from hdgife.ink.
+// Combined metrics. avg3, blend, invert, scale100 and clamp come from hdgife_util.ink.
 === function strain() ===
 ~ return avg3(stat("tiredness"), invert(stat("mood")), invert(stat("sanity")))
 

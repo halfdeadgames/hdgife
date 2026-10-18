@@ -658,7 +658,7 @@ public class StoryManager private constructor(
      * Starts the story over: ink state back to the beginning (variables, position, visit counts, random seed and
      * [speaker]), open styles closed, pending events dropped. Bindings, observers and settings stay. It does not
      * recompile. To run different sources, let your game choose and order them, compile with `InkCompilerService`,
-     * and build a new `StoryManager` (or assign [story]) and optionally [loadState] a saved state.
+     * and build a new `StoryManager` (or call [replaceStory]) and optionally [loadState] a saved state.
      */
     public fun reset() {
         story.resetState()
