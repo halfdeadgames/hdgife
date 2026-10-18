@@ -22,7 +22,11 @@ import com.github.halfdeadgames.hdgife.story.DialogStep
 import com.github.halfdeadgames.hdgife.story.TextSpan
 import com.github.halfdeadgames.hdgife.story.NumberFormat
 import com.github.halfdeadgames.hdgife.story.Rounding
+import com.github.halfdeadgames.hdgife.story.StoryEvent
 import com.github.halfdeadgames.hdgife.story.StoryManager
+import com.github.halfdeadgames.hdgife.story.Style
+import com.github.halfdeadgames.hdgife.story.TextMarker
+import com.github.halfdeadgames.hdgife.story.VariableObservation
 import com.strongjoshua.console.GUIConsole
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -41,9 +45,13 @@ private val log = logger<DialogScreen>()
 /** How this harness treats choices whose requirements are not met. The engine leaves that to the game. */
 enum class ChoiceMode { HIDE, GREY, SHOW }
 
+/** Style names this harness draws itself. Everything else is an "effect" that the harness only reports. */
+private val DRAWN = setOf("em", "b", "color")
+
 /**
  * Harness-only mapping from engine style names to libGDX color markup. The engine just reports names.
- * `em` and `b` get fixed colors, `color=NAME` uses a libGDX named color, anything else is left unstyled.
+ * `em` and `b` get fixed colors. `color` is resolved here: hex values (`Style.hexColor()` is non-null) become
+ * `[#rrggbbaa]`, anything else is looked up as a libGDX named color. Effects (shake, bounce...) are not drawn.
  */
 private fun styleColor(span: TextSpan): String? {
     var result: String? = null
@@ -52,12 +60,42 @@ private fun styleColor(span: TextSpan): String? {
             "em" -> result = "#ffd27f"
             "b" -> result = "#ffffff"
             "color" -> {
-                val name = style.value?.uppercase()
-                if (name != null && Colors.get(name) != null) result = name
+                val hex = style.hexColor()
+                if (hex != null) {
+                    result = "#%08x".format(hex)
+                } else {
+                    val name = style.value?.uppercase()
+                    if (name != null && Colors.get(name) != null) result = name
+                }
             }
         }
     }
     return result
+}
+
+private fun show(value: Any?): String = if (value is Float && value % 1f == 0f) value.toInt().toString() else value.toString()
+
+private fun describeStyle(style: Style) = buildString {
+    append(style.name)
+    style.value?.let { append('=').append(it) }
+    for ((k, v) in style.params) append(' ').append(k).append('=').append(v)
+}
+
+private fun describeMarker(marker: TextMarker) = buildString {
+    append('<').append(marker.name)
+    marker.value?.let { append('=').append(it) }
+    for ((k, v) in marker.params) append(' ').append(k).append('=').append(v)
+    append("/> at ").append(marker.offset)
+}
+
+/** What the harness does not draw: effect spans and point markers. It only reports them. */
+private fun effectsNote(line: DialogLine): String? {
+    val parts = ArrayList<String>()
+    for (span in line.spans) {
+        for (style in span.styles) if (style.name !in DRAWN) parts += "${describeStyle(style)} on \"${span.text}\""
+    }
+    for (marker in line.markers) parts += describeMarker(marker)
+    return if (parts.isEmpty()) null else "fx: " + parts.joinToString("; ")
 }
 
 /** Spans to libGDX markup. A literal `[` is doubled so it isn't read as markup. */
@@ -74,8 +112,9 @@ private fun toMarkup(spans: List<TextSpan>): String {
 
 private fun describe(r: ChoiceRequirement): String {
     if (!r.valid) return "bad requirement '${r.raw}'"
-    val have = r.actual?.let { "have ${it.toString().removeSuffix(".0")}" } ?: "stat missing"
-    return "${r.entity ?: "?"}.${r.stat} ${r.op?.symbol} ${r.target.toString().removeSuffix(".0")} ($have)"
+    val have = r.actual?.let { "have ${show(it)}" } ?: "stat missing"
+    val why = if (r.mismatch) ", type mismatch" else ""
+    return "${r.entity ?: "?"}.${r.stat} ${r.op?.symbol} ${show(r.target)} ($have$why)"
 }
 
 private fun Actor.onChange(block: () -> Unit) {
@@ -107,6 +146,10 @@ class DialogScreen(
     private var lastStep: DialogStep? = null
     private var choiceMode = ChoiceMode.GREY
     private var savedState: String? = null
+    private val observations = HashMap<String, VariableObservation>()
+
+    /** The harness's own game state, driven by ink: `emit("give_item", x)` adds to it, ink reads it back. */
+    private val inventory = HashMap<String, Int>()
 
     init {
         // ktx-scene2d builders read the default skin
@@ -132,6 +175,17 @@ class DialogScreen(
         console.setCommandExecutor(DialogCommands(this))
         console.isVisible = false
         console.log("Console ready. Type help.")
+
+        // The engine reports events and never acts on them. This is the harness acting on them.
+        manager.onEvent = { event ->
+            console.log("event ${event.name}(${event.args.joinToString { show(it) }}) before line ${event.lineIndex}")
+            if (event.name == "give_item") {
+                val item = event.args.firstOrNull()?.toString()
+                if (item != null) inventory.merge(item, 1, Int::plus)
+            }
+        }
+        // And the other direction: ink asks the game. Safe because it only reads.
+        manager.bindFunction("inventory_count", lookaheadSafe = true) { args -> inventory[args.string(0)] ?: 0 }
     }
 
     override fun show() {
@@ -190,10 +244,21 @@ class DialogScreen(
         val prefix = line.speaker?.let { "[#9ecbff]${it.replace("[", "[[")}:[] " } ?: ""
         addLine(prefix + toMarkup(line.spans))
         if (!line.tags.isEmpty) addLine("# " + line.tags.raw.joinToString(", "), dim)
+        effectsNote(line)?.let { addLine(it, dim) }
+    }
+
+    private fun addEvent(event: StoryEvent) {
+        addLine("! event ${event.name}(${event.args.joinToString { show(it) }})", Color.GOLDENROD)
     }
 
     private fun showStep(step: DialogStep) {
-        for (line in step.lines) addDialogLine(line)
+        var next = 0
+        for ((index, line) in step.lines.withIndex()) {
+            while (next < step.events.size && step.events[next].lineIndex <= index) addEvent(step.events[next++])
+            addDialogLine(line)
+        }
+        while (next < step.events.size) addEvent(step.events[next++])
+        if (step.openStyles.isNotEmpty()) addLine("(still open: ${step.openStyles.joinToString { describeStyle(it) }})", dim)
         lastStep = step
         buildChoices(step)
         statusLabel.setText(if (step.ended) "Story ended." else "")
@@ -221,20 +286,38 @@ class DialogScreen(
 
     override fun log(message: String) = console.log(message)
 
-    override fun listVariables(): List<String> = manager.story.variablesState.toList()
+    override fun listVariables(): List<String> = manager.variableNames
 
-    override fun getVariable(name: String): Any? = manager.story.variablesState.get(name)
+    override fun getVariable(name: String): Any? = manager.variable(name)
 
-    override fun setVariable(name: String, value: Any) {
-        manager.story.variablesState.set(name, value)
+    override fun setVariable(name: String, value: Any) = manager.setVariable(name, value)
+
+    override fun observe(name: String) {
+        if (name in observations) {
+            console.log("Already observing $name")
+            return
+        }
+        try {
+            observations[name] = manager.observe(name) { old, new -> console.log("$name: $old -> $new") }
+            console.log("Observing $name")
+        } catch (e: IllegalArgumentException) {
+            console.log(e.message ?: "Cannot observe $name")
+        }
     }
 
-    override fun setStat(entity: String, stat: String, value: Float) {
+    override fun unobserve(name: String) {
+        val observation = observations.remove(name)
+        if (observation == null) console.log("Not observing $name") else manager.unobserve(observation)
+        if (observation != null) console.log("Stopped observing $name")
+    }
+
+    override fun setStat(entity: String, stat: String, value: Any) {
         val name = applyStat(manager, provider, entity, stat, value)
-        console.log("$name = ${manager.story.variablesState.get(name)}")
+        val synced = manager.variable(name)
+        console.log(if (synced == null) "$entity.$stat = $value (no ink variable $name)" else "$name = $synced")
     }
 
-    override fun setNpcStat(entity: String, stat: String, value: Float) {
+    override fun setNpcStat(entity: String, stat: String, value: Any) {
         provider.setStat(entity, stat, value)
         console.log("$entity.$stat = $value")
     }
@@ -327,7 +410,8 @@ class DialogScreen(
     }
 
     override fun restart() {
-        manager.story.resetState()
+        manager.reset()
+        inventory.clear()
         resetLog()
     }
 

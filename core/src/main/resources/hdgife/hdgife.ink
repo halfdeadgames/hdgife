@@ -1,11 +1,15 @@
 // hdgife helper library. Add `INCLUDE hdgife.ink` at the top of your main ink file.
 //
-// The stat and number-format functions are EXTERNAL: StoryManager binds them to your
-// NarrativeStateProvider and number format settings. The ink bodies below are fallbacks that run when
-// nothing is bound (no StoryManager), so a story using this library still runs on its own:
-// stats read as 0 and has_stat is false.
+// The stat, number-format and event functions are EXTERNAL: StoryManager binds them to your
+// NarrativeStateProvider, number format settings and event channel. The ink bodies below are fallbacks that run
+// when nothing is bound (no StoryManager), so a story using this library still runs on its own:
+// stats read as 0, has_stat is false and emit does nothing.
 //
-// stat and stat_of always give a float, so ink math does not depend on whether a value is whole.
+// stat and stat_of give the type the game stores: an int stat is an ink int, a float stat a float, and a
+// string, bool or enum stat a string or bool. Missing stats give 0.0. Ink integer division truncates, so use
+// "/ 2.0" when averaging whole numbers.
+//
+// This file contains no scenes and no story content. It is a helper library only.
 
 // All parameters and temps in this file start with hdg_, so your story can declare VARs like n, x or name.
 // Don't declare your own knots or variables starting with hdg_ or hdgife_.
@@ -21,6 +25,27 @@ EXTERNAL stat_text(hdg_name)
 EXTERNAL stat_text_of(hdg_entity, hdg_name)
 EXTERNAL fmt(hdg_x, hdg_decimals, hdg_mode)
 EXTERNAL speak(hdg_name)
+EXTERNAL emit0(hdg_name)
+EXTERNAL emit(hdg_name, hdg_a)
+EXTERNAL emit2(hdg_name, hdg_a, hdg_b)
+EXTERNAL emit3(hdg_name, hdg_a, hdg_b, hdg_c)
+
+// Events for the game. Use as statements: ~ emit("give_item", "sword")
+// The name and arguments come back, in order, on DialogStep.events and StoryManager.onEvent. The engine does
+// nothing with them, the game decides. emit0 takes no argument, emit one, emit2 two, emit3 three (ink has no
+// overloads). Each call is reported once: StoryManager binds them so ink does not run them during glue lookahead.
+// Don't call them inside "{...}" strings or choice text. Without a StoryManager they do nothing.
+=== function emit0(hdg_name) ===
+~ return 0
+
+=== function emit(hdg_name, hdg_a) ===
+~ return 0
+
+=== function emit2(hdg_name, hdg_a, hdg_b) ===
+~ return 0
+
+=== function emit3(hdg_name, hdg_a, hdg_b, hdg_c) ===
+~ return 0
 
 // Stat of the current speaker (see StoryManager.beginScene). 0 if missing.
 === function stat(hdg_name) ===

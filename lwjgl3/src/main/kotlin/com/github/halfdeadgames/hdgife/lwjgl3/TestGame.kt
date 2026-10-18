@@ -17,13 +17,14 @@ import ktx.log.logger
 private val logger = logger<TestGame>()
 
 /**
- * The harness's own load policy: ink/main.ink plus any .ink files under the local mods/ folder, sorted by
- * path. The engine just compiles the list in this order. Blocking, so call it off the render thread.
+ * The harness's own load policy: ink/main.ink plus any .ink files under the local extra/ folder, sorted by
+ * path. The game (here, the harness) decides which sources to feed and in what order; the engine just compiles
+ * the list as given. Blocking, so call it off the render thread.
  */
 fun compileHarnessStory(compiler: InkCompilerService): Story {
-    val mods = Gdx.files.local("mods/")
+    val extra = Gdx.files.local("extra/")
     val extras = ArrayList<FileHandle>()
-    if (mods.exists() && mods.isDirectory) collectInk(mods, extras)
+    if (extra.exists() && extra.isDirectory) collectInk(extra, extras)
     extras.sortBy { it.path() }
     return compiler.compile(Gdx.files.internal("ink/main.ink"), extras)
 }
@@ -45,6 +46,11 @@ class TestGame : KtxGame<KtxScreen>() {
             setStat("guard", "strength", 12f)
             setStat("merchant", "mood", 70f)
             setStat("merchant", "strength", 4f)
+            setStat("guard", "faction", "crown")          // a string stat
+            setStat("merchant", "faction", "guild")
+            setStat("player", "faction", "rebels")
+            setStat("player", "is_injured", false)        // a boolean stat
+            setStat("player", "rank", 2)                  // an int stat
         }
         KtxAsync.launch {
             try {

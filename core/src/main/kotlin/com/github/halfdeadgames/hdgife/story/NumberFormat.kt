@@ -50,10 +50,25 @@ data class NumberFormat(
     }
 
     /** Formats [value]. NaN and infinities give `NaN`, `Infinity` and `-Infinity`. */
-    fun format(value: Float): String {
-        if (value.isNaN()) return "NaN"
-        if (value.isInfinite()) return if (value > 0f) "Infinity" else "-Infinity"
-        var number = BigDecimal(value.toString()).setScale(decimals, rounding.mode)
+    fun format(value: Float): String = formatDecimal(value.toString(), value.isNaN(), value.isInfinite(), value > 0f)
+
+    /** Same for a Double, using its shortest decimal form. */
+    fun format(value: Double): String = formatDecimal(value.toString(), value.isNaN(), value.isInfinite(), value > 0.0)
+
+    /** Same for a Long, exactly. */
+    fun format(value: Long): String = formatDecimal(value.toString(), false, false, true)
+
+    /** Formats any [Number]: Int, Short, Byte and Long exactly, the rest through their Double or Float form. */
+    fun format(value: Number): String = when (value) {
+        is Float -> format(value)
+        is Int, is Short, is Byte, is Long -> format(value.toLong())
+        else -> format(value.toDouble())
+    }
+
+    private fun formatDecimal(text: String, nan: Boolean, infinite: Boolean, positive: Boolean): String {
+        if (nan) return "NaN"
+        if (infinite) return if (positive) "Infinity" else "-Infinity"
+        var number = BigDecimal(text).setScale(decimals, rounding.mode)
         if (trimTrailingZeros) {
             number = number.stripTrailingZeros()
             if (number.scale() < 0) number = number.setScale(0)

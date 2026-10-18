@@ -5,27 +5,30 @@ import com.github.halfdeadgames.hdgife.story.Rounding
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.strongjoshua.console.CommandExecutor
 
-/** Mutable stat map for testing. Keys are "entity.stat". */
+/** Mutable stat map for testing. Values can be any type; the engine maps them to ink. Keys are "entity.stat". */
 class MapStateProvider : NarrativeStateProvider {
-    private val stats = HashMap<String, Float>()
+    private val stats = HashMap<String, Any>()
 
-    fun setStat(entityId: String, statName: String, value: Float) {
+    fun setStat(entityId: String, statName: String, value: Any) {
         stats["$entityId.$statName"] = value
     }
 
-    override fun getStat(entityId: String, statName: String): Float = stats["$entityId.$statName"] ?: 0f
-
-    override fun hasStat(entityId: String, statName: String): Boolean = stats.containsKey("$entityId.$statName")
+    override fun getStat(entityId: String, statName: String): Any? = stats["$entityId.$statName"]
 }
 
-/** Sets the stat, syncs it to ink and returns the ink variable name. Whole numbers go in as Int so they print without ".0". */
-fun applyStat(manager: StoryManager, provider: MapStateProvider, entity: String, stat: String, value: Float): String {
+/** Reads console text as the most specific value: whole number, decimal, `true`/`false`, else a string. */
+fun parseValue(text: String): Any =
+    text.toIntOrNull() ?: text.toFloatOrNull() ?: when (text.lowercase()) {
+        "true" -> true
+        "false" -> false
+        else -> text
+    }
+
+/** Sets the stat, syncs it to ink and returns the ink variable name. */
+fun applyStat(manager: StoryManager, provider: MapStateProvider, entity: String, stat: String, value: Any): String {
     provider.setStat(entity, stat, value)
     manager.syncStatsToInk(entity, listOf(stat))
-    val name = StoryManager.defaultVariableName(entity, stat)
-    val variables = manager.story.variablesState
-    if (value % 1f == 0f && variables.get(name) != null) variables.set(name, value.toInt())
-    return name
+    return manager.variableNamer(entity, stat)
 }
 
 /** What the console commands need from the screen. */
@@ -34,8 +37,10 @@ interface DialogControl {
     fun listVariables(): List<String>
     fun getVariable(name: String): Any?
     fun setVariable(name: String, value: Any)
-    fun setStat(entity: String, stat: String, value: Float)
-    fun setNpcStat(entity: String, stat: String, value: Float)
+    fun observe(name: String)
+    fun unobserve(name: String)
+    fun setStat(entity: String, stat: String, value: Any)
+    fun setNpcStat(entity: String, stat: String, value: Any)
     fun talk(knot: String, speaker: String?)
     fun seed(value: Int)
     fun setNumberFormat(decimals: Int, rounding: Rounding)
@@ -56,10 +61,17 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
         if (names.isEmpty()) control.log("No variables") else names.forEach { control.log("$it = ${control.getVariable(it)}") }
     }
 
-    fun get(name: String) {
+    /** Reads one ink variable through the engine's variable API and shows its type. */
+    fun `var`(name: String) {
         val value = control.getVariable(name)
-        control.log(if (value == null) "$name is not a declared variable" else "$name = $value")
+        control.log(if (value == null) "$name is not a declared variable" else "$name = $value (${value.javaClass.simpleName})")
     }
+
+    /** Logs every change of an ink variable, with the old and new value. */
+    fun observe(name: String) = control.observe(name)
+
+    /** Stops logging changes of an ink variable. */
+    fun unobserve(name: String) = control.unobserve(name)
 
     /** Sets the variable using its current type in the story. */
     fun set(name: String, value: String) {
@@ -117,22 +129,14 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
         }
     }
 
-    fun stat(entity: String, stat: String, value: String) {
-        val number = value.toFloatOrNull()
-        if (number == null) control.log("Stat value must be a number") else control.setStat(entity, stat, number)
-    }
+    /** Sets a stat on the provider and syncs it to ink. The value can be a number, `true`/`false` or text. */
+    fun stat(entity: String, stat: String, value: String) = control.setStat(entity, stat, parseValue(value))
 
     /** Shortcut for `stat player hp <value>`. */
-    fun hp(value: String) {
-        val number = value.toFloatOrNull()
-        if (number == null) control.log("HP must be a number") else control.setStat("player", "hp", number)
-    }
+    fun hp(value: String) = control.setStat("player", "hp", parseValue(value))
 
-    /** Sets a stat on the provider only. Ink reads it live, no sync needed. */
-    fun npc(entity: String, stat: String, value: String) {
-        val number = value.toFloatOrNull()
-        if (number == null) control.log("Stat value must be a number") else control.setNpcStat(entity, stat, number)
-    }
+    /** Sets a stat on the provider only. Ink reads it live, no sync needed. The value can be a number, `true`/`false` or text. */
+    fun npc(entity: String, stat: String, value: String) = control.setNpcStat(entity, stat, parseValue(value))
 
     fun talk(knot: String) = control.talk(knot, null)
 

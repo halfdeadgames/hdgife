@@ -4,6 +4,7 @@ import com.badlogic.gdx.files.FileHandle
 import com.bladecoder.ink.compiler.Compiler
 import com.bladecoder.ink.compiler.IFileHandler
 import com.bladecoder.ink.runtime.Error.ErrorType
+import com.bladecoder.ink.runtime.HdgifeStory
 import com.bladecoder.ink.runtime.InkNativePatch
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.HdgifeLog
@@ -11,7 +12,11 @@ import java.io.FileNotFoundException
 
 /**
  * Compiles ink into a [Story]. It compiles what you give it, in the order you give it.
- * Finding mods, load order and threading are the game's job.
+ * Choosing the sources, their order and the thread is the game's job. To run a different set of sources,
+ * compile again and build a new `StoryManager` from the new story.
+ *
+ * The stories it returns are [HdgifeStory]s: plain Blade Ink stories with the lookahead-safe external function
+ * fix. Everything else about them is the normal [Story] API.
  *
  * Every call is plain blocking. Run it on whatever thread or coroutine context you like, but don't use the
  * [Story] from two threads at once.
@@ -55,8 +60,7 @@ class InkCompilerService {
         } catch (e: SourceReadException) {
             throw InkCompileException(listOf(e.message ?: "Cannot read ink source"), e.sourceName, e.cause)
         }
-        story.setAllowExternalFunctionFallbacks(true)
-        return story
+        return finish(story)
     }
 
     /** Compiles [main] as the root, then [extras] in the order given. */
@@ -69,7 +73,7 @@ class InkCompilerService {
     /**
      * Compiles the `.ink` files of [folder]. Paths are compared as text, case-sensitive, with `/` as separator.
      * The root is `main.ink` in the folder if there is one, else the first file in that order.
-     * The rest follow in that order. Control the order with file names (`000_base.ink`, `010_modA.ink`)
+     * The rest follow in that order. Control the order with file names (`000_base.ink`, `010_extra.ink`)
      * or use [compile] with your own list. [recursive] also takes files in subfolders. Throws if there are none.
      */
     fun compileFolder(folder: FileHandle, recursive: Boolean = true): Story {
@@ -89,13 +93,15 @@ class InkCompilerService {
     /** Loads a story from compiled JSON, as made by `story.toJson()`. No compiler work is done. */
     fun loadCompiled(json: String): Story {
         val story = try {
-            Story(json)
+            HdgifeStory(json)
         } catch (e: Exception) {
             throw InkCompileException(listOf("Cannot load compiled story: ${e.message}"), null, e)
         }
-        story.setAllowExternalFunctionFallbacks(true)
-        return story
+        return finish(story)
     }
+
+    /** Rebuilds [story] as an [HdgifeStory] (fresh state) with ink fallbacks for EXTERNAL functions allowed. */
+    private fun finish(story: Story): Story = HdgifeStory.from(story).also { it.setAllowExternalFunctionFallbacks(true) }
 
     private fun run(rootName: String, text: String, handler: IFileHandler): Story {
         val errors = ArrayList<String>()
