@@ -4,9 +4,11 @@ HDG Interactive Fiction Engine. A game-agnostic interactive fiction library for 
 
 Ink does all the narrative: the branching story and the generated flavor text, through ink variables, functions and alternatives. The Kotlin side is a bridge to your game plus a runtime compiler.
 
-The engine reports, the game decides. It takes ink source and stats and gives back lines, spans, markers, choices and events. It never renders, hides a choice, blocks one or acts on an event. Everything that is a decision (number format, colors, which sources to load, what a style name means) is a default you can replace, listed under "Defaults".
+The engine takes ink source and stats and gives back lines, spans, markers, choices and events. It never renders anything, hides or blocks a choice, or acts on an event. Everything that is a decision (number format, colors, which sources to load, what a style name means) is a default you can replace, listed under "Defaults".
 
-Version 0.2.0. It's early, the API will change. Parts marked experimental say so.
+Version 1.0.0, the first release. Licensed under Apache-2.0, see "License".
+
+What 1.0 freezes: the public API in `core/api/core.api` (checked by `checkKotlinAbi`), save format versions 1 and 2, and `hdgife.ink` version 2. What stays `@ExperimentalHdgifeApi` and may change in a minor release: validation (`validateStory`, `StoryValidator`, `StoryReport`, `ValidationIssue`, `Severity`, `IssueKind`). Anything not in `core.api` is internal.
 
 ## Contents
 
@@ -27,6 +29,7 @@ Version 0.2.0. It's early, the API will change. Parts marked experimental say so
    - [Save, load and seeding](#save-load-and-seeding)
    - [Validation](#validation)
    - [Errors](#errors)
+   - [Lifecycle](#lifecycle)
    - [Threading](#threading)
 4. [The ink library reference](#the-ink-library-reference)
 5. [Defaults](#defaults)
@@ -35,6 +38,7 @@ Version 0.2.0. It's early, the API will change. Parts marked experimental say so
 8. [Testing](#testing)
 9. [Test harness](#test-harness)
 10. [Known limits](#known-limits)
+11. [License](#license)
 
 ## Setup
 
@@ -50,7 +54,7 @@ Then add the dependency to your core module. JitPack builds from a git tag or a 
 
 ```groovy
 dependencies {
-  api "com.github.halfdeadgames:hdgife:0.2.0"
+  api "com.github.halfdeadgames:hdgife:1.0.0"
 }
 ```
 
@@ -59,15 +63,17 @@ What the library pulls in (`core/build.gradle`):
 | Dependency | Scope | Why |
 | --- | --- | --- |
 | `com.badlogicgames.gdx:gdx` | api | `FileHandle` in `InkSource.of` and the `compile` overloads |
-| `com.bladecoder.ink:blade-ink` | api | `Story` is in the public signatures |
-| `com.bladecoder.ink:blade-ink-compiler` | implementation, so runtime for you | no compiler type is in a public signature, so you get it at runtime and can't import it |
+| `com.bladecoder.ink:blade-ink` | api, strictly 1.3.2 | `Story` is in the public signatures |
+| `com.bladecoder.ink:blade-ink-compiler` | implementation, so runtime for you, strictly 1.3.2 | no compiler type is in a public signature, so you get it at runtime and can't import it |
 | `org.jetbrains.kotlin:kotlin-stdlib` | api | Kotlin |
 
-No KTX, no coroutines, no logging library. If you add libGDX or Blade Ink yourself, keep them in line: libGDX 1.14.2, Blade Ink 1.3.2. The build uses Kotlin 2.4.20 and a JVM 11 target. JitPack builds with openjdk17 and runs `:core:test` and `:core:publishToMavenLocal` (`jitpack.yml`).
+No KTX, no coroutines, no logging library. Keep libGDX at 1.14.2 if you add it yourself. The build uses Kotlin 2.4.21 and a JVM 11 target. JitPack builds with openjdk17 and runs `:core:test` and `:core:publishToMavenLocal` (`jitpack.yml`).
 
-`Hdgife.VERSION` is a `const val String` generated at build time from `projectVersion` in `gradle.properties`. `HdgifeInk.VERSION` is the version of the bundled ink library, see "The ink library reference".
+Blade Ink is pinned to exactly 1.3.2, on purpose. `HdgifeStory` overrides a package-private method and `InkNativePatch` uses package-private internals, which can change in any other release. The pin is `strictly` in the Gradle module metadata, so a consumer asking for another version fails to resolve, and the pom carries the exact range `[1.3.2]`, which Maven treats as a hard requirement. Don't override it. `UpstreamCanaryTest` checks the internals by reflection, so an upgrade shows up as a failing test (see "Testing").
 
-The jar holds the engine, the two ink libraries (`hdgife/hdgife.ink`, `hdgife/hdgife_util.ink`, functions only, no scenes) and two classes in Blade Ink's own package (see "Known limits"). Demo stories are in the test harness, not in the jar.
+`Hdgife.VERSION` is a `const val String` generated at build time from `projectVersion` in `gradle.properties` ("1.0.0"). `HdgifeInk.VERSION` is the version of the bundled ink library (2), see "The ink library reference".
+
+The jar holds the engine, `LICENSE` and `NOTICE` in `META-INF`, the two ink libraries (`hdgife/hdgife.ink`, `hdgife/hdgife_util.ink`, functions only, no scenes) and two classes in Blade Ink's own package (see "Known limits"). Demo stories are in the test harness, not in the jar.
 
 ## Quick start
 
@@ -125,9 +131,11 @@ val story = InkCompilerService().compile(Gdx.files.internal("ink/main.ink"))
 - Names use `/` and must be unique within one compile. `hdgife.ink` and `hdgife_util.ink` are reserved for the bundled libraries. Violations are `IllegalArgumentException`, as is an empty list.
 - `INCLUDE hdgife.ink` and `INCLUDE hdgife_util.ink` come from the classpath. They work together or alone and are never added for you.
 - `InkSource(name, text)` holds text. `InkSource.lazy(name, sibling = null) { text }` reads it when the compiler needs it (a file, a network response, an archive).
-- libGDX extensions (GdxSources.kt): `InkSource.of(file)`, `compile(main: FileHandle, extras = emptyList())` and `compileFolder(folder, recursive = true)`. `compileFolder` compares paths as case-sensitive text relative to the folder. The root is `main.ink` in the folder if there is one, else the first path in that order, and the rest follow in that order. Order them with file names (`000_base.ink`, `010_extra.ink`) or build your own list. No `.ink` files gives an `InkCompileException`.
+- libGDX extensions (GdxSources.kt, the only place the public API takes a `FileHandle`): `InkSource.of(file)`, `compile(main: FileHandle, extras = emptyList())` and `compileFolder(folder, recursive = true)`. `compileFolder` compares paths as case-sensitive text relative to the folder. The root is `main.ink` in the folder if there is one, else the first path in that order, and the rest follow in that order. Order them with file names (`000_base.ink`, `010_extra.ink`) or build your own list. No `.ink` files gives an `InkCompileException`.
 
 To run different sources, compile again. Then either make a fresh `StoryManager` or call `manager.replaceStory(newStory)`. `replaceStory` checks the story first (a refused story leaves the manager as it was), moves your stat functions, `bindFunction`s and observers onto it, closes open styles, drops pending events and keeps `speaker`. Observers whose variable the new story doesn't declare are dropped and logged. The old story is unbound from the manager. One story should have one manager.
+
+Core still uses `Gdx` in one place: when the bundled `hdgife.ink` can't be read from the class loader (the browser build has none), `InkCompilerService` falls back to `Gdx.files.classpath`. With no class loader hit and no `Gdx.files`, the include is not found.
 
 Compiler warnings go to `InkCompilerService.log`. Compile errors are `InkCompileException` with the messages in `errors`, which already name file and line.
 
@@ -159,6 +167,8 @@ A missing stat (or no provider) makes `stat` and `stat_of` give 0, `has_stat` an
 
 `manager.speaker` is the persistent speaker, the entity `stat()` and `has_stat()` read. Ink changes it with `~ speak("guard")` (use `""` for none), `beginScene(path, speaker)` sets it from Kotlin. With `hdgife.ink` it lives in the ink variable `hdgife_speaker`, so it is saved and safe during lookahead. Without the library it is a plain field and `saveState` still stores it.
 
+Timing: a `DialogLine` gets the speaker it had when its text was produced. Within one line (glue), the last `speak()` before the line ends wins. A trailing `speak()`, after the last line of a step or between lines, applies to the next lines and doesn't change the one before it. This holds during ink's glue lookahead and across `saveState`, because `speak` also tells the manager when it ran (`hdgife_speak`). On a plain `Story` `speak()` is not lookahead safe, so it is correct there too but ends glue lookahead.
+
 A line can name a speaker for itself with a tag, `# speaker: ilse`. The key is `speakerTagKey`, case-sensitive. A tag speaker covers that one line only. `DialogLine.speaker` is the tag speaker, else the persistent speaker when the line was produced, else null. Requirements without an entity use the persistent speaker, not a tag speaker.
 
 ### Tags and typed readers
@@ -183,7 +193,20 @@ A choice declares requirements in a tag inside the choice text:
 
 Put the tag inside the brackets. Blade Ink 1.3.2 drops tags written after the closing `]`, so `* [Lift the boulder] # requires: strength >= 12` loses the requirement and the choice is always available. The right form is `* [Lift the boulder # requires: strength >= 12]`.
 
-A clause is `[entity.]stat op value`. Ops are `>`, `>=`, `<`, `<=`, `==`, `!=`. Clauses are separated by commas, and the tag may repeat. Without an entity the persistent speaker is used. They are evaluated against the state provider when `next` builds the step, and come back on `DialogChoice.requirements` as `RequirementResult`s. `DialogChoice.isAvailable` is true when all are met, or there are none. `choose` never refuses an unavailable choice. Whether to hide, grey or allow it is the game's call. Plain ink conditions (`+ {door_open} [Slip out]`) are different: ink hides those itself and the engine never sees them.
+A clause is `[entity.]stat op value`. Ops are `>`, `>=`, `<`, `<=`, `==`, `!=`. Clauses are separated by commas and all must hold (AND). The tag may repeat.
+
+OR and NOT work inside a clause:
+
+```ink
+* [Force it # requires: strength >= 12 or charm >= 8, !is_injured == true]
+* [Sneak # requires: not guard.mood > 30]
+```
+
+- OR is `or` (spaces around it) or `|`. Ink reads a bare `|` inside a choice's brackets as its own separator, so there write `\|` or, easier, `or`.
+- NOT is a leading `!` or `not `. It negates one alternative.
+- Precedence: `!` binds tighter than OR, OR binds tighter than the comma. There are no parentheses.
+- A `|`, `,` or ` or ` inside quotes is literal.
+- NOT is met only when the inner requirement was really checked and came out unmet. If it is a `MissingStat`, `Mismatch` or `Unreadable`, nothing was decided and the negation is not met either. Without an entity the persistent speaker is used. They are evaluated against the state provider when `next` builds the step, and come back on `DialogChoice.requirements` as `RequirementResult`s. `DialogChoice.isAvailable` is true when all are met, or there are none. `choose` never refuses an unavailable choice. Whether to hide, grey or allow it is the game's call. Plain ink conditions (`+ {door_open} [Slip out]`) are different: ink hides those itself and the engine never sees them.
 
 Numbers compare with every op. Strings, enum names and booleans only with `==` and `!=`; a boolean value is `true` or `false` in any case; string comparison is exact. Values are bare or quoted.
 
@@ -195,7 +218,7 @@ Quoted names: an entity, stat or value can be wrapped in `"` or `'` to hold spac
 
 A quote opens at the start of a part or after one of `= < > ! . ,` (so the apostrophe in `O'Brien` isn't a quote) and closes at the same character. Commas inside quotes don't split clauses. A bare value can't contain a comma.
 
-`RequirementResult` is a sealed interface with `raw` (the clause as written) and `isMet`:
+`RequirementResult` is a sealed interface with `raw` (the clause as written) and `isMet`. Every node, also inside `AnyOf` and `Not`, has both:
 
 | Variant | Meaning | Fields besides `raw` |
 | --- | --- | --- |
@@ -204,8 +227,10 @@ A quote opens at the start of a part or after one of `= < > ! . ,` (so the apost
 | `Mismatch` | stat found but the written value or operator doesn't fit its type (`strength >= high`, `faction > 3`, `is_injured == 4`). Logged, never met | `entity`, `stat`, `op`, `target`, `actual` |
 | `MissingStat` | provider has no such stat, or there is no entity and no speaker (`entity` is then null). Never met | `entity: String?`, `stat`, `op`, `target` |
 | `Unreadable` | the text isn't `[entity.]stat op value`. Never met | none |
+| `AnyOf` | alternatives joined with `or` or `\|`. Met when any is | `results: List<RequirementResult>` |
+| `Not` | a negated requirement, see above | `result: RequirementResult` |
 
-`actual` is an `Int`, `Float`, `Boolean` or `String`. `target` is the written value read as the type of `actual`; a number is an `Int` if it parses as one, else a `Float`. For `Mismatch` and `MissingStat` it is a number if the text is one, else the text. A `when` over the variants should have an `else`, more may come. `op` is a `Comparison`, which is experimental (see "Validation" and the API reference).
+`actual` is an `Int`, `Float`, `Boolean` or `String`. `target` is the written value read as the type of `actual`; a number is an `Int` if it parses as one, else a `Float`. For `Mismatch` and `MissingStat` it is a number if the text is one, else the text. A `when` over the variants should have an `else`, more may come. `op` is a `Comparison`, which is stable.
 
 ### Styles and markers
 
@@ -230,6 +255,8 @@ Colors: `Style.hexColor()` reads the value, or a param with `hexColor("key")`, a
 
 Output: `DialogLine.text` is plain text with markers removed (then run through `textCleaner`), and exactly the `spans` texts joined. Each `TextSpan` has the `styles` active over it, outermost first, empty if unstyled. Point markers are `TextMarker`s with an `offset` into the line's plain text: the marker sits before the character at `offset`, and `offset == text.length` means after the last one. `Style` and `TextMarker` have `name`, `value`, `values` (the value split at commas, trimmed), `params`, `param(key)` and `hexColor(key = null)`.
 
+Limits and logs. `maxOpenStyles` (default 16, at least 1) caps how many styles stay open. Opening one past the cap drops the oldest and logs it, so a stray `<word>` in a looping knot can't grow spans and saves forever. `closeStylesAtChoice` (default false) closes whatever is open when a step reaches a choice (logged), so `openStyles` is empty at every step end and nothing carries into the chosen branch. With it off, a style that a step opened and left open is logged (`opened and not closed by the end of the step`) when `log` is set.
+
 Carry across lines: an open style stays open until its closing marker. That holds across the lines of a step, across `next` calls, and over a choice into the chosen branch. Spans include styles left open by earlier lines. `DialogStep.openStyles` lists what is open at the end of a step. All open styles close, with a log message, when the story ends, on `reset`, on `replaceStory`, and when `loadState` reads a plain ink state. Choice text is the exception: it is read on its own, nothing carries in, and what is left open at its end is dropped (logged).
 
 Save and load: `saveState` stores the open styles and `loadState` opens them again.
@@ -238,13 +265,13 @@ Save and load: `saveState` stores the open styles and `loadState` opens them aga
 
 Ink tells the game things with `~ emit("name")`, `emit1("name", a)`, `emit2("name", a, b)` and `emit3("name", a, b, c)`. They are numbered by argument count because ink has no overloads. Arguments come back as `Int`, `Float`, `Boolean` or `String`. No `EXTERNAL` of your own is needed.
 
-Events are on `DialogStep.events` (a `StoryEvent`: `name`, `args`, `lineIndex`, `id`) and go to `onEvent`. The engine never acts on them.
+Events are on `DialogStep.events` (a `StoryEvent`: `name`, `args`, `size`, `lineIndex`, `id`) and go to `onEvent`. `StoryEvent` has typed getters like `FunctionArgs`: `string(i)`, `int(i)`, `float(i)`, `bool(i)`, with the same coercion (`float` accepts an int, `bool` accepts an int, `string` accepts anything, `int` only an int). A missing or wrong-typed argument is an `IllegalArgumentException` naming the event and position. The engine never acts on them.
 
 - Exactly once, in order. Ink runs ahead past a line break to see if glue (`<>`) joins the next line, and may run an `emit` and undo it. The engine keeps each event once, also between a line and its glue line. This works on both `HdgifeStory` and plain `Story` entry points.
 - `lineIndex` is the index in `DialogStep.lines` of the line produced right after the call, so the event happened just before that line shows. It equals `lines.size` when no line follows in the step.
 - `id` counts `emit` calls on the story timeline: the first is 1, then 2. It is the value of the ink variable `hdgife_event_seq` right after the call, so it is saved with the ink state and survives `saveState` and `loadState`. Play on from an earlier save and the event that comes again has the id it had. To not act twice on a replayed event, keep the highest id you handled together with its save and skip ids at or below it. Ids name a timeline position, so a different branch after a load can give another event the same id. `reset` starts again at 1. `manager.eventCount` is the latest id, 0 before the first.
 - Timing: `onEvent` runs for each event while `next` builds the step, after ink has run to the next choice or the end and before the choices are read. A `requires` check on a choice sees what the game changed in the handler (spending a coin). A condition ink evaluates itself, like `+ {coin >= 3} [Buy]`, is decided inside ink before the event arrives, so keep such state in ink variables or use `# requires:`.
-- An exception thrown in `onEvent` comes out of `next` as a `StoryStepException` whose step holds the lines and events so far.
+- An exception thrown in `onEvent` comes out of `next` as a `StoryStepException` whose step holds the lines and events so far. The event that threw counts as delivered. The events after it stay pending, and the next `next()` delivers them first (placed before that step's first line, `lineIndex` 0). If the listener throws again, the rest stays pending again. `loadState`, `reset`, `replaceStory` and `close` drop them.
 - Don't put `emit` in choice text. It fires when the choice is created.
 - Without a manager the functions do nothing.
 
@@ -276,7 +303,7 @@ Lookahead safety. Ink runs ahead to see if glue joins the next line. A function 
 - `getVariable(name, Int::class)` and `variableAs<Int>(name)`: typed. Null when undeclared. An ink int is accepted as `Float`, `Double` or `Long`, a float as `Double`. Any other mismatch is an `IllegalArgumentException`.
 - `setVariable(name, value)`: mapped like stats (an `InkList` is kept). `IllegalArgumentException` if undeclared. Observers fire as for any change.
 - `variableNames`: all declared global variables, sorted, `VAR` and `CONST` not told apart. Includes the library's own, which start with `hdgife_`.
-- `observe(name) { old, new -> }` returns a `VariableObservation`. It fires when ink or `setVariable` changes the variable. Ink reports changes in a batch when a `next` finishes, so `old` is the value at the last report, not each step in between. `old` starts as the value when you called `observe`. `IllegalArgumentException` if undeclared. Stop it with `unobserve(observation)`, `unobserve(name)` (every observation of that variable) or `observation.close()`. `isActive` turns false.
+- `observe(name) { old, new -> }` returns a `VariableObservation`. It fires when ink or `setVariable` changes the variable. Ink reports changes in a batch after each Continue (each line), not once per `next()`, so `old` is the value at the last report, not each step in between. `old` starts as the value when you called `observe`. `IllegalArgumentException` if undeclared. Stop it with `unobserve(observation)`, `unobserve(name)` (every observation of that variable) or `observation.close()`. `isActive` turns false.
 
 ### Number formatting
 
@@ -294,7 +321,14 @@ In ink:
 
 `saveState()` returns one opaque string: ink's state (variables, position, visit counts, random seed, and the speaker with `hdgife.ink`) plus the open styles, in a small versioned envelope. Store it as is and load it only into the same compiled story. Stat values are not in it, they live in your game.
 
-`loadState(json)` restores it. Output continues from there, open styles are open again, pending events are dropped, observers are rebased and `lastSeed` becomes null (the seed itself is in the loaded state). It also reads a plain ink state JSON, in which case open styles are closed. A newer save version, a broken envelope, or a state ink refuses is a `SaveStateException`.
+Tying a save to its story. Two optional settings, both off by default:
+
+- `storyId: String?`. When set, `saveState` writes it and `loadState` refuses a save with a different id.
+- `saveFingerprint: Boolean`. When true, `saveState` writes a hash of the story's structure (names of knots, stitches, labels and variables) and `loadState` refuses a save with another hash. It sees structure, not text, so an edited line passes. It is computed once and kept until `replaceStory`.
+
+With either in use the envelope is version 2 and carries `storyId` and `fingerprint`. Without them it is written as version 1, as before. The engine reads both. A save without an id or fingerprint is accepted. A mismatch is a `SaveStateException`, checked before anything is touched, so the manager stays as it was.
+
+`loadState(json)` restores it. Output continues from there, open styles are open again, pending events are dropped, observers are rebased and `lastSeed` becomes null (the seed itself is in the loaded state). It also reads a plain ink state JSON, in which case open styles are closed. A newer save version, a broken envelope, an id or fingerprint mismatch, or a state ink refuses is a `SaveStateException`. If ink itself fails to load the state it may be half updated, so the manager still closes open styles, drops pending events, rebases observers and clears `lastSeed`, and keeps the speaker field. It is consistent with itself. Load a good save or `reset`.
 
 `reset()` restarts the story: ink state, speaker, open styles, pending events. Bindings, observers and settings stay. It doesn't recompile.
 
@@ -325,13 +359,21 @@ Every failure the engine throws on purpose for something a game can meet at run 
 | --- | --- | --- |
 | `InkCompileException` | `compile`, `compileFolder`, `loadCompiled`: ink didn't compile, a source couldn't be read, an include isn't listed, compiled JSON couldn't load, no `.ink` files in a folder | `errors: List<String>`, `source: String?` (the unreadable source, else null) |
 | `StoryStepException` | `next` and `choose`: ink failed while continuing (a bound function threw, the state provider threw, `onEvent` threw, a story runtime error) | `step`: the partial `DialogStep` built so far (no choices, not ended). The original exception is the cause |
-| `SaveStateException` | `loadState`: broken envelope, newer save version, or ink refused the state | cause is ink's exception when it was ink |
+| `SaveStateException` | `loadState`: broken envelope, newer save version, `storyId` or fingerprint mismatch, or ink refused the state | cause is ink's exception when it was ink |
 | `IncompatibleLibraryException` | the constructor, `forPlainStory`, `replaceStory`, `replacePlainStory` when the story's `hdgife.ink` is another version (also logged first); `seedRandom` when the library is missing | `found` (0 for none or an old one with no version), `expected` (`HdgifeInk.VERSION`) |
 | `StoryPathException` | `beginScene`: ink can't find the knot or stitch. The speaker is left as it was | `path`, cause is ink's `StoryException` |
 
 Mistakes in how the API is called are plain `IllegalArgumentException`: an unknown choice index in `choose`, an undeclared variable in `setVariable` or `observe`, a bad `getVariable` type, a name already bound in `bindFunction`, a bad `FunctionArgs` read, `NumberFormat` decimals outside 0..9, an empty or duplicate or reserved source list.
 
 After a `StoryStepException` the ink story is in whatever state ink left it. The usual move is `loadState` or `reset`. The manager stays consistent with the partial step: open styles and events cover exactly its lines, and events of the failed `Continue` are dropped.
+
+### Lifecycle
+
+`StoryManager` is `AutoCloseable`. `close()` unbinds the library functions and your `bindFunction`s from the story, removes observers (their `VariableObservation`s turn inactive), closes styles and drops pending events. The story keeps its ink state and can go to a fresh manager. After that, calls that use the story throw `IllegalStateException`, `isClosed` is true, and closing again does nothing.
+
+```kotlin
+StoryManager(story, provider).use { manager -> /* ... */ }
+```
 
 ### Threading
 
@@ -359,10 +401,10 @@ hdgife.ink:
 | `stat_text(name)` | the speaker's stat printed with the game's number format. Use inline: `{stat_text("hp")}` |
 | `stat_text_of(entity, name)` | same for any entity |
 | `fmt(x, decimals, mode)` | prints a number. Mode is `"floor"`, `"ceil"` (or `"ceiling"`), `"round"`, `"trunc"` (or `"truncate"`). Use inline |
-| `speak(name)` | makes the entity the speaker until changed, `""` for none. Plain ink, not an `EXTERNAL`, so it needs no binding |
+| `speak(name)` | makes the entity the speaker until changed, `""` for none. Sets `hdgife_speaker` and tells the manager when it ran (through `hdgife_speak`), so a `speak()` after a line doesn't change that line's speaker. Works without a manager |
 | `emit(name)`, `emit1(name, a)`, `emit2(name, a, b)`, `emit3(name, a, b, c)` | events for the game, used as statements: `~ emit1("give_item", "sword")` |
 
-Also in the file: `VAR hdgife_speaker`, `VAR hdgife_event_seq`, `CONST hdgife_version`, the externals `hdgife_emit0` to `hdgife_emit3`, and the helpers `hdgife_pow10`, `hdgife_digits`, `hdgife_zeros`, `hdgife_seed` (used by `seedRandom`) and `hdgife_lib_version`. Leave them alone.
+Also in the file: `VAR hdgife_speaker`, `VAR hdgife_event_seq`, `CONST hdgife_version`, the externals `hdgife_emit0` to `hdgife_emit3` and `hdgife_speak`, and the helpers `hdgife_pow10`, `hdgife_digits`, `hdgife_zeros`, `hdgife_seed` (used by `seedRandom`) and `hdgife_lib_version`. Leave them alone.
 
 `fmt` and the `stat_text` fallbacks print text directly, so call them inline, not as `~ temp t = fmt(...)`. Ink integer division truncates, so use `/ 2.0` when averaging whole numbers. `FLOOR`, `CEILING` and `INT` on floats work because of the engine's patch (applied by the compiler service and `StoryManager`).
 
@@ -381,7 +423,7 @@ plus `hdgife_util_loaded()`, which only marks the file as included so `validateS
 
 Reserved names. The function names are not prefixed, so don't define your own with these names, whether your story includes the library or not: `stat`, `stat_of`, `has_stat`, `has_stat_of`, `stat_text`, `stat_text_of`, `fmt`, `speak`, `emit`, `emit1`, `emit2`, `emit3`, `chance`, `clamp`, `avg2`, `avg3`, `blend`, `invert`, `scale100`, and everything starting with `hdgife_`. Parameters and temps inside the libraries start with `hdg_`, so your story can have `VAR n` or `x`; don't declare knots or variables starting with `hdg_` or `hdgife_`. A manager rebinds the external names to its own functions, replacing yours. `HdgifeInk.LIBRARY_FUNCTIONS` lists them all, generated from the two files at build time. `validateStory` warns about one defined without its library.
 
-Versioning. `CONST hdgife_version` in `hdgife.ink` is `HdgifeInk.VERSION` (currently 1). A story that includes a `hdgife.ink` of another version, or an old one with no version (counted as 0), is refused by `StoryManager` with an `IncompatibleLibraryException`, and `validateStory` reports `OLD_LIBRARY`. Recompile the story against the library bundled with the engine you use. A story that doesn't include `hdgife.ink` isn't checked. If you change, add or remove a function in the libraries, bump `hdgife_version` and pin the new hash in `LibraryPinTest`, which fails with "library changed: bump hdgife_version" until you do.
+Versioning. `CONST hdgife_version` in `hdgife.ink` is `HdgifeInk.VERSION` (currently 2). A story that includes a `hdgife.ink` of another version, or an old one with no version (counted as 0), is refused by `StoryManager` with an `IncompatibleLibraryException`, and `validateStory` reports `OLD_LIBRARY`. Recompile the story against the library bundled with the engine you use. A story that doesn't include `hdgife.ink` isn't checked. If you change, add or remove a function in the libraries, bump `hdgife_version` and pin the new hash in `LibraryPinTest`, which fails with "library changed: bump hdgife_version" until you do.
 
 ## Defaults
 
@@ -411,13 +453,17 @@ Every default that is a game decision can be replaced.
 | seed | none | ink seeds itself randomly until you call `seedRandom` |
 | style, effect and marker names | no meaning | the game decides |
 | choices | all returned | `isAvailable` only reports |
-| save format | version 1 | opaque. `loadState` reads versions 1 up to the current, and a plain ink state |
+| `maxOpenStyles` | `16` | at least 1 |
+| `closeStylesAtChoice` | `false` | styles carry over a choice |
+| `storyId` | `null` | no id written or checked |
+| `saveFingerprint` | `false` | no fingerprint written or checked |
+| save format | version 1, version 2 when `storyId` or `saveFingerprint` is used | opaque. `loadState` reads versions 1 and 2, and a plain ink state |
 
 ## API reference
 
 Everything public in `core/api/core.api`, grouped by package. Properties are listed as Kotlin properties. The `is`-prefixed Boolean properties (`isMet`, `isAvailable`, `isEnded`, `isEmpty`, `isOk`, `isActive`, `isEquality`, `isLookaheadSafe`) are `isX()` in Java.
 
-Experimental (`@ExperimentalHdgifeApi`, `RequiresOptIn` level WARNING, so using it compiles with a warning): `Comparison`, `Severity`, `IssueKind`, `ValidationIssue`, `StoryReport`, `StoryValidator` and `StoryManager.validateStory()`. These may change in a minor release. Opt in with `@OptIn(ExperimentalHdgifeApi::class)` or the compiler option `-opt-in=com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi`. `RequirementResult` itself isn't marked, but reading its `op` gives you a `Comparison`. The core module opts in for its own code. The library is built with explicit API mode.
+Experimental (`@ExperimentalHdgifeApi`, `RequiresOptIn` level WARNING, so using it compiles with a warning): `Severity`, `IssueKind`, `ValidationIssue`, `StoryReport`, `StoryValidator` and `StoryManager.validateStory()`. These may change in a minor release. Everything else is frozen for 1.x. Opt in with `@OptIn(ExperimentalHdgifeApi::class)` or the compiler option `-opt-in=com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi`. The core module opts in for its own code. The library is built with explicit API mode.
 
 ### com.github.halfdeadgames.hdgife
 
@@ -473,6 +519,10 @@ StoryManager.
 | `var valueConverter: ValueConverter`, `fun valueConverter(converter: ValueConverter)` | |
 | `var onEvent: StoryEventListener`, `fun onEvent(listener: StoryEventListener)` | |
 | `var speaker: String?` | |
+| `var maxOpenStyles: Int` | default 16, at least 1 (`IllegalArgumentException` otherwise) |
+| `var closeStylesAtChoice: Boolean` | default false |
+| `var storyId: String?`, `var saveFingerprint: Boolean` | see "Save, load and seeding" |
+| `val isClosed: Boolean`, `fun close()` | `StoryManager` is `AutoCloseable` |
 | `val lastSeed: Int?` | |
 | `val isLookaheadSafe: Boolean` | |
 | `val eventCount: Int` | latest event id, 0 before the first |
@@ -504,7 +554,7 @@ Output types.
 | `DialogStep` | `lines: List<DialogLine>`, `text: String` (lines joined with `\n`), `tags: Tags`, `choices: List<DialogChoice>`, `isEnded: Boolean`, `events: List<StoryEvent>`, `openStyles: List<Style>` |
 | `DialogLine` | `text: String`, `speaker: String?`, `tags: Tags`, `spans: List<TextSpan>`, `markers: List<TextMarker>` |
 | `DialogChoice` | `index: Int`, `text: String`, `spans: List<TextSpan>`, `tags: Tags`, `requirements: List<RequirementResult>`, `markers: List<TextMarker>`, `isAvailable: Boolean` |
-| `StoryEvent` | `name: String`, `args: List<Any?>`, `lineIndex: Int`, `id: Int` |
+| `StoryEvent` | `name: String`, `args: List<Any?>`, `size: Int`, `lineIndex: Int`, `id: Int`, `string(i): String`, `int(i): Int`, `float(i): Float`, `bool(i): Boolean` |
 | `TextSpan` | `text: String`, `styles: List<Style>` |
 | `Style` | `name: String`, `value: String?`, `values: List<String>`, `params: Map<String, String>`, `param(key): String?`, `hexColor(key: String? = null): Int?` |
 | `TextMarker` | `name: String`, `offset: Int`, `value: String?`, `values: List<String>`, `params: Map<String, String>`, `param(key): String?`, `hexColor(key: String? = null): Int?` |
@@ -520,7 +570,9 @@ Requirements.
 | `RequirementResult.Met`, `.Unmet`, `.Mismatch` | `entity: String`, `stat: String`, `op: Comparison`, `target: Any`, `actual: Any` |
 | `RequirementResult.MissingStat` | `entity: String?`, `stat: String`, `op: Comparison`, `target: Any` |
 | `RequirementResult.Unreadable` | nothing besides `raw` |
-| `enum class Comparison` (experimental) | `GREATER`, `GREATER_EQUAL`, `LESS`, `LESS_EQUAL`, `EQUAL`, `NOT_EQUAL`; `symbol: String`, `isEquality: Boolean`; `Comparison.parse(symbol: String): Comparison?` |
+| `RequirementResult.AnyOf` | `results: List<RequirementResult>` |
+| `RequirementResult.Not` | `result: RequirementResult` |
+| `enum class Comparison` | `GREATER`, `GREATER_EQUAL`, `LESS`, `LESS_EQUAL`, `EQUAL`, `NOT_EQUAL`; `symbol: String`, `isEquality: Boolean`; `Comparison.parse(symbol: String): Comparison?` |
 
 Callbacks and helpers.
 
@@ -564,7 +616,7 @@ This is Blade Ink's own package, because the patch needs package-private access.
 
 ## Writing stat-driven ink
 
-A trimmed version of `assets/ink/main.ink`. The stats live in the game. Ink reads them with `stat()`, builds combined metrics with the util functions, scales flavor text by them, and tells the game things with `emit`.
+A trimmed version of `assets/ink/main.ink`. The stats live in the game. Ink reads them with `stat()`, combines them with the util functions to scale flavor text, and sends events to the game with `emit`.
 
 ```ink
 INCLUDE hdgife.ink
@@ -601,7 +653,7 @@ He keeps his eyes on you,
 + [Back] -> END
 ```
 
-Things to notice: `requires` uses the speaker when no entity is given (`trust`), and `player.wits` names one. The `spend` event is handled in `onEvent` before the choices are read, so the requirements of the next step already see the lower coin total. The harness's own `main.ink` also shows `<color=ff8800>` and `<color=\#9ecbff>` markers, `{&...}` and `{~...}` alternatives, a style left open over a choice, and an `emit` between a line and its glue line.
+In this script `requires` uses the speaker when no entity is given (`trust`), and `player.wits` names one. The `spend` event is handled in `onEvent` before the choices are read, so the requirements of the next step already see the lower coin total. The harness's own `main.ink` also shows `<color=ff8800>` and `<color=\#9ecbff>` markers, `{&...}` and `{~...}` alternatives, a style left open over a choice, and an `emit` between a line and its glue line.
 
 ## Testing
 
@@ -609,10 +661,12 @@ Things to notice: `requires` uses the speaker when no entity is given (`trust`),
 ./gradlew :core:test            JUnit 5 unit tests of the engine
 ./gradlew :core:checkKotlinAbi  compares the public API with core/api/core.api (also part of :core:check and build)
 ./gradlew :core:updateKotlinAbi rewrites core/api/core.api after an intended API change
-./gradlew :core:publishToMavenLocal   to try a build in another project (add mavenLocal(), use version 0.2.0)
+./gradlew :core:publishToMavenLocal   to try a build in another project (add mavenLocal(), use version 1.0.0)
 ```
 
 `core/api/core.api` is committed. `checkKotlinAbi` fails when the code and the dump differ, so after an API change run `updateKotlinAbi` and commit the dump with the change. The JitPack build runs only `:core:test` and `:core:publishToMavenLocal`, which don't run `checkKotlinAbi`, so a stale dump never fails JitPack. Every public declaration says `public` and names its type (explicit API mode).
+
+CI (`.github/workflows/ci.yml`) runs on pushes to master and on pull requests. The `core` job runs `:core:check :core:publishToMavenLocal` on JDK 17 and 21. The `desktop` job compiles the harness and `lwjgl3`. The `android` (`:android:assembleDebug`) and `web` (TeaVM release build) jobs are allowed to fail. `uiTest` needs a display, so CI doesn't run it.
 
 `LibraryPinTest` pins the sorted function names and arities of the two ink libraries to `hdgife_version`.
 
@@ -690,13 +744,13 @@ In Android Studio, open the project, pick the `android` run configuration and st
 ./gradlew :android:run
 ```
 
-`installDebug` installs the app (`com.github.halfdeadgames.hdgife.harness`) and `run` starts it with adb. The layout stacks the panels in portrait and puts them side by side in landscape. The View button replaces F2 and the Console button replaces the backtick key; the console has a Submit button. When the app is paused it saves the story to `autosave.json` in the app's files and restores it on the next start (the lines are not part of a save, so only the choices show).
+`installDebug` installs the app (`com.github.halfdeadgames.hdgife.harness`) and `run` starts it with adb. The layout stacks the panels in portrait and puts them side by side in landscape. The View button replaces F2 and the Console button replaces the backtick key; the console has a Submit button. It has been run on an emulator, not on a real device. When the app is paused it saves the story to `autosave.json` in the app's files and restores it on the next start (the lines are not part of a save, so only the choices show).
 
 By default the harness compiles `ink/main.ink` on the device at startup, which is what a game with mods would do. To ship the story precompiled instead, build with `-PprecompiledInk` (for example `./gradlew -PprecompiledInk :android:installDebug`). `:harness:compileInk` writes `ink/main.ink.json` and the harness loads it when no `extra/` files exist. The log line `Story ready in ... ms` says which path ran.
 
 ### Web
 
-The `teavm` module runs the same harness in a browser. It uses [gdx-teavm](https://github.com/xpenatan/gdx-teavm), which compiles the JVM bytecode (so Kotlin works) to JavaScript. GWT is not an option, because it cannot compile Kotlin. The module is left out with `-PskipWeb`. JitPack skips both the web and android modules (`jitpack.yml` passes `-PskipAndroid -PskipWeb`) and builds only `:core`. It needs JDK 17 or newer and a browser with WebGL (only Chrome has been tried).
+The `teavm` module runs the same harness in a browser. It uses [gdx-teavm](https://github.com/xpenatan/gdx-teavm), which compiles the JVM bytecode (so Kotlin works) to JavaScript. GWT is not an option, because it cannot compile Kotlin. The module is left out with `-PskipWeb`. JitPack skips both the web and android modules (`jitpack.yml` passes `-PskipAndroid -PskipWeb`) and builds only `:core`. It needs JDK 17 or newer and a browser with WebGL. It has been run in headless Chrome only, not in other browsers.
 
 ```
 ./gradlew :teavm:run
@@ -724,19 +778,23 @@ What differs or does not work:
 ./gradlew :lwjgl3:uiTest -PuiShow
 ```
 
-`uiTest` plays the harness through its real UI and checks what is on screen. It starts `TestGame` in a real LWJGL3 window (1280x720), clicks the choice buttons with real touch events at their stage coordinates, presses F2, scrolls the raw panel, and uses the console for setup. Each scenario asserts on both panels: the raw text, the rendered rows and the buttons. It walks the Lantern Pass, the three layouts, the debug scenes and the console. The window is hidden unless you pass `-PuiShow`.
+`uiTest` has 23 scenarios. It plays the harness through its real UI and checks what is on screen. It starts `TestGame` in a real LWJGL3 window (1280x720), clicks the choice buttons with real touch events at their stage coordinates, presses F2, scrolls the raw panel, and uses the console for setup, including a check that the console's Copy action works. Each scenario asserts on both panels: the raw text, the rendered rows and the buttons. It walks the Lantern Pass, the three layouts, the debug scenes and the console. The window is hidden unless you pass `-PuiShow`.
 
 It takes screenshots into `lwjgl3/build/ui-shots/` and, with the window shown, fails if one is blank (with a hidden window it only warns, since a hidden window may not render on every system). On failure it prints the reason per scenario, saves a `FAILED-...png` and exits non-zero. On success it prints a summary and exits 0. It gives up after 180 seconds. It needs a display and a GPU driver, so it isn't part of `:core:test`, `build` or JitPack. The code is in `lwjgl3/src/uiTest`, a separate source set that isn't in the harness jar. So far it has only been run on Windows.
 
 ## Known limits
 
 - Blade Ink 1.3.2 is patched from inside its own package, because the bugs can't be reached any other way. `HdgifeStory` fixes the inverted lookahead-safe guard. `InkNativePatch` fixes `FLOOR`, `CEILING` and `INT` on floats. Both are in `com.bladecoder.ink.runtime` (no reflection), so a Java module can't hold the split package and this is classpath only. `UpstreamCanaryTest` tells you when upstream fixes one, see "Testing".
-- Android and web (TeaVM) are untested. Precompiled stories (`loadCompiled`) avoid compiler work at runtime, but I haven't tried them there.
+- Android has been run on an emulator and web (TeaVM) in headless Chrome, not on real devices or other browsers. Precompiled stories (`loadCompiled`) avoid compiler work at runtime, but I haven't tried them there.
 - The UI test has only been run on Windows.
 - Conditions ink evaluates itself (`+ {coin >= 3} [Buy]`) are decided before events reach the game, so a game that changes state in `onEvent` should keep that state in ink variables or use `# requires:`.
-- Mods are the game's job. Ink can't override an existing knot, so replacing content means the game choosing which sources to compile.
+- Ink can't override an existing knot, so replacing content means the game choosing which sources to compile.
 - A tag speaker covers one line only.
 - The `emit` functions are numbered by argument count because ink has no overloads.
 - A bare requirement value can't contain a comma. A quoted one can.
 - Validation of `requires` tags only sees tags written literally in the source.
-- There's no reusable UI in the library. That's on purpose.
+- There's no reusable UI in the library.
+
+## License
+
+Apache-2.0, see `LICENSE`. `NOTICE` has the copyright line, and `THIRD_PARTY_NOTICES.md` lists the third-party code and assets in the repository (the harness console, the Roboto font, the lwjgl3 startup helper). `LICENSE` and `NOTICE` are also packed into the jar under `META-INF`.
