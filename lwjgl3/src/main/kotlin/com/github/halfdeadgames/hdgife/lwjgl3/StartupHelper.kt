@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 // Note, the above license and copyright applies to this file only.
+// Modified by the hdgife authors (Apache License 2.0, section 4b): stale Java version comments were removed, and
+// startNewJvm0 now returns false when the child JVM could not be started.
 package com.github.halfdeadgames.hdgife.lwjgl3
 
 import com.badlogic.gdx.Version
@@ -133,10 +135,7 @@ object StartupHelper {
 
 		// Spawn the child JVM process with updated environment variables or JVM args
 		val jvmArgs: MutableList<String> = mutableListOf()
-		// The following line is used assuming you target Java 8, the minimum for LWJGL3.
 		val javaExecPath = "${System.getProperty("java.home")}/bin/java"
-		// If targeting Java 9 or higher, you could use the following instead of the above line:
-		//val javaExecPath = ProcessHandle.current().info().command().orElseThrow()
 		if (!File(javaExecPath).exists()) {
 			System.err.println(if (isMac) MAC_JRE_ERR_MSG else LINUX_JRE_ERR_MSG)
 			return false
@@ -166,6 +165,7 @@ object StartupHelper {
 		} catch (e: Exception) {
 			System.err.println("There was a problem restarting the JVM.")
 			e.printStackTrace()
+			return false
 		}
 
 		return true

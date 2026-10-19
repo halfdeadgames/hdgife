@@ -174,9 +174,9 @@ internal fun validateStory(
 
     for ((tag, context) in requirementTags) {
         val value = Tags.splitTag(tag.trim()).second
-        for (part in StoryManager.splitClauses(value)) {
+        for (part in splitClauses(value)) {
             val clause = part.trim()
-            if (clause.isEmpty() || StoryManager.isReadableRequirement(clause)) continue
+            if (clause.isEmpty() || isReadableRequirement(clause)) continue
             val where = if (context.isEmpty()) "" else " (near \"$context\")"
             issues += ValidationIssue(Severity.WARNING, IssueKind.UNREADABLE_REQUIREMENT, clause, "Requirement '$clause' cannot be read$where")
         }

@@ -334,7 +334,6 @@ public final class com/github/halfdeadgames/hdgife/story/StoryManager : java/lan
 	public static final fun forPlainStory (Lcom/bladecoder/ink/runtime/Story;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
 	public static final fun forPlainStory (Lcom/bladecoder/ink/runtime/Story;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
 	public static final fun forPlainStory (Lcom/bladecoder/ink/runtime/Story;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;Lkotlin/jvm/functions/Function1;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
-	public final fun formatOverride (Lcom/github/halfdeadgames/hdgife/story/NumberFormatOverride;)V
 	public final fun getAllowExternalFunctionFallbacks ()Z
 	public final fun getCloseStylesAtChoice ()Z
 	public final fun getEventCount ()I
@@ -351,18 +350,17 @@ public final class com/github/halfdeadgames/hdgife/story/StoryManager : java/lan
 	public final fun getStateProvider ()Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;
 	public final fun getStory ()Lcom/bladecoder/ink/runtime/Story;
 	public final fun getStoryId ()Ljava/lang/String;
-	public final fun getTextCleaner ()Lkotlin/jvm/functions/Function1;
+	public final fun getTextCleaner ()Lcom/github/halfdeadgames/hdgife/story/TextCleaner;
 	public final fun getValueConverter ()Lcom/github/halfdeadgames/hdgife/story/ValueConverter;
 	public final fun getVariable (Ljava/lang/String;)Ljava/lang/Object;
 	public final fun getVariable (Ljava/lang/String;Lkotlin/reflect/KClass;)Ljava/lang/Object;
-	public final fun getVariableNamer ()Lkotlin/jvm/functions/Function2;
+	public final fun getVariableNamer ()Lcom/github/halfdeadgames/hdgife/story/VariableNamer;
 	public final fun getVariableNames ()Ljava/util/List;
 	public final fun isClosed ()Z
 	public final fun isLookaheadSafe ()Z
 	public final fun loadState (Ljava/lang/String;)V
 	public final fun next ()Lcom/github/halfdeadgames/hdgife/story/DialogStep;
 	public final fun observe (Ljava/lang/String;Lkotlin/jvm/functions/Function2;)Lcom/github/halfdeadgames/hdgife/story/VariableObservation;
-	public final fun onEvent (Lcom/github/halfdeadgames/hdgife/story/StoryEventListener;)V
 	public final fun replacePlainStory (Lcom/bladecoder/ink/runtime/Story;)V
 	public final fun replaceStory (Lcom/bladecoder/ink/runtime/HdgifeStory;)V
 	public final fun reset ()V
@@ -381,16 +379,15 @@ public final class com/github/halfdeadgames/hdgife/story/StoryManager : java/lan
 	public final fun setSpeakerTagKey (Ljava/lang/String;)V
 	public final fun setStateProvider (Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;)V
 	public final fun setStoryId (Ljava/lang/String;)V
-	public final fun setTextCleaner (Lkotlin/jvm/functions/Function1;)V
+	public final fun setTextCleaner (Lcom/github/halfdeadgames/hdgife/story/TextCleaner;)V
 	public final fun setValueConverter (Lcom/github/halfdeadgames/hdgife/story/ValueConverter;)V
 	public final fun setVariable (Ljava/lang/String;Ljava/lang/Object;)V
-	public final fun setVariableNamer (Lkotlin/jvm/functions/Function2;)V
+	public final fun setVariableNamer (Lcom/github/halfdeadgames/hdgife/story/VariableNamer;)V
 	public final fun syncStats (Ljava/lang/String;Ljava/util/List;)Ljava/util/List;
 	public final fun unbindFunction (Ljava/lang/String;)V
 	public final fun unobserve (Lcom/github/halfdeadgames/hdgife/story/VariableObservation;)V
 	public final fun unobserve (Ljava/lang/String;)V
 	public final fun validateStory ()Lcom/github/halfdeadgames/hdgife/story/StoryReport;
-	public final fun valueConverter (Lcom/github/halfdeadgames/hdgife/story/ValueConverter;)V
 }
 
 public final class com/github/halfdeadgames/hdgife/story/StoryManager$Companion {
@@ -472,6 +469,10 @@ public final class com/github/halfdeadgames/hdgife/story/Tags$Companion {
 	public final fun parse (Ljava/util/List;)Lcom/github/halfdeadgames/hdgife/story/Tags;
 }
 
+public abstract interface class com/github/halfdeadgames/hdgife/story/TextCleaner {
+	public abstract fun clean (Ljava/lang/String;)Ljava/lang/String;
+}
+
 public final class com/github/halfdeadgames/hdgife/story/TextMarker {
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getName ()Ljava/lang/String;
@@ -506,6 +507,10 @@ public final class com/github/halfdeadgames/hdgife/story/ValidationIssue {
 
 public abstract interface class com/github/halfdeadgames/hdgife/story/ValueConverter {
 	public abstract fun convert (Ljava/lang/Object;)Ljava/lang/Object;
+}
+
+public abstract interface class com/github/halfdeadgames/hdgife/story/VariableNamer {
+	public abstract fun nameFor (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
 }
 
 public final class com/github/halfdeadgames/hdgife/story/VariableObservation : java/lang/AutoCloseable {

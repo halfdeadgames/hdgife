@@ -21,10 +21,12 @@ def consoleLibrary = tasks.register('consoleLibrary', Jar) {
 
 dependencies {
   api project(':core')
+  // ktx-app stays api: TestGame extends KtxGame, and lwjgl3 and android hand it to libGDX as an ApplicationListener, so
+  // their compilers must see that supertype. They import nothing from ktx themselves. The other modules are internal.
+  // The harness uses no coroutines (so that it runs under TeaVM); the UI test brings its own ktx-async.
   api "io.github.quillraven.libktx:ktx-app:$ktxVersion"
-  api "io.github.quillraven.libktx:ktx-async:$ktxVersion"
-  api "io.github.quillraven.libktx:ktx-log:$ktxVersion"
-  api "io.github.quillraven.libktx:ktx-scene2d:$ktxVersion"
+  implementation "io.github.quillraven.libktx:ktx-log:$ktxVersion"
+  implementation "io.github.quillraven.libktx:ktx-scene2d:$ktxVersion"
   // the console library, minus its ConsoleContext (see consoleLibrary below)
   api files(consoleLibrary)
 }

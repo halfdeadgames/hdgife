@@ -1,10 +1,8 @@
 package com.github.halfdeadgames.hdgife.story
 
-import com.bladecoder.ink.runtime.Container
 import com.bladecoder.ink.runtime.HdgifeStory
 import com.bladecoder.ink.runtime.InkList
 import com.bladecoder.ink.runtime.InkNativePatch
-import com.bladecoder.ink.runtime.SimpleJson
 import com.bladecoder.ink.runtime.Story
 import com.bladecoder.ink.runtime.StoryException
 import com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi
@@ -108,7 +106,7 @@ public fun cleanLine(raw: String): String =
  *     stateProvider = myProvider
  *     log = HdgifeLog { println(it) }
  *     numberFormat = NumberFormat(decimals = 1)
- *     onEvent { event -> handle(event) }
+ *     onEvent = StoryEventListener { event -> handle(event) }
  * }
  * ```
  *
@@ -120,6 +118,8 @@ public fun cleanLine(raw: String): String =
  * ### Closing
  * [close] unbinds this manager from the story, so the story can go to a fresh manager. A closed manager throws
  * [IllegalStateException] from calls that use the story.
+ *
+ * Errors: invalid API input throws, bad story content is logged or reported (see [validateStory]).
  *
  * Story is not thread-safe. Call this from one thread.
  */
@@ -148,7 +148,7 @@ public class StoryManager private constructor(
      * Builds the ink variable name that [syncStats] writes a stat to. Default [defaultVariableName]:
      * `entityId_statName` with anything outside `[A-Za-z0-9_]` replaced by `_` (`player_hp`).
      */
-    public var variableNamer: (entityId: String, statName: String) -> String = ::defaultVariableName
+    public var variableNamer: VariableNamer = VariableNamer(::defaultVariableName)
 
     private var current: Story = story
 
@@ -211,22 +211,16 @@ public class StoryManager private constructor(
      * or styles. Return the text unchanged to turn cleaning off. Spans and markers follow the cleaned text; a
      * cleaner that only removes characters keeps them exact (see `parseStyles`).
      */
-    public var textCleaner: (String) -> String = ::cleanLine
+    public var textCleaner: TextCleaner = TextCleaner(::cleanLine)
 
     /** Format used by ink's `stat_text` and `stat_text_of` when [formatOverride] has nothing for the stat. Default 0 decimals, round half away from zero. */
     public var numberFormat: NumberFormat = NumberFormat(decimals = 0, rounding = Rounding.ROUND)
 
     /**
      * Per-stat format. Its `formatFor` returns null to use [numberFormat]. Default: always null. Called each time ink
-     * prints a stat, so keep it cheap. Assign `NumberFormatOverride { entity, stat -> ... }` or use the helper
-     * `formatOverride { entity, stat -> ... }`.
+     * prints a stat, so keep it cheap. Assign `NumberFormatOverride { entity, stat -> ... }`.
      */
     public var formatOverride: NumberFormatOverride = NumberFormatOverride { _, _ -> null }
-
-    /** Sets [formatOverride] from a lambda. */
-    public fun formatOverride(override: NumberFormatOverride) {
-        formatOverride = override
-    }
 
     /**
      * Whether ink functions declared `EXTERNAL` may fall back to the ink function of the same name when
@@ -245,14 +239,9 @@ public class StoryManager private constructor(
      * enums) into something ink can hold: an `Int`, `Float`, `Boolean` or `String` (other results go through the
      * normal mapping once more, without this hook). Used for stats, [setVariable] and the results of
      * [bindFunction] functions. Default: converts nothing, so such values become `toString()`. Returning null also
-     * means `toString()`. Assign `ValueConverter { value -> ... }` or use the helper `valueConverter { value -> ... }`.
+     * means `toString()`. Assign `ValueConverter { value -> ... }`.
      */
     public var valueConverter: ValueConverter = ValueConverter { null }
-
-    /** Sets [valueConverter] from a lambda. */
-    public fun valueConverter(converter: ValueConverter) {
-        valueConverter = converter
-    }
 
     /**
      * Called for each `emit` event, in order, while [next] builds a step: after the story has run to the next choice
@@ -267,11 +256,6 @@ public class StoryManager private constructor(
      * listener throws again, the rest stays pending again. [loadState], [reset], [replaceStory] and [close] drop them.
      */
     public var onEvent: StoryEventListener = StoryEventListener { }
-
-    /** Sets [onEvent] from a lambda: `onEvent { event -> ... }`. */
-    public fun onEvent(listener: StoryEventListener) {
-        onEvent = listener
-    }
 
     /**
      * How many styles may be open at once. Default 16. When a style opens beyond the limit the oldest open style is
@@ -632,7 +616,7 @@ public class StoryManager private constructor(
         val variables = story.variablesState
         var skipped: ArrayList<String>? = null
         for (stat in statNames) {
-            val name = variableNamer(entityId, stat)
+            val name = variableNamer.nameFor(entityId, stat)
             val value = if (variables.get(name) == null) null else toInk(provider.getStat(entityId, stat))
             if (value == null) {
                 (skipped ?: ArrayList<String>().also { skipped = it }) += name
@@ -693,32 +677,7 @@ public class StoryManager private constructor(
         ensureOpen()
         val id = storyId
         val print = if (saveFingerprint) fingerprint() else null
-        val writer = SimpleJson.Writer()
-        writer.writeObjectStart()
-        writer.writeProperty("v", if (id != null || print != null) 2 else 1)
-        writer.writeProperty("ink", story.state.toJson())
-        writer.writePropertyStart("styles")
-        writer.writeArrayStart()
-        for (style in openStyles) {
-            writer.writeObjectStart()
-            writer.writeProperty("name", style.name)
-            style.value?.let { writer.writeProperty("value", it) }
-            if (style.params.isNotEmpty()) {
-                writer.writePropertyStart("params")
-                writer.writeObjectStart()
-                for ((key, value) in style.params) writer.writeProperty(key, value)
-                writer.writeObjectEnd()
-                writer.writePropertyEnd()
-            }
-            writer.writeObjectEnd()
-        }
-        writer.writeArrayEnd()
-        writer.writePropertyEnd()
-        fallbackSpeaker?.let { writer.writeProperty("speaker", it) }
-        id?.let { writer.writeProperty("storyId", it) }
-        print?.let { writer.writeProperty("fingerprint", it) }
-        writer.writeObjectEnd()
-        return writer.toString()
+        return SaveEnvelope.write(story.state.toJson(), openStyles, fallbackSpeaker, id, print)
     }
 
     /**
@@ -736,20 +695,9 @@ public class StoryManager private constructor(
      */
     public fun loadState(json: String) {
         ensureOpen()
-        var inkJson = json
-        var styles = emptyList<Style>()
-        var savedSpeaker: String? = null
-        val envelope = readEnvelope(json)
-        if (envelope != null) {
-            val version = (envelope["v"] as? Number)?.toInt() ?: throw SaveStateException("Save has no version")
-            if (version !in 1..SAVE_VERSION) {
-                throw SaveStateException("Save version $version is not supported (this engine reads up to $SAVE_VERSION)")
-            }
-            inkJson = envelope["ink"] as? String ?: throw SaveStateException("Save has no ink state")
-            styles = readStyles(envelope["styles"])
-            savedSpeaker = envelope["speaker"] as? String
-            checkIdentity(envelope)
-        }
+        val saved = SaveEnvelope.read(json)
+        if (saved != null) checkIdentity(saved)
+        val inkJson = saved?.inkJson ?: json
         try {
             story.state.loadJson(inkJson)
         } catch (e: Exception) {
@@ -761,73 +709,28 @@ public class StoryManager private constructor(
             throw SaveStateException("Ink could not load the state: ${e.message}", e)
         }
         lastSeed = null
-        if (envelope == null) {
+        if (saved == null) {
             closeStyles("state was loaded")
         } else {
-            openStyles = styles
-            fallbackSpeaker = savedSpeaker
+            openStyles = saved.styles
+            fallbackSpeaker = saved.speaker
         }
         dropEvents()
         rebaseObservations()
     }
 
-    private fun checkIdentity(envelope: Map<String, Any?>) {
-        val savedId = envelope["storyId"] as? String
+    private fun checkIdentity(saved: SavedState) {
         val id = storyId
-        if (id != null && savedId != null && savedId != id) {
-            throw SaveStateException("This save belongs to story '$savedId', but this manager is for story '$id'")
+        if (id != null && saved.storyId != null && saved.storyId != id) {
+            throw SaveStateException("This save belongs to story '${saved.storyId}', but this manager is for story '$id'")
         }
-        val savedPrint = envelope["fingerprint"] as? String
-        if (saveFingerprint && savedPrint != null && savedPrint != fingerprint()) {
+        if (saveFingerprint && saved.fingerprint != null && saved.fingerprint != fingerprint()) {
             throw SaveStateException("The story has changed since this save was written (its structure fingerprint differs)")
         }
     }
 
-    /** A hash of the sorted names of the story's containers (knots, stitches, labels) and variables. Computed once. */
-    private fun fingerprint(): String = fingerprintCache ?: computeFingerprint().also { fingerprintCache = it }
-
-    private fun computeFingerprint(): String {
-        val names = ArrayList<String>()
-        fun walk(container: Container, prefix: String) {
-            val named = container.namedContent ?: return
-            for ((name, content) in named) {
-                names += prefix + name
-                if (content is Container) walk(content, "$prefix$name.")
-            }
-        }
-        walk(story.mainContentContainer, "")
-        for (variable in story.variablesState) names += "$ $variable"
-        names.sort()
-        var hash = -0x340d631b7bdddcdbL // FNV-1a 64 offset basis
-        for (name in names) {
-            for (c in name) hash = (hash xor c.code.toLong()) * 0x100000001b3L
-            hash = (hash xor 10L) * 0x100000001b3L
-        }
-        return hash.toULong().toString(16).padStart(16, '0')
-    }
-
-    /** The parsed envelope, or null when [json] is a plain ink state (it has no `v` and `ink` keys). */
-    private fun readEnvelope(json: String): Map<String, Any?>? {
-        val parsed = try {
-            SimpleJson.textToDictionary(json)
-        } catch (e: Exception) {
-            return null // not ours; ink reports the problem when it loads it
-        }
-        return if (parsed.containsKey("v") && parsed.containsKey("ink")) parsed else null
-    }
-
-    private fun readStyles(raw: Any?): List<Style> {
-        val list = raw as? List<*> ?: return emptyList()
-        return list.map { item ->
-            val map = item as? Map<*, *> ?: throw SaveStateException("Save has a broken style entry")
-            val params = (map["params"] as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value.toString() }
-            Style(
-                map["name"] as? String ?: throw SaveStateException("Save has a style without a name"),
-                map["value"] as? String,
-                params ?: emptyMap(),
-            )
-        }
-    }
+    /** The structure fingerprint of the current story. Computed once, kept until [replaceStory]. */
+    private fun fingerprint(): String = fingerprintCache ?: SaveEnvelope.fingerprint(story).also { fingerprintCache = it }
 
     /**
      * Starts the story over: ink state back to the beginning (variables, position, visit counts, random seed and
@@ -1006,76 +909,7 @@ public class StoryManager private constructor(
     private fun requirementsOf(tags: Tags): List<RequirementResult> {
         val clauses = tags.all(requirementsTagKey)
         if (clauses.isEmpty()) return emptyList()
-        val result = ArrayList<RequirementResult>()
-        val current = speaker
-        for (value in clauses) {
-            for (part in splitClauses(value)) {
-                val raw = part.trim()
-                if (raw.isEmpty()) continue
-                result += evaluateClause(raw, current)
-            }
-        }
-        return result
-    }
-
-    private fun evaluateClause(raw: String, currentSpeaker: String?): RequirementResult {
-        val alternatives = splitAlternatives(raw)
-        if (alternatives.size == 1) return evaluateTerm(raw, currentSpeaker)
-        return RequirementResult.AnyOf(raw, alternatives.map { evaluateTerm(it.trim(), currentSpeaker) })
-    }
-
-    private fun evaluateTerm(raw: String, currentSpeaker: String?): RequirementResult {
-        val rest = negatedRest(raw) ?: return evaluateRequirement(raw, currentSpeaker)
-        return RequirementResult.Not(raw, evaluateTerm(rest, currentSpeaker))
-    }
-
-    private fun evaluateRequirement(raw: String, currentSpeaker: String?): RequirementResult {
-        val match = REQUIREMENT.matchEntire(raw)
-        val op = match?.let { Comparison.parse(it.groupValues[3]) }
-        val text = match?.groupValues?.get(4)?.trim()?.let(::unquote)
-        if (match == null || op == null || text.isNullOrEmpty()) {
-            log?.log("Requirement: cannot read '$raw'")
-            return RequirementResult.Unreadable(raw)
-        }
-        val entity = match.groupValues[1].ifEmpty { null }?.let(::unquote) ?: currentSpeaker
-        val stat = unquote(match.groupValues[2])
-        val number = text.toDoubleOrNull()?.takeIf { it.isFinite() }
-        val numberTarget: Any? = number?.let { text.toIntOrNull() ?: it.toFloat() }
-        if (entity == null) {
-            log?.log("Requirement: '$raw' names no entity and there is no speaker")
-            return RequirementResult.MissingStat(raw, null, stat, op, numberTarget ?: text)
-        }
-        val actual = statInk(entity, stat)
-            ?: return RequirementResult.MissingStat(raw, entity, stat, op, numberTarget ?: text)
-
-        fun mismatch(why: String): RequirementResult {
-            log?.log("Requirement: '$raw' $why")
-            return RequirementResult.Mismatch(raw, entity, stat, op, numberTarget ?: text, actual)
-        }
-        fun outcome(met: Boolean, target: Any): RequirementResult =
-            if (met) RequirementResult.Met(raw, entity, stat, op, target, actual)
-            else RequirementResult.Unmet(raw, entity, stat, op, target, actual)
-        return when (actual) {
-            is Int, is Float -> {
-                if (number == null || numberTarget == null) return mismatch("compares a number to '$text'")
-                val have = (actual as Number).let { if (it is Float) it.toString().toDouble() else it.toDouble() }
-                val want = if (numberTarget is Float) numberTarget.toString().toDouble() else number
-                outcome(op.test(have, want), numberTarget)
-            }
-            is Boolean -> {
-                val want = when (text.lowercase()) {
-                    "true" -> true
-                    "false" -> false
-                    else -> return mismatch("compares a boolean to '$text'")
-                }
-                if (!op.isEquality) return mismatch("uses ${op.symbol} on a boolean")
-                outcome((actual == want) == (op == Comparison.EQUAL), want)
-            }
-            else -> {
-                if (!op.isEquality) return mismatch("uses ${op.symbol} on a string")
-                outcome((actual == text) == (op == Comparison.EQUAL), text)
-            }
-        }
+        return RequirementEvaluator(::statInk, speaker, log).evaluate(clauses)
     }
 
     // ---- variables ---------------------------------------------------------------------------------------------
@@ -1127,7 +961,7 @@ public class StoryManager private constructor(
             value is Int && type == Float::class -> value.toFloat()
             value is Int && type == Double::class -> value.toDouble()
             value is Int && type == Long::class -> value.toLong()
-            value is Float && type == Double::class -> value.toString().toDouble()
+            value is Float && type == Double::class -> value.toCleanDouble()
             else -> null
         }
         @Suppress("UNCHECKED_CAST")
@@ -1213,7 +1047,6 @@ public class StoryManager private constructor(
         private const val SEED_FUNCTION = "hdgife_seed"
         private const val SPEAKER_VARIABLE = "hdgife_speaker"
         private const val EVENT_SEQ_VARIABLE = "hdgife_event_seq"
-        private const val SAVE_VERSION = 2
         private val NOT_NAME = Regex("[^A-Za-z0-9_]")
 
         /**
@@ -1228,96 +1061,6 @@ public class StoryManager private constructor(
             stateProvider: NarrativeStateProvider? = null,
             configure: StoryManager.() -> Unit = {},
         ): StoryManager = StoryManager(story, false, stateProvider, configure)
-
-        // A name is a plain word (letters, digits, _ and -) or quoted ('...' or "..."), so it can hold spaces, dots and commas.
-        private const val NAME = """\x22[^\x22]+\x22|'[^']+'|[\w-]+"""
-        private val REQUIREMENT = Regex("""(?:($NAME)\.)?($NAME)\s*(>=|<=|==|!=|>|<)\s*(.+)""")
-
-        /**
-         * True when [clause] (one comma-separated part of a requirement tag) can be read: terms of the shape
-         * `[entity.]stat op value`, joined with `|`, each optionally negated with `!` or `not `.
-         */
-        internal fun isReadableRequirement(clause: String): Boolean =
-            splitAlternatives(clause).all { isReadableTerm(it.trim()) }
-
-        private fun isReadableTerm(term: String): Boolean {
-            val rest = negatedRest(term) ?: return isSimpleRequirement(term)
-            return isReadableTerm(rest)
-        }
-
-        private fun isSimpleRequirement(term: String): Boolean {
-            val match = REQUIREMENT.matchEntire(term) ?: return false
-            return Comparison.parse(match.groupValues[3]) != null && match.groupValues[4].trim().let(::unquote).isNotEmpty()
-        }
-
-        /**
-         * The term without its negation, or null when [term] is not negated. `!x` and `not x` negate; `not` alone as a
-         * stat name (`not >= 3`, a readable term by itself) does not. Nothing after the mark is not a negation either.
-         */
-        private fun negatedRest(term: String): String? {
-            if (term.startsWith('!')) return term.substring(1).trim().ifEmpty { null }
-            if (term.length > 4 && term.startsWith("not") && term[3].isWhitespace() && !isSimpleRequirement(term)) {
-                return term.substring(4).trim().ifEmpty { null }
-            }
-            return null
-        }
-
-        private fun unquote(text: String): String =
-            if (text.length >= 2 && (text.first() == '"' || text.first() == '\'') && text.last() == text.first()) text.substring(1, text.length - 1) else text
-
-        /** Splits a requirement tag on commas that are outside quotes, see [splitOutsideQuotes]. */
-        internal fun splitClauses(value: String): List<String> = splitOutsideQuotes(value) { v, i -> if (v[i] == ',') 1 else 0 }
-
-        /**
-         * Splits a clause into alternatives at a `|` or at the word `or` (with whitespace on both sides), outside quotes.
-         * Ink reads a bare `|` inside a choice's `[ ]` as its own separator, so there write `\|` or use `or`.
-         */
-        internal fun splitAlternatives(clause: String): List<String> = splitOutsideQuotes(clause) { v, i ->
-            when {
-                v[i] == '|' -> 1
-                v[i] == 'o' && v.startsWith("or", i) && i > 0 && v[i - 1].isWhitespace() &&
-                    i + 2 < v.length && v[i + 2].isWhitespace() -> 2
-                else -> 0
-            }
-        }
-
-        /**
-         * Splits [value] where [separator] says a separator starts (it returns its length at index i, or 0), outside
-         * quotes. A quote opens at the start or after one of `= < > ! . , |` or a separator (so an apostrophe inside a
-         * word, `O'Brien`, is not a quote) and ends at the same quote character. An unterminated quote runs to the end.
-         */
-        internal fun splitOutsideQuotes(value: String, separator: (String, Int) -> Int): List<String> {
-            val parts = ArrayList<String>()
-            var start = 0
-            var quote = NO_CHAR
-            var previous = NO_CHAR
-            var i = 0
-            while (i < value.length) {
-                val c = value[i]
-                var step = 1
-                if (quote != NO_CHAR) {
-                    if (c == quote) quote = NO_CHAR
-                } else if ((c == '"' || c == '\'') && (previous == NO_CHAR || previous in "=<>!.,|")) {
-                    quote = c
-                } else {
-                    val length = separator(value, i)
-                    if (length > 0) {
-                        parts += value.substring(start, i)
-                        start = i + length
-                        step = length
-                        previous = ','
-                        i += step
-                        continue
-                    }
-                }
-                if (!c.isWhitespace()) previous = c
-                i += step
-            }
-            parts += value.substring(start)
-            return parts
-        }
-
-        private const val NO_CHAR = '\u0000'
 
         /** Builds `entityId_statName`, replacing characters outside `[A-Za-z0-9_]` with `_`. */
         @JvmStatic

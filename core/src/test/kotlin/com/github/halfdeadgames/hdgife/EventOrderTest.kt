@@ -1,5 +1,6 @@
 package com.github.halfdeadgames.hdgife
 
+import com.github.halfdeadgames.hdgife.story.StoryEventListener
 import com.github.halfdeadgames.hdgife.story.RequirementResult
 import com.github.halfdeadgames.hdgife.story.StoryEvent
 import com.github.halfdeadgames.hdgife.story.StoryManager
@@ -22,7 +23,7 @@ class EventOrderTest {
     private fun spendingManager(coin: Int): StoryManager {
         val stats = MapStats().also { it["player", "coin"] = coin }
         val m = managerOf(shop, stats)
-        m.onEvent { event ->
+        m.onEvent = StoryEventListener { event ->
             if (event.name == "spend") stats["player", "coin"] = (stats.getStat("player", "coin") as Int) - (event.args[1] as Int)
         }
         return m
@@ -47,7 +48,7 @@ class EventOrderTest {
             "* [Go] Went\n~ emit1(\"grant\", 5)\n* * [Buy # requires: player.coin >= 5] Bought -> END\n* * [Leave] Left -> END",
             stats,
         )
-        m.onEvent { stats["player", "coin"] = (stats.getStat("player", "coin") as Int) + (it.args[0] as Int) }
+        m.onEvent = StoryEventListener { stats["player", "coin"] = (stats.getStat("player", "coin") as Int) + (it.args[0] as Int) }
         m.next()
         assertTrue(m.choose(0).choices[0].isAvailable)
     }
@@ -56,7 +57,7 @@ class EventOrderTest {
     fun `onEvent runs once per event, in order, and the step lists the same events`() {
         val m = managerOf("A <>\n~ emit(\"x\")\nB\n~ emit1(\"y\", 1)\nC\n~ emit(\"z\")\n* [Go] -> END")
         val seen = ArrayList<StoryEvent>()
-        m.onEvent { seen += it }
+        m.onEvent = StoryEventListener { seen += it }
         val step = m.next()
         assertEquals(listOf("x", "y", "z"), seen.map { it.name })
         assertEquals(seen, step.events)
@@ -66,7 +67,7 @@ class EventOrderTest {
     fun `an event is delivered when the story ends too`() {
         val m = managerOf("Hi\n~ emit(\"bye\")\n-> END")
         val seen = ArrayList<String>()
-        m.onEvent { seen += it.name }
+        m.onEvent = StoryEventListener { seen += it.name }
         assertTrue(m.next().isEnded)
         assertEquals(listOf("bye"), seen)
     }
@@ -74,7 +75,7 @@ class EventOrderTest {
     @Test
     fun `an exception in onEvent comes out as a StoryStepException that keeps the step`() {
         val m = managerOf("Hi\n~ emit(\"a\")\n* [Go] -> END")
-        m.onEvent { error("nope") }
+        m.onEvent = StoryEventListener { error("nope") }
         val ex = assertFailsWith<StoryStepException> { m.next() }
         assertEquals(listOf("a"), ex.step.events.map { it.name })
         assertEquals(listOf("Hi"), ex.step.texts())

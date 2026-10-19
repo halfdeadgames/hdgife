@@ -1,5 +1,6 @@
 package com.github.halfdeadgames.hdgife
 
+import com.github.halfdeadgames.hdgife.story.StoryEventListener
 import com.bladecoder.ink.runtime.HdgifeStory
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.story.SaveStateException
@@ -95,7 +96,7 @@ class LifecycleTest {
         val log = LogSink()
         m.log = log
         val seen = ArrayList<String>()
-        m.onEvent { seen += it.name; if (it.name == "a") error("boom") }
+        m.onEvent = StoryEventListener { seen += it.name; if (it.name == "a") error("boom") }
         assertFailsWith<StoryStepException> { m.next() }
         assertEquals(listOf("a"), seen)
 

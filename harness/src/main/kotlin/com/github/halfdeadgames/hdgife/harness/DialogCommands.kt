@@ -27,10 +27,10 @@ fun parseValue(text: String): Any =
     }
 
 /** Sets the stat, syncs it to ink and returns the ink variable name. */
-fun applyStat(manager: StoryManager, provider: MapStateProvider, entity: String, stat: String, value: Any): String {
-    provider.setStat(entity, stat, value)
-    manager.syncStats(entity, listOf(stat))
-    return manager.variableNamer(entity, stat)
+fun applyStat(manager: StoryManager, provider: MapStateProvider, entityId: String, statName: String, value: Any): String {
+    provider.setStat(entityId, statName, value)
+    manager.syncStats(entityId, listOf(statName))
+    return manager.variableNamer.nameFor(entityId, statName)
 }
 
 /** What the console commands need from the screen. */
@@ -41,9 +41,9 @@ interface DialogControl {
     fun setVariable(name: String, value: Any)
     fun observe(name: String)
     fun unobserve(name: String)
-    fun setStat(entity: String, stat: String, value: Any)
-    fun setNpcStat(entity: String, stat: String, value: Any)
-    fun talk(knot: String, speaker: String?)
+    fun setStat(entityId: String, statName: String, value: Any)
+    fun setNpcStat(entityId: String, statName: String, value: Any)
+    fun talk(path: String, speaker: String?)
     fun seed(value: Int)
     fun setNumberFormat(decimals: Int, rounding: Rounding)
     fun choose(index: Int)
@@ -132,23 +132,20 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
         try {
             control.setVariable(name, parsed)
             control.log("$name = ${control.getVariable(name)}")
-        } catch (e: Exception) {
+        } catch (e: IllegalArgumentException) {
             control.log("Cannot set $name: ${e.message}")
         }
     }
 
     /** Sets a stat on the provider and syncs it to ink. The value can be a number, `true`/`false` or text. */
-    fun stat(entity: String, stat: String, value: String) = control.setStat(entity, stat, parseValue(value))
-
-    /** Shortcut for `stat player hp <value>`. */
-    fun hp(value: String) = control.setStat("player", "hp", parseValue(value))
+    fun stat(entityId: String, statName: String, value: String) = control.setStat(entityId, statName, parseValue(value))
 
     /** Sets a stat on the provider only. Ink reads it live, no sync needed. The value can be a number, `true`/`false` or text. */
-    fun npc(entity: String, stat: String, value: String) = control.setNpcStat(entity, stat, parseValue(value))
+    fun npc(entityId: String, statName: String, value: String) = control.setNpcStat(entityId, statName, parseValue(value))
 
-    fun talk(knot: String) = control.talk(knot, null)
+    fun talk(path: String) = control.talk(path, null)
 
-    fun talk(knot: String, speaker: String) = control.talk(knot, speaker)
+    fun talk(path: String, speaker: String) = control.talk(path, speaker)
 
     fun seed(n: String) {
         val value = n.toIntOrNull()

@@ -14,7 +14,7 @@ dependencies {
 
   // Tests only. Not part of the published pom.
   testImplementation "org.jetbrains.kotlin:kotlin-test-junit5:$kotlinVersion"
-  // Pins the JUnit platform launcher (and Jupiter) to one consistent 5.x line, newer than the one kotlin-test-junit5 asks for.
+  // kotlin-test-junit5 pulls an older JUnit 5 than the Gradle launcher expects; the BOM aligns Jupiter and the platform launcher on one version.
   testImplementation platform("org.junit:junit-bom:5.14.4")
   testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }

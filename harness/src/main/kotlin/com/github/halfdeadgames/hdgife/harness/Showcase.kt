@@ -64,5 +64,5 @@ val PLAYER_SYNCED_STATS = listOf("hp", "coin")
  * The harness's per-stat number format: trust shows one decimal, except Tobin's whole-number trust. Everything
  * else uses `StoryManager.numberFormat`, which the `numfmt` command changes.
  */
-fun harnessFormatOverride(entity: String, stat: String): NumberFormat? =
-    if (stat == "trust" && entity != "tobin") NumberFormat(1, Rounding.ROUND) else null
+fun harnessFormatOverride(entityId: String, statName: String): NumberFormat? =
+    if (statName == "trust" && entityId != "tobin") NumberFormat(1, Rounding.ROUND) else null

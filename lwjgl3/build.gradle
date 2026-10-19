@@ -56,7 +56,7 @@ kotlin.compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.J
 dependencies {
   implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
   implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
-  // The harness UI (and through it core, ktx, coroutines and the console) is shared with the android module.
+  // The harness UI (and through it core and the console) is shared with the android module.
   implementation project(':harness')
 
   if(enableGraalNative == 'true') {
@@ -89,7 +89,9 @@ configurations {
 
 dependencies {
   uiTestImplementation sourceSets.main.output
-  // the test script launches coroutines (the harness itself uses none, so that it runs under TeaVM)
+  // The test script launches coroutines with ktx-async. The harness itself uses neither (so that it runs under TeaVM);
+  // kotlinx-coroutines would also arrive through ktx-async, and is named here because the script imports it directly.
+  uiTestImplementation "io.github.quillraven.libktx:ktx-async:$ktxVersion"
   uiTestImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinxCoroutinesVersion"
 }
 

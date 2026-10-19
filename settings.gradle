@@ -14,8 +14,18 @@ plugins {
 // if you want to temporarily disable a subproject.
 include 'core', 'harness', 'lwjgl3'
 
+// Optional modules are left out with -P<flag>. A module that needs more than the flag (the Android SDK) passes a
+// second condition.
+def optional = { String module, String skipFlag, Closure available = { true } ->
+  if (!settings.startParameter.projectProperties.containsKey(skipFlag) && available()) {
+    include module
+    return true
+  }
+  return false
+}
+
 // The web (TeaVM) module. Pass -PskipWeb to leave it out.
-if (!settings.startParameter.projectProperties.containsKey('skipWeb')) include 'teavm'
+optional('teavm', 'skipWeb')
 
 // The android test module needs the Android SDK and the Android Gradle plugin. It is only included when the SDK is
 // found (sdk.dir in local.properties, or ANDROID_HOME / ANDROID_SDK_ROOT), so a machine without it (JitPack, CI) can
@@ -29,6 +39,4 @@ def androidSdkFound = {
   }
   return System.getenv('ANDROID_HOME') != null || System.getenv('ANDROID_SDK_ROOT') != null
 }
-def includeAndroid = !settings.startParameter.projectProperties.containsKey('skipAndroid') && androidSdkFound()
-gradle.ext.includeAndroid = includeAndroid
-if (includeAndroid) include 'android'
+gradle.ext.includeAndroid = optional('android', 'skipAndroid', androidSdkFound)

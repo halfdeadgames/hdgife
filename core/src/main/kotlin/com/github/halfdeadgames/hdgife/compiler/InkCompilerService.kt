@@ -84,6 +84,7 @@ public class InkCompilerService {
     }
 
     /** Rebuilds [story] as an [HdgifeStory] (fresh state) with ink fallbacks for EXTERNAL functions allowed. */
+    // Kept although StoryManager sets it too: a story used without a manager needs the ink fallbacks to run.
     private fun finish(story: Story): HdgifeStory = HdgifeStory.from(story).also { it.setAllowExternalFunctionFallbacks(true) }
 
     private fun run(rootName: String, text: String, handler: IFileHandler): Story {

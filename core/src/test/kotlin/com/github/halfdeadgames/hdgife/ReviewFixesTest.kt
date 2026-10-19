@@ -1,5 +1,8 @@
 package com.github.halfdeadgames.hdgife
 
+import com.github.halfdeadgames.hdgife.story.splitClauses
+import com.github.halfdeadgames.hdgife.story.VariableNamer
+import com.github.halfdeadgames.hdgife.story.StoryEventListener
 import com.bladecoder.ink.runtime.HdgifeStory
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.compiler.InkSource
@@ -92,7 +95,7 @@ class ReviewFixesTest {
         val m = managerOf(boomInk)
         m.bindFunction("boom") { error("bang") }
         val heard = ArrayList<String>()
-        m.onEvent { heard += it.name }
+        m.onEvent = StoryEventListener { heard += it.name }
         val ex = assertFailsWith<StoryStepException> { m.next() }
         assertEquals(listOf("Line one"), ex.step.texts())
         assertEquals(listOf("b"), ex.step.openStyles.map { it.name })
@@ -196,10 +199,10 @@ class ReviewFixesTest {
 
     @Test
     fun `splitClauses splits outside quotes only`() {
-        assertEquals(listOf("a == \"x, y\"", " b > 1"), StoryManager.splitClauses("a == \"x, y\", b > 1"))
-        assertEquals(listOf("a == 'x, y'"), StoryManager.splitClauses("a == 'x, y'"))
-        assertEquals(listOf("\"A, B\".c > 1", " d < 2"), StoryManager.splitClauses("\"A, B\".c > 1, d < 2"))
-        assertEquals(listOf("a == \"x, y"), StoryManager.splitClauses("a == \"x, y"))
+        assertEquals(listOf("a == \"x, y\"", " b > 1"), splitClauses("a == \"x, y\", b > 1"))
+        assertEquals(listOf("a == 'x, y'"), splitClauses("a == 'x, y'"))
+        assertEquals(listOf("\"A, B\".c > 1", " d < 2"), splitClauses("\"A, B\".c > 1, d < 2"))
+        assertEquals(listOf("a == \"x, y"), splitClauses("a == \"x, y"))
     }
 
     // ---- seed ----
@@ -357,7 +360,7 @@ class ReviewFixesTest {
     @Test
     fun `a custom variableNamer decides where stats are written`() {
         val m = managerOf("VAR v_hp = 0\nHi", stats("hero", "hp", 9))
-        m.variableNamer = { _, stat -> "v_$stat" }
+        m.variableNamer = VariableNamer { _, stat -> "v_$stat" }
         val skipped = m.syncStats("hero", listOf("hp", "mp"))
         assertEquals(9, m.getVariable("v_hp"))
         assertEquals(listOf("v_mp"), skipped)

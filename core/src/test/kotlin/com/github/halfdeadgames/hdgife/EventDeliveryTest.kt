@@ -1,5 +1,6 @@
 package com.github.halfdeadgames.hdgife
 
+import com.github.halfdeadgames.hdgife.story.StoryEventListener
 import com.github.halfdeadgames.hdgife.story.FunctionArgs
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.github.halfdeadgames.hdgife.story.StoryStepException
@@ -17,7 +18,7 @@ class EventDeliveryTest {
     private fun managerThrowingOn(text: String, vararg names: String, seen: MutableList<String>): StoryManager {
         val remaining = names.toMutableList()
         return managerOf(text).also { m ->
-            m.onEvent { event ->
+            m.onEvent = StoryEventListener { event ->
                 seen += event.name
                 if (remaining.remove(event.name)) error("boom ${event.name}")
             }

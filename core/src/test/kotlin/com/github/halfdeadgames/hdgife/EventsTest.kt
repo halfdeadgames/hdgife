@@ -1,5 +1,7 @@
 package com.github.halfdeadgames.hdgife
 
+import com.github.halfdeadgames.hdgife.story.TextCleaner
+import com.github.halfdeadgames.hdgife.story.StoryEventListener
 import com.bladecoder.ink.runtime.InkList
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.story.StoryEvent
@@ -71,7 +73,7 @@ class EventsTest {
         """.trimIndent())
         var calls = 0
         val cleaner = m.textCleaner
-        m.textCleaner = { if (++calls == 2) throw IllegalStateException("boom") else cleaner(it) }
+        m.textCleaner = TextCleaner { if (++calls == 2) throw IllegalStateException("boom") else cleaner.clean(it) }
         assertIs<IllegalStateException>(assertFailsWith<StoryStepException> { m.next() }.cause)
         m.textCleaner = cleaner
         m.reset()
@@ -160,7 +162,7 @@ class EventsTest {
             """.trimIndent(),
         )
         val seen = ArrayList<String>()
-        m.onEvent { seen += it.name }
+        m.onEvent = StoryEventListener { seen += it.name }
         val first = m.next()
         assertEquals(listOf("Start here"), first.texts())
         assertEquals(listOf("s"), first.events.map { it.name })
@@ -210,7 +212,7 @@ class EventsTest {
     fun `onEvent receives each event in order after the step is built`() {
         val m = managerOf(eventInk)
         val seen = ArrayList<StoryEvent>()
-        m.onEvent { seen += it }
+        m.onEvent = StoryEventListener { seen += it }
         val step = m.next()
         assertEquals(step.events, seen)
     }

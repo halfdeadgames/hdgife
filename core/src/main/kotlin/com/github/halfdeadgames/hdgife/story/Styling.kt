@@ -146,12 +146,12 @@ private class CloseToken(val name: String, override val end: Int) : Token
 internal fun parseStyles(
     source: String,
     carried: List<Style> = emptyList(),
-    cleaner: (String) -> String = ::cleanLine,
+    cleaner: TextCleaner = TextCleaner(::cleanLine),
     log: HdgifeLog? = null,
     maxOpen: Int = Int.MAX_VALUE,
 ): StyledText {
     if (source.indexOf('<') < 0) {
-        val cleaned = cleaner(source)
+        val cleaned = cleaner.clean(source)
         val spans = if (cleaned.isEmpty()) emptyList() else listOf(TextSpan(cleaned, carried.toList()))
         return StyledText(cleaned, spans, emptyList(), carried.toList())
     }
@@ -209,7 +209,7 @@ internal fun parseStyles(
     flush()
 
     val raw = plain.toString()
-    val cleaned = cleaner(raw)
+    val cleaned = cleaner.clean(raw)
     val map = boundaryMap(raw, cleaned)
 
     val spans = ArrayList<TextSpan>()

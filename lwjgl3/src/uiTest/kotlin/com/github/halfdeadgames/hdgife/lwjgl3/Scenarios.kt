@@ -386,7 +386,7 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         command("divert debug_status")
         expectRows("You have 12 hp.", "You feel fine.")
         expectRaw("text      : \"You have 12 hp.\"")
-        command("hp 0")
+        command("stat player hp 0")
         command("divert debug_status")
         expectRows("You feel awful.")
         command("talk guard_chat guard")
@@ -442,7 +442,7 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expectEquals(6, buttons.size, "show mode")
         expect(buttons.none { it.isDisabled }) { "Show keeps every choice clickable" }
         command("choicemode grey")
-        command("hp 20")
+        command("stat player hp 20")
         command("stat player faction rebels")
         command("divert gate_exchange")
         expect(!button("Stand aside").isDisabled && "(needs" !in buttonText(button("Stand aside"))) { "Stand aside opens with hp 20" }
@@ -451,7 +451,7 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
     }
 
     ui.scenario(report, "debug: events reach the game, which acts on them and ink reads it back") {
-        command("hp 20")
+        command("stat player hp 20")
         command("divert gate_exchange")
         click("Back the merchant up")
         val told = log.indexOfFirst { it.contains("Told you") }

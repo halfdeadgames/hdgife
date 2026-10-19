@@ -1,5 +1,6 @@
 package com.github.halfdeadgames.hdgife
 
+import com.github.halfdeadgames.hdgife.story.VariableNamer
 import com.github.halfdeadgames.hdgife.compiler.InkSource
 import com.github.halfdeadgames.hdgife.story.NumberFormat
 import com.github.halfdeadgames.hdgife.story.NumberFormatOverride
@@ -54,7 +55,7 @@ class ApiSurfaceTest {
         val seen = ArrayList<String>()
         m.onEvent = StoryEventListener { seen += it.name }
         m.onEvent.onEvent(StoryEvent("a", emptyList(), 0))
-        m.onEvent { seen += "b" }
+        m.onEvent = StoryEventListener { seen += "b" }
         m.onEvent.onEvent(StoryEvent("a", emptyList(), 0))
         assertEquals(listOf("a", "b"), seen)
 
@@ -75,12 +76,12 @@ class ApiSurfaceTest {
             stateProvider = stats
             this.log = log
             numberFormat = NumberFormat(1)
-            variableNamer = { entity, stat -> "v_${entity}_$stat" }
-            onEvent { events += it.name }
+            variableNamer = VariableNamer { entity, stat -> "v_${entity}_$stat" }
+            onEvent = StoryEventListener { events += it.name }
         }
         assertSame(stats, m.stateProvider)
         assertSame(log, m.log)
-        assertEquals("v_p_hp", m.variableNamer("p", "hp"))
+        assertEquals("v_p_hp", m.variableNamer.nameFor("p", "hp"))
         assertEquals(listOf("7.5"), m.next().texts())
         assertEquals(listOf("hello"), events)
     }
