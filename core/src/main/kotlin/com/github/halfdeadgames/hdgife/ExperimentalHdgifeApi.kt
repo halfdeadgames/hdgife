@@ -1,7 +1,7 @@
 package com.github.halfdeadgames.hdgife
 
 /**
- * Marks API that may still change in a minor release: `Comparison` and the validation types. Using it
+ * Marks API that may still change in a minor release: the validation types. Using it
  * only gives a warning; opt in with `@OptIn(ExperimentalHdgifeApi::class)` at the use site or the compiler option
  * `-opt-in=com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi` for the whole module.
  */

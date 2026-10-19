@@ -36,7 +36,7 @@ He serves the {stat("faction")} and you carry {inventory_count("pass")} pass.
   -> guard_chat
 + {stat("strength") >= 10} [Arm-wrestle him] You win, barely.
   -> guard_chat
-+ [Impress him with <em>your</em> muscles # requires: player.strength >= 10]
++ [Impress him with <em>your</em> muscles # requires: player.strength >= 10 or player.wits >= 7, !player.is_injured == true]
   He nods, grudgingly.
   -> guard_chat
 + [Ask him to bend the rules # requires: mood >= 50, sanity > 30]

@@ -1,12 +1,9 @@
 package com.github.halfdeadgames.hdgife.story
 
-import com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi
-
 /**
- * Comparison used by a requirement such as `strength >= 12`. More entries may be added in a later version, so a
+ * Comparison used by a requirement such as `strength >= 12`. Stable API. It may gain entries in a later version, so a
  * `when` over it should have an `else`.
  */
-@ExperimentalHdgifeApi
 public enum class Comparison(public val symbol: String) {
     GREATER(">"), GREATER_EQUAL(">="), LESS("<"), LESS_EQUAL("<="), EQUAL("=="), NOT_EQUAL("!=");
 
@@ -38,6 +35,10 @@ public enum class Comparison(public val symbol: String) {
  *   (`strength >= high`, `faction > 3`, `is_injured == 4`). That is logged and never met.
  * - [MissingStat]: the stat does not exist, or there is no entity to look it up on. Never met.
  * - [Unreadable]: the text is not a requirement at all. Never met.
+ * - [AnyOf]: alternatives joined with `|`, met when any of them is.
+ * - [Not]: a requirement negated with `!` (or `not `), met when the inner one was checked and is not met.
+ *
+ * Every node, also inside [AnyOf] and [Not], has [raw] and [isMet].
  *
  * Values are ink values: [actual] is an `Int`, `Float`, `Boolean` or `String`, [target] the value written in the
  * requirement read as the type of [actual] (a number is an `Int` or `Float`). More cases may be added in a later
@@ -141,4 +142,41 @@ public sealed interface RequirementResult {
 
         override fun toString(): String = "Unreadable(raw=$raw)"
     }
+
+    /**
+     * Alternatives written with `|` or `or` in one clause (`strength >= 12 or charm >= 8`). Met when any of [results] is met.
+     * [results] are the evaluated alternatives in the order written, each of them any kind of result except [AnyOf].
+     */
+    public class AnyOf internal constructor(override val raw: String, public val results: List<RequirementResult>) : RequirementResult {
+        override val isMet: Boolean get() = results.any { it.isMet }
+
+        override fun equals(other: Any?): Boolean = this === other || other is AnyOf && raw == other.raw && results == other.results
+
+        override fun hashCode(): Int = listOf(raw, results).hashCode()
+
+        override fun toString(): String = "AnyOf(raw=$raw, results=$results)"
+    }
+
+    /**
+     * A requirement negated with `!` or `not ` (`!is_injured == true`, `not guard.mood > 30`). Met only when [result] was
+     * checked and is not met ([RequirementResult.Unmet]). If [result] is a [MissingStat], a [Mismatch] or an [Unreadable],
+     * or an [AnyOf] with one of those and no met alternative, nothing was decided, so this is not met either.
+     */
+    public class Not internal constructor(override val raw: String, public val result: RequirementResult) : RequirementResult {
+        override val isMet: Boolean get() = !result.isMet && result.isDecided()
+
+        override fun equals(other: Any?): Boolean = this === other || other is Not && raw == other.raw && result == other.result
+
+        override fun hashCode(): Int = listOf(raw, result).hashCode()
+
+        override fun toString(): String = "Not(raw=$raw, result=$result)"
+    }
+}
+
+/** True when the requirement was really checked: met or unmet, not a missing stat, a type mismatch or unreadable text. */
+internal fun RequirementResult.isDecided(): Boolean = when (this) {
+    is RequirementResult.Met, is RequirementResult.Unmet -> true
+    is RequirementResult.AnyOf -> results.any { it.isMet } || results.all { it.isDecided() }
+    is RequirementResult.Not -> result.isDecided()
+    else -> false
 }

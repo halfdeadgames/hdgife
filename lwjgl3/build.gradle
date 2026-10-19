@@ -89,6 +89,8 @@ configurations {
 
 dependencies {
   uiTestImplementation sourceSets.main.output
+  // the test script launches coroutines (the harness itself uses none, so that it runs under TeaVM)
+  uiTestImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinxCoroutinesVersion"
 }
 
 tasks.register('uiTest', JavaExec) {

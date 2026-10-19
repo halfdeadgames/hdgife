@@ -138,6 +138,8 @@ private class CloseToken(val name: String, override val end: Int) : Token
  * default does). A cleaner that rewrites characters still gives consistent text, but the boundaries are placed
  * proportionally.
  *
+ * At most [maxOpen] styles stay open: opening one more drops the oldest (logged).
+ *
  * Problems are reported to [log] and never thrown. A closing marker with no match is dropped. A closing marker for
  * an outer style also closes the inner ones.
  */
@@ -146,6 +148,7 @@ internal fun parseStyles(
     carried: List<Style> = emptyList(),
     cleaner: (String) -> String = ::cleanLine,
     log: HdgifeLog? = null,
+    maxOpen: Int = Int.MAX_VALUE,
 ): StyledText {
     if (source.indexOf('<') < 0) {
         val cleaned = cleaner(source)
@@ -189,6 +192,10 @@ internal fun parseStyles(
             is OpenToken -> {
                 flush()
                 open += token.style
+                if (open.size > maxOpen) {
+                    log?.log("Style: more than $maxOpen styles open, dropped the oldest <${open[0].name}> in \"$source\"")
+                    open.removeAt(0)
+                }
             }
             is SelfToken -> rawMarkers += TextMarker(
                 token.style.name, plain.length, token.style.value, token.style.params,

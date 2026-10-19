@@ -257,7 +257,7 @@ class StateTest {
     fun `an unsupported save version is refused and nothing changes`() {
         val m = managerOf(styledInk)
         m.next()
-        val saved = m.saveState().replace("\"v\":1", "\"v\":2")
+        val saved = m.saveState().replace("\"v\":1", "\"v\":99")
         assertFailsWith<SaveStateException> { m.loadState(saved) }
         val line = m.choose(0).lines.single()
         assertEquals("and go now then.", line.text)

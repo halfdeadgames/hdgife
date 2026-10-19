@@ -1,5 +1,6 @@
 package com.github.halfdeadgames.hdgife.story
 
+import com.bladecoder.ink.runtime.Container
 import com.bladecoder.ink.runtime.HdgifeStory
 import com.bladecoder.ink.runtime.InkList
 import com.bladecoder.ink.runtime.InkNativePatch
@@ -37,19 +38,27 @@ public fun cleanLine(raw: String): String =
  * ### Speakers
  * [speaker] is the persistent speaker. Ink changes it with `speak("guard")`, a line can name a speaker for itself
  * with a tag (`# speaker: guard`, key set by [speakerTagKey]). A tag speaker applies to that line only.
- * Each [DialogLine] reports the speaker it had. `stat(name)` always reads the persistent speaker.
+ * Each [DialogLine] reports the speaker it had when its text was produced: a `speak()` that comes after the line
+ * (before a choice, the end or the next line) does not change it. Within one line (glue), the last `speak()` before the
+ * line ends wins. This works in glue lookahead and across [saveState]. On a plain [Story] (see "Glue and lookahead")
+ * `speak()` is not lookahead safe, so it is also correct there, but it ends glue lookahead.
+ * `stat(name)` always reads the persistent speaker.
  *
  * ### Requirements
  * Choices can declare requirements in a tag inside the choice text, for example
  * `* [Lift the boulder # requires: strength >= 12, faction == rebels, guard.mood > 30]`. They are evaluated against
  * [stateProvider] and reported on each [DialogChoice]. Nothing is hidden or blocked here.
+ * Commas separate clauses that must all hold (AND). Inside a clause `|` or the word `or` separates alternatives (OR)
+ * and a leading `!` or `not ` negates one (ink needs `\|` for a bar inside a choice's brackets, so `or` is easier there): `# requires: strength >= 12 or charm >= 8, !is_injured == true`. `!` binds tighter than `|`,
+ * which binds tighter than `,`. There are no parentheses. A `|`, `,` or ` or ` inside quotes is literal. See [requirementsTagKey].
  *
  * ### Styles
  * Style markers (`<em>`, `<color=red>`, `<shake amp=2>`) and point markers (`<pause=0.5/>`) in lines and choices
  * come back as [TextSpan]s and [TextMarker]s. An open style stays open until its closing marker: across the
- * lines of a step and across [next] calls, also over a choice into the chosen branch. All of it is closed when the
- * story ends or the manager is reset. [DialogStep.openStyles] tells what is open at the end of a step.
- * Unbalanced closing markers are logged.
+ * lines of a step and across [next] calls, also over a choice into the chosen branch (unless [closeStylesAtChoice]).
+ * All of it is closed when the story ends or the manager is reset. [DialogStep.openStyles] tells what is open at the
+ * end of a step. At most [maxOpenStyles] stay open, so a stray `<word>` that is never closed cannot grow without limit.
+ * Unbalanced closing markers, dropped styles and styles opened in a step and still open at its end are logged.
  *
  * ### Number display
  * `stat_text(name)` and `stat_text_of(entity, name)` print a stat using [numberFormat] (or the [formatOverride]
@@ -59,7 +68,8 @@ public fun cleanLine(raw: String): String =
  * [bindFunction] binds a Kotlin lambda to an ink `EXTERNAL` function. `~ emit("name", arg)` (hdgife.ink) is an event
  * channel that needs no `EXTERNAL` of your own: the calls come back on [DialogStep.events] and through [onEvent].
  * [onEvent] runs for each event before the step's choices are read, so what the game changes in it (spending a coin)
- * is seen by the requirements of that step's choices. Each event has a stable [StoryEvent.id].
+ * is seen by the requirements of that step's choices. Each event has a stable [StoryEvent.id]. If [onEvent] throws,
+ * the events after the one that threw stay pending and the next [next] delivers them first (see [onEvent]).
  * Events are lookahead safe: each one is reported exactly once and in order, also across glue (see "Glue and lookahead").
  *
  * ### Variables
@@ -87,7 +97,7 @@ public fun cleanLine(raw: String): String =
  * styles, in one opaque string. Ink state needs `INCLUDE hdgife.ink`, which keeps the speaker in an ink variable.
  * Your own stat values live in your game, so save those yourself. [loadState] also reads a plain ink state JSON
  * (styles are then closed). [reset]
- * restarts the story. To run different sources, compile a new story and make a new manager (or call [replaceStory]).
+ * restarts the story. [storyId] and [saveFingerprint] tie a save to its story, see [saveState]. To run different sources, compile a new story and make a new manager (or call [replaceStory]).
  *
  * ### Configuring
  * Settings are properties. Set them in the optional trailing lambda of the constructor, so the manager is ready to use
@@ -107,6 +117,10 @@ public fun cleanLine(raw: String): String =
  * [textCleaner], [speakerTagKey], [requirementsTagKey], [allowExternalFunctionFallbacks], [log], [valueConverter],
  * [onEvent].
  *
+ * ### Closing
+ * [close] unbinds this manager from the story, so the story can go to a fresh manager. A closed manager throws
+ * [IllegalStateException] from calls that use the story.
+ *
  * Story is not thread-safe. Call this from one thread.
  */
 public class StoryManager private constructor(
@@ -114,7 +128,7 @@ public class StoryManager private constructor(
     lookaheadSafeMode: Boolean,
     stateProvider: NarrativeStateProvider?,
     configure: StoryManager.() -> Unit,
-) {
+) : AutoCloseable {
     /**
      * Wraps [story], which stat functions bound lookahead safe (see "Glue and lookahead"). Throws
      * [IncompatibleLibraryException] if the story includes a hdgife.ink of another version. Use [forPlainStory] for
@@ -163,6 +177,7 @@ public class StoryManager private constructor(
     public fun replacePlainStory(story: Story): Unit = swapStory(story, false)
 
     private fun swapStory(value: Story, safeMode: Boolean) {
+        ensureOpen()
         // Validate first: a refused story leaves the manager exactly as it was.
         checkLibrary(value)
         val old = current
@@ -175,8 +190,8 @@ public class StoryManager private constructor(
         value.setAllowExternalFunctionFallbacks(allowExternalFunctionFallbacks)
         bind(value)
         lastSeed = null
-        pendingEvents.clear()
-        unconfirmedEvents.clear()
+        fingerprintCache = null
+        dropEvents()
         speaker = keep
         reattachObservations()
     }
@@ -244,8 +259,12 @@ public class StoryManager private constructor(
      * or the end, and before the choices are read. A requirement on a choice therefore sees what the game changed
      * here. (A condition that ink itself evaluates, like `{coin >= 3} [Buy]`, is decided inside the story before the
      * event arrives, so keep such state in ink variables or use `# requires:`.) The same events are on
-     * [DialogStep.events]. Default: does nothing. The engine does nothing with events itself. An exception thrown here comes
-     * out of [next] as a [StoryStepException] whose step holds the lines and events so far.
+     * [DialogStep.events]. Default: does nothing. The engine does nothing with events itself.
+     *
+     * An exception thrown here comes out of [next] as a [StoryStepException] whose step holds the lines and all the
+     * events. The event that threw counts as delivered. The events after it stay pending: the next [next] delivers them
+     * first, in order and once, and lists them at the front of its [DialogStep.events] with `lineIndex` 0. If the
+     * listener throws again, the rest stays pending again. [loadState], [reset], [replaceStory] and [close] drop them.
      */
     public var onEvent: StoryEventListener = StoryEventListener { }
 
@@ -254,6 +273,43 @@ public class StoryManager private constructor(
         onEvent = listener
     }
 
+    /**
+     * How many styles may be open at once. Default 16. When a style opens beyond the limit the oldest open style is
+     * dropped and a message is logged, so a stray `<word>` or an unclosed style in a looping knot cannot grow the
+     * spans and the saves without limit. Must be at least 1.
+     */
+    public var maxOpenStyles: Int = 16
+        set(value) {
+            require(value >= 1) { "maxOpenStyles must be at least 1" }
+            field = value
+        }
+
+    /**
+     * When true, the styles still open at a choice are closed (and logged) instead of carrying into the chosen branch,
+     * so [DialogStep.openStyles] is empty at every step end. Default false: they carry over.
+     */
+    public var closeStylesAtChoice: Boolean = false
+
+    /**
+     * Names the story in saves. When set, [saveState] writes it and [loadState] refuses a save that carries a
+     * different id with a [SaveStateException]. A save without an id (older, or written with no id) is accepted.
+     * Default null.
+     */
+    public var storyId: String? = null
+
+    /**
+     * When true, [saveState] also writes a fingerprint of the story structure (a hash of the names of its knots,
+     * stitches, labels and variables) and [loadState] refuses a save with another fingerprint with a
+     * [SaveStateException]: the story changed since the save. Saves without a fingerprint are accepted. The fingerprint
+     * is computed on first use and kept until [replaceStory]. It sees structure, not text: an edited line passes.
+     * Default false.
+     */
+    public var saveFingerprint: Boolean = false
+
+    private var closed = false
+    private var fingerprintCache: String? = null
+    private val speakRecords = ArrayList<SpeakRecord>()
+    private val undelivered = ArrayList<StoryEvent>()
     private var fallbackSpeaker: String? = null
     /**
      * The last seed set through [seedRandom], or null if none since the story was assigned, [loadState] or [reset]
@@ -273,6 +329,9 @@ public class StoryManager private constructor(
     /** An event kept by [confirmEvents]. [late] means it happened after the line just added (see [placeLateEvents]). */
     private class PendingEvent(val event: StoryEvent, val late: Boolean)
 
+    /** A `speak()` call: the new speaker and the text ink had in its output when it was called. */
+    private class SpeakRecord(val name: String?, val seen: String)
+
     private class CandidateEvent(val seq: Int, val event: StoryEvent, val textAtEmit: String)
 
     private class UserFunction(val lookaheadSafe: Boolean, val block: (FunctionArgs) -> Any?)
@@ -291,8 +350,12 @@ public class StoryManager private constructor(
      * [saveState]. Otherwise it is a plain field and not saved.
      */
     public var speaker: String?
-        get() = if (hasSpeakerVariable()) (story.variablesState.get(SPEAKER_VARIABLE) as? String)?.ifEmpty { null } else fallbackSpeaker
+        get() {
+            ensureOpen()
+            return if (hasSpeakerVariable()) (story.variablesState.get(SPEAKER_VARIABLE) as? String)?.ifEmpty { null } else fallbackSpeaker
+        }
         set(value) {
+            ensureOpen()
             if (hasSpeakerVariable()) story.variablesState.set(SPEAKER_VARIABLE, value ?: "") else fallbackSpeaker = value
         }
 
@@ -307,6 +370,35 @@ public class StoryManager private constructor(
 
     init {
         configure()
+    }
+
+    /** True after [close]. */
+    public val isClosed: Boolean get() = closed
+
+    private fun ensureOpen() = check(!closed) { "This StoryManager is closed" }
+
+    /**
+     * Detaches this manager from its story: unbinds the library functions and your [bindFunction]s, removes the
+     * observers, closes the styles and drops pending events. The story keeps its ink state and can go to a fresh
+     * manager. After this, calls that use the story throw [IllegalStateException]; closing again does nothing. The
+     * [VariableObservation]s become inactive.
+     */
+    override fun close() {
+        if (closed) return
+        closed = true
+        detachObservations()
+        for (observation in observations) observation.isActive = false
+        observations.clear()
+        unbindOwn(story)
+        userFunctions.clear()
+        dropEvents()
+        closeStyles("the manager was closed")
+    }
+
+    private fun dropEvents() {
+        pendingEvents.clear()
+        unconfirmedEvents.clear()
+        undelivered.clear()
     }
 
     // ---- ink binding -------------------------------------------------------------------------------------------
@@ -324,6 +416,7 @@ public class StoryManager private constructor(
         bindLibrary(target, "hdgife_emit1") { args -> record(args); null }
         bindLibrary(target, "hdgife_emit2") { args -> record(args); null }
         bindLibrary(target, "hdgife_emit3") { args -> record(args); null }
+        bindLibrary(target, "hdgife_speak") { args -> recordSpeak(args); null }
         for ((name, def) in userFunctions) {
             if (target.getExternalFunction(name) != null) target.unbindExternalFunction(name)
             bindUser(target, name, def)
@@ -389,6 +482,7 @@ public class StoryManager private constructor(
      */
     @JvmOverloads
     public fun bindFunction(name: String, lookaheadSafe: Boolean = false, function: (FunctionArgs) -> Any?) {
+        ensureOpen()
         if (name in userFunctions) unbindFunction(name)
         require(story.getExternalFunction(name) == null) { "'$name' is already bound" }
         val def = UserFunction(lookaheadSafe, function)
@@ -398,9 +492,31 @@ public class StoryManager private constructor(
 
     /** Removes a function bound with [bindFunction]. Does nothing if there is none. */
     public fun unbindFunction(name: String) {
+        ensureOpen()
         if (userFunctions.remove(name) == null) return
         val own = attached.remove(name)
         if (own != null && story.getExternalFunction(name) === own) story.unbindExternalFunction(name)
+    }
+
+    /** Called by `speak()` after it set the speaker. [speakerAt] sorts out later which line each call belongs to. */
+    private fun recordSpeak(args: Array<out Any?>) {
+        speakRecords += SpeakRecord(args.getOrNull(0)?.toString()?.ifEmpty { null }, (story as? HdgifeStory)?.outputText().orEmpty())
+    }
+
+    /**
+     * The speaker of the line [raw] that [next] just got from Continue. [before] is the speaker when the Continue began.
+     * The last `speak()` call during it wins, except a call that ink ran ahead past the line's newline (it saw the whole
+     * line plus the newline): that one is for the lines after, and the ink variable already holds it for them. If glue
+     * later joined the next text onto the line, the newline is gone and the call counts for the line.
+     */
+    private fun speakerAt(raw: String, before: String?): String? {
+        var result = before
+        for (record in speakRecords) {
+            val seen = record.seen
+            if (seen.endsWith('\n') && seen.trimEnd('\n', '\r') == raw) continue
+            result = record.name
+        }
+        return result
     }
 
     /**
@@ -511,6 +627,7 @@ public class StoryManager private constructor(
      * returns null for. Does nothing without a [stateProvider]. Returns the names of the variables that were skipped.
      */
     public fun syncStats(entityId: String, statNames: List<String>): List<String> {
+        ensureOpen()
         val provider = stateProvider ?: return emptyList()
         val variables = story.variablesState
         var skipped: ArrayList<String>? = null
@@ -535,6 +652,7 @@ public class StoryManager private constructor(
      */
     @JvmOverloads
     public fun beginScene(path: String, speaker: String? = null) {
+        ensureOpen()
         try {
             story.choosePathString(path)
         } catch (e: StoryException) {
@@ -552,6 +670,7 @@ public class StoryManager private constructor(
      * can't set the seed directly: blade-ink keeps that setter package-private.
      */
     public fun seedRandom(seed: Int) {
+        ensureOpen()
         if (!story.hasFunction(SEED_FUNCTION)) {
             throw IncompatibleLibraryException("Seeding needs INCLUDE hdgife.ink in the story", 0)
         }
@@ -565,11 +684,18 @@ public class StoryManager private constructor(
      * story. It is a small versioned envelope around ink's own state JSON:
      * `{"v":1,"ink":"<ink state>","styles":[{"name":"color","value":"red","params":{}}]}`, plus `"speaker"` when the
      * speaker is kept outside ink (no hdgife.ink). Treat the format as opaque.
+     *
+     * With [storyId] set, or [saveFingerprint] on, the envelope is version 2 and also carries `"storyId"` and
+     * `"fingerprint"`, which [loadState] checks. Without them it stays version 1, so older engines read it too.
+     * This engine reads both versions.
      */
     public fun saveState(): String {
+        ensureOpen()
+        val id = storyId
+        val print = if (saveFingerprint) fingerprint() else null
         val writer = SimpleJson.Writer()
         writer.writeObjectStart()
-        writer.writeProperty("v", SAVE_VERSION)
+        writer.writeProperty("v", if (id != null || print != null) 2 else 1)
         writer.writeProperty("ink", story.state.toJson())
         writer.writePropertyStart("styles")
         writer.writeArrayStart()
@@ -589,6 +715,8 @@ public class StoryManager private constructor(
         writer.writeArrayEnd()
         writer.writePropertyEnd()
         fallbackSpeaker?.let { writer.writeProperty("speaker", it) }
+        id?.let { writer.writeProperty("storyId", it) }
+        print?.let { writer.writeProperty("fingerprint", it) }
         writer.writeObjectEnd()
         return writer.toString()
     }
@@ -597,10 +725,17 @@ public class StoryManager private constructor(
      * Restores a string from [saveState], or a plain ink state JSON (an older save). Output continues from there,
      * and styles that were open at save time are open again. A plain ink JSON has no style information, so open
      * styles are closed. Throws [SaveStateException] for a save from a newer version or a broken envelope, and for
-     * a state that ink refuses (the story doesn't match; ink's exception is the cause). Stat values are not part of
+     * a state that ink refuses (the story doesn't match; ink's exception is the cause), and for a save whose `storyId`
+     * differs from [storyId], or, with [saveFingerprint] on, whose fingerprint differs. Stat values are not part of
      * it. Pending events are dropped.
+     *
+     * A refused envelope (version, ids, damage) is checked before anything is touched, so the manager stays as it was.
+     * If ink itself fails to load the state, ink's story may be half-updated, so the manager still closes the open
+     * styles, drops pending events and resets the observer baselines and [lastSeed], and keeps the speaker field as it
+     * is. It is then consistent with itself; load a good save or [reset].
      */
     public fun loadState(json: String) {
+        ensureOpen()
         var inkJson = json
         var styles = emptyList<Style>()
         var savedSpeaker: String? = null
@@ -613,10 +748,16 @@ public class StoryManager private constructor(
             inkJson = envelope["ink"] as? String ?: throw SaveStateException("Save has no ink state")
             styles = readStyles(envelope["styles"])
             savedSpeaker = envelope["speaker"] as? String
+            checkIdentity(envelope)
         }
         try {
             story.state.loadJson(inkJson)
         } catch (e: Exception) {
+            // Ink may have changed part of the story. Leave the manager's own bookkeeping consistent with that.
+            lastSeed = null
+            closeStyles("loading the state failed")
+            dropEvents()
+            rebaseObservations()
             throw SaveStateException("Ink could not load the state: ${e.message}", e)
         }
         lastSeed = null
@@ -626,9 +767,43 @@ public class StoryManager private constructor(
             openStyles = styles
             fallbackSpeaker = savedSpeaker
         }
-        pendingEvents.clear()
-        unconfirmedEvents.clear()
+        dropEvents()
         rebaseObservations()
+    }
+
+    private fun checkIdentity(envelope: Map<String, Any?>) {
+        val savedId = envelope["storyId"] as? String
+        val id = storyId
+        if (id != null && savedId != null && savedId != id) {
+            throw SaveStateException("This save belongs to story '$savedId', but this manager is for story '$id'")
+        }
+        val savedPrint = envelope["fingerprint"] as? String
+        if (saveFingerprint && savedPrint != null && savedPrint != fingerprint()) {
+            throw SaveStateException("The story has changed since this save was written (its structure fingerprint differs)")
+        }
+    }
+
+    /** A hash of the sorted names of the story's containers (knots, stitches, labels) and variables. Computed once. */
+    private fun fingerprint(): String = fingerprintCache ?: computeFingerprint().also { fingerprintCache = it }
+
+    private fun computeFingerprint(): String {
+        val names = ArrayList<String>()
+        fun walk(container: Container, prefix: String) {
+            val named = container.namedContent ?: return
+            for ((name, content) in named) {
+                names += prefix + name
+                if (content is Container) walk(content, "$prefix$name.")
+            }
+        }
+        walk(story.mainContentContainer, "")
+        for (variable in story.variablesState) names += "$ $variable"
+        names.sort()
+        var hash = -0x340d631b7bdddcdbL // FNV-1a 64 offset basis
+        for (name in names) {
+            for (c in name) hash = (hash xor c.code.toLong()) * 0x100000001b3L
+            hash = (hash xor 10L) * 0x100000001b3L
+        }
+        return hash.toULong().toString(16).padStart(16, '0')
     }
 
     /** The parsed envelope, or null when [json] is a plain ink state (it has no `v` and `ink` keys). */
@@ -661,12 +836,12 @@ public class StoryManager private constructor(
      * and build a new `StoryManager` (or call [replaceStory]) and optionally [loadState] a saved state.
      */
     public fun reset() {
+        ensureOpen()
         story.resetState()
         lastSeed = null
         fallbackSpeaker = null
         closeStyles("the story was reset")
-        pendingEvents.clear()
-        unconfirmedEvents.clear()
+        dropEvents()
         rebaseObservations()
     }
 
@@ -690,21 +865,27 @@ public class StoryManager private constructor(
      * The ink story itself is in whatever state ink left it in, so after a failure the usual move is [loadState] or [reset].
      */
     public fun next(): DialogStep {
+        ensureOpen()
         val s = story
         val lines = ArrayList<DialogLine>()
         val stepTags = ArrayList<String>()
         var carried: ArrayList<String>? = null
         val choices = ArrayList<DialogChoice>()
+        val startStyles = openStyles
+        val leftover = takeUndelivered()
         var events: List<StoryEvent>? = null
         var notified = false
         try {
             while (s.canContinue()) {
                 eventLine = lines.size
+                val before = speaker
+                speakRecords.clear()
                 val raw = s.Continue().trimEnd('\n', '\r')
                 confirmEvents(raw)
+                val lineSpeaker = speakerAt(raw, before)
                 val lineTags = s.currentTags
                 stepTags.addAll(lineTags)
-                val styled = parseStyles(raw, openStyles, textCleaner, log)
+                val styled = parseStyles(raw, openStyles, textCleaner, log, maxOpenStyles)
                 openStyles = styled.open
                 if (styled.text.isBlank()) {
                     // a line with no text hands its tags to the next line, as ink does
@@ -715,14 +896,15 @@ public class StoryManager private constructor(
                 val tags = Tags.parse(carried?.let { it + lineTags } ?: lineTags)
                 carried = null
                 val tagSpeaker = tags[speakerTagKey]?.ifBlank { null }
-                lines += DialogLine(styled.text, tagSpeaker ?: speaker, tags, styled.spans, styled.markers)
+                // The speaker when the line's text was produced, not after ink ran ahead (see recordSpeak).
+                lines += DialogLine(styled.text, tagSpeaker ?: lineSpeaker, tags, styled.spans, styled.markers)
                 placeLateEvents(true)
             }
             confirmEvents("")
             placeLateEvents(false)
             eventLine = lines.size
             // The game hears every event first, so the requirements below see the state it changed.
-            val confirmed = takeEvents()
+            val confirmed = if (leftover.isEmpty()) takeEvents() else leftover + takeEvents()
             events = confirmed
             notified = true
             notifyEvents(confirmed)
@@ -742,14 +924,34 @@ public class StoryManager private constructor(
             unconfirmedEvents.clear()
             placeLateEvents(false)
             eventLine = lines.size
-            val kept = events ?: takeEvents()
+            val kept = events ?: (if (leftover.isEmpty()) takeEvents() else leftover + takeEvents())
             val partial = DialogStep(lines, Tags.parse(stepTags), emptyList(), false, kept, openStyles)
-            if (!notified) notifyEvents(kept)
+            if (!notified) {
+                try {
+                    notifyEvents(kept)
+                } catch (listenerFailure: Exception) {
+                    e.addSuppressed(listenerFailure)
+                }
+            }
             throw StoryStepException("The story failed while continuing: ${e.message}", e, partial)
         }
         val ended = choices.isEmpty()
-        if (ended) closeStyles("the story ended")
+        if (ended) {
+            closeStyles("the story ended")
+        } else if (closeStylesAtChoice) {
+            closeStyles("a choice was reached")
+        } else {
+            logUnclosed(startStyles)
+        }
         return DialogStep(lines, Tags.parse(stepTags), choices, ended, events.orEmpty(), openStyles)
+    }
+
+    /** Logs the styles that this step opened and left open (they carry on into the choice). Only works when [log] is set. */
+    private fun logUnclosed(startStyles: List<Style>) {
+        val sink = log ?: return
+        if (openStyles.isEmpty()) return
+        val added = openStyles.filter { style -> startStyles.none { it === style } }
+        if (added.isNotEmpty()) sink.log("Style: <${added.joinToString("> <") { it.name }}> opened and not closed by the end of the step")
     }
 
     private fun takeEvents(): List<StoryEvent> {
@@ -758,13 +960,30 @@ public class StoryManager private constructor(
         return events
     }
 
+    /** The events a throwing [onEvent] left behind, placed before the first line of this step. */
+    private fun takeUndelivered(): List<StoryEvent> {
+        if (undelivered.isEmpty()) return emptyList()
+        val events = undelivered.map { it.atLine(0) }
+        undelivered.clear()
+        return events
+    }
+
+    /** Hands the events to [onEvent]. The one that throws counts as delivered; the ones after it stay for the next [next]. */
     private fun notifyEvents(events: List<StoryEvent>) {
         val listener = onEvent
-        for (event in events) listener.onEvent(event)
+        for (i in events.indices) {
+            try {
+                listener.onEvent(events[i])
+            } catch (e: Exception) {
+                for (j in i + 1 until events.size) undelivered += events[j]
+                throw e
+            }
+        }
     }
 
     /** Picks choice [index] (as in [DialogChoice.index]) and returns the following [DialogStep]. Open styles carry over. */
     public fun choose(index: Int): DialogStep {
+        ensureOpen()
         val count = story.currentChoices.size
         require(index in 0 until count) { "No choice $index, there are $count" }
         story.chooseChoiceIndex(index)
@@ -774,12 +993,15 @@ public class StoryManager private constructor(
     // ---- requirements ------------------------------------------------------------------------------------------
 
     /**
-     * Reads the requirement tags of a choice and checks them against [stateProvider]. Each clause is
-     * `[entity.]stat op value`, ops `> >= < <= == !=`, clauses separated by commas, and the tag may repeat.
+     * Reads the requirement tags of a choice and checks them against [stateProvider]. Each term is
+     * `[entity.]stat op value`, ops `> >= < <= == !=`, and the tag may repeat. Clauses are separated by commas
+     * (all must hold); a clause is one term or several joined with `|` or `or` (any may hold, an [RequirementResult.AnyOf]);
+     * a term can start with `!` or `not ` (a [RequirementResult.Not]). `!` binds first, then `|`, then `,`.
      * Without an entity the current [speaker] is used. Numbers compare with every op. Strings (and enum
-     * names) and booleans only with `==` and `!=`; the value is written bare (`faction == rebels`) or in quotes.
+     * names) and booleans only with `==` and `!=`; the value is written bare (`faction == rebels`) or in quotes, and a
+     * value with `|`, `,` or ` or ` in it must be quoted.
      * A value or operator that doesn't fit the stat's type is a mismatch: unmet, and logged.
-     * Clauses that can't be read are logged and returned unmet with their raw text.
+     * Terms that can't be read are logged and returned unmet with their raw text.
      */
     private fun requirementsOf(tags: Tags): List<RequirementResult> {
         val clauses = tags.all(requirementsTagKey)
@@ -790,10 +1012,21 @@ public class StoryManager private constructor(
             for (part in splitClauses(value)) {
                 val raw = part.trim()
                 if (raw.isEmpty()) continue
-                result += evaluateRequirement(raw, current)
+                result += evaluateClause(raw, current)
             }
         }
         return result
+    }
+
+    private fun evaluateClause(raw: String, currentSpeaker: String?): RequirementResult {
+        val alternatives = splitAlternatives(raw)
+        if (alternatives.size == 1) return evaluateTerm(raw, currentSpeaker)
+        return RequirementResult.AnyOf(raw, alternatives.map { evaluateTerm(it.trim(), currentSpeaker) })
+    }
+
+    private fun evaluateTerm(raw: String, currentSpeaker: String?): RequirementResult {
+        val rest = negatedRest(raw) ?: return evaluateRequirement(raw, currentSpeaker)
+        return RequirementResult.Not(raw, evaluateTerm(rest, currentSpeaker))
     }
 
     private fun evaluateRequirement(raw: String, currentSpeaker: String?): RequirementResult {
@@ -861,7 +1094,7 @@ public class StoryManager private constructor(
      */
     @ExperimentalHdgifeApi
     public fun validateStory(): StoryReport = validateStory(
-        story,
+        story.also { ensureOpen() },
         boundFunctions = attached.keys + userFunctions.keys,
         observedVariables = observations.map { it.name },
         requirementsTagKey = requirementsTagKey,
@@ -871,13 +1104,16 @@ public class StoryManager private constructor(
      * Names of all global variables declared in the story (`VAR` and `CONST` are not distinguished), sorted.
      * Includes the library's own, which start with `hdgife_`.
      */
-    public val variableNames: List<String> get() = story.variablesState.toList().sorted()
+    public val variableNames: List<String> get() = story.also { ensureOpen() }.variablesState.toList().sorted()
 
     /**
      * The current value of ink variable [name]: an `Int`, `Float`, `Boolean` or `String` (an `InkList` for lists),
      * or null if the story declares no such variable.
      */
-    public fun getVariable(name: String): Any? = story.variablesState.get(name)
+    public fun getVariable(name: String): Any? {
+        ensureOpen()
+        return story.variablesState.get(name)
+    }
 
     /**
      * Typed read: `getVariable("player_hp", Int::class)`, or `variableAs<Int>("player_hp")` from Kotlin. Null when
@@ -908,6 +1144,7 @@ public class StoryManager private constructor(
      * Throws [IllegalArgumentException] if the variable isn't declared. Observers fire as for any change.
      */
     public fun setVariable(name: String, value: Any) {
+        ensureOpen()
         require(getVariable(name) != null) { "'$name' is not a variable declared in the story" }
         story.variablesState.set(name, if (value is InkList) value else toInk(value) ?: value)
     }
@@ -919,6 +1156,7 @@ public class StoryManager private constructor(
      * Throws [IllegalArgumentException] if the variable isn't declared. Stop it with [unobserve].
      */
     public fun observe(name: String, observer: (old: Any?, new: Any?) -> Unit): VariableObservation {
+        ensureOpen()
         require(getVariable(name) != null) { "'$name' is not a variable declared in the story" }
         val observation = VariableObservation(name, observer, this)
         observation.last = getVariable(name)
@@ -975,7 +1213,7 @@ public class StoryManager private constructor(
         private const val SEED_FUNCTION = "hdgife_seed"
         private const val SPEAKER_VARIABLE = "hdgife_speaker"
         private const val EVENT_SEQ_VARIABLE = "hdgife_event_seq"
-        private const val SAVE_VERSION = 1
+        private const val SAVE_VERSION = 2
         private val NOT_NAME = Regex("[^A-Za-z0-9_]")
 
         /**
@@ -995,35 +1233,85 @@ public class StoryManager private constructor(
         private const val NAME = """\x22[^\x22]+\x22|'[^']+'|[\w-]+"""
         private val REQUIREMENT = Regex("""(?:($NAME)\.)?($NAME)\s*(>=|<=|==|!=|>|<)\s*(.+)""")
 
-        /** True when [clause] (one comma-separated part of a requirement tag) has the shape `[entity.]stat op value`. */
-        internal fun isReadableRequirement(clause: String): Boolean {
-            val match = REQUIREMENT.matchEntire(clause.trim()) ?: return false
+        /**
+         * True when [clause] (one comma-separated part of a requirement tag) can be read: terms of the shape
+         * `[entity.]stat op value`, joined with `|`, each optionally negated with `!` or `not `.
+         */
+        internal fun isReadableRequirement(clause: String): Boolean =
+            splitAlternatives(clause).all { isReadableTerm(it.trim()) }
+
+        private fun isReadableTerm(term: String): Boolean {
+            val rest = negatedRest(term) ?: return isSimpleRequirement(term)
+            return isReadableTerm(rest)
+        }
+
+        private fun isSimpleRequirement(term: String): Boolean {
+            val match = REQUIREMENT.matchEntire(term) ?: return false
             return Comparison.parse(match.groupValues[3]) != null && match.groupValues[4].trim().let(::unquote).isNotEmpty()
+        }
+
+        /**
+         * The term without its negation, or null when [term] is not negated. `!x` and `not x` negate; `not` alone as a
+         * stat name (`not >= 3`, a readable term by itself) does not. Nothing after the mark is not a negation either.
+         */
+        private fun negatedRest(term: String): String? {
+            if (term.startsWith('!')) return term.substring(1).trim().ifEmpty { null }
+            if (term.length > 4 && term.startsWith("not") && term[3].isWhitespace() && !isSimpleRequirement(term)) {
+                return term.substring(4).trim().ifEmpty { null }
+            }
+            return null
         }
 
         private fun unquote(text: String): String =
             if (text.length >= 2 && (text.first() == '"' || text.first() == '\'') && text.last() == text.first()) text.substring(1, text.length - 1) else text
 
+        /** Splits a requirement tag on commas that are outside quotes, see [splitOutsideQuotes]. */
+        internal fun splitClauses(value: String): List<String> = splitOutsideQuotes(value) { v, i -> if (v[i] == ',') 1 else 0 }
+
         /**
-         * Splits a requirement tag on commas that are outside quotes. A quote opens at the start or after one of
-         * `= < > ! . ,` (so an apostrophe inside a word, `O'Brien`, is not a quote) and ends at the same quote
-         * character. An unterminated quote runs to the end.
+         * Splits a clause into alternatives at a `|` or at the word `or` (with whitespace on both sides), outside quotes.
+         * Ink reads a bare `|` inside a choice's `[ ]` as its own separator, so there write `\|` or use `or`.
          */
-        internal fun splitClauses(value: String): List<String> {
+        internal fun splitAlternatives(clause: String): List<String> = splitOutsideQuotes(clause) { v, i ->
+            when {
+                v[i] == '|' -> 1
+                v[i] == 'o' && v.startsWith("or", i) && i > 0 && v[i - 1].isWhitespace() &&
+                    i + 2 < v.length && v[i + 2].isWhitespace() -> 2
+                else -> 0
+            }
+        }
+
+        /**
+         * Splits [value] where [separator] says a separator starts (it returns its length at index i, or 0), outside
+         * quotes. A quote opens at the start or after one of `= < > ! . , |` or a separator (so an apostrophe inside a
+         * word, `O'Brien`, is not a quote) and ends at the same quote character. An unterminated quote runs to the end.
+         */
+        internal fun splitOutsideQuotes(value: String, separator: (String, Int) -> Int): List<String> {
             val parts = ArrayList<String>()
             var start = 0
             var quote = NO_CHAR
             var previous = NO_CHAR
-            for ((i, c) in value.withIndex()) {
+            var i = 0
+            while (i < value.length) {
+                val c = value[i]
+                var step = 1
                 if (quote != NO_CHAR) {
                     if (c == quote) quote = NO_CHAR
-                } else if ((c == '"' || c == '\'') && (previous == NO_CHAR || previous in "=<>!.,")) {
+                } else if ((c == '"' || c == '\'') && (previous == NO_CHAR || previous in "=<>!.,|")) {
                     quote = c
-                } else if (c == ',') {
-                    parts += value.substring(start, i)
-                    start = i + 1
+                } else {
+                    val length = separator(value, i)
+                    if (length > 0) {
+                        parts += value.substring(start, i)
+                        start = i + length
+                        step = length
+                        previous = ','
+                        i += step
+                        continue
+                    }
                 }
                 if (!c.isWhitespace()) previous = c
+                i += step
             }
             parts += value.substring(start)
             return parts

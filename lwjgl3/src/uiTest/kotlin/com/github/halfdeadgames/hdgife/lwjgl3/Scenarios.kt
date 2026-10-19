@@ -2,7 +2,12 @@ package com.github.halfdeadgames.hdgife.lwjgl3
 
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
+import com.badlogic.gdx.scenes.scene2d.InputEvent
+import com.badlogic.gdx.scenes.scene2d.ui.Label
+import com.badlogic.gdx.scenes.scene2d.ui.Skin
+import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.github.halfdeadgames.hdgife.harness.*
 import ktx.async.skipFrame
 
@@ -582,6 +587,27 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expect(first.size > 1) { "talk produced nothing" }
         expectEquals(first.dropLast(1), second.dropLast(1), "guard scene rows with the same seed")
         expectEquals(first.last().substringAfter("LINES"), second.last().substringAfter("LINES"), "raw panel with the same seed")
+    }
+    // The console library was built for an older libGDX and its Copy action used to throw NoSuchMethodError
+    // (Label.getText() changed type). The harness ships a recompiled ConsoleContext; this clicks its Copy label.
+    ui.scenario(report, "console: the Copy action works") {
+        val contextClass = Class.forName("com.strongjoshua.console.ConsoleContext")
+        val make = contextClass.getDeclaredConstructor(Class::class.java, Class::class.java, Skin::class.java, String::class.java)
+        make.isAccessible = true
+        val skin = Skin(Gdx.files.classpath("default_skin/uiskin.json"))
+        try {
+            val context = make.newInstance(Table::class.java, Label::class.java, skin, "default-round")
+            val source = Label("  text to copy  ", skin)
+            contextClass.getDeclaredMethod("setLabel", Label::class.java).apply { isAccessible = true }.invoke(context, source)
+            val copy = contextClass.getDeclaredField("copy").apply { isAccessible = true }.get(context) as Label
+            Gdx.app.clipboard.contents = "before"
+            val event = InputEvent().apply { type = InputEvent.Type.touchUp; pointer = 0 }
+            val click = copy.listeners.filterIsInstance<ClickListener>().first()
+            click.clicked(event, 0f, 0f)
+            expectEquals("text to copy", Gdx.app.clipboard.contents, "clipboard after Copy")
+        } finally {
+            skin.dispose()
+        }
     }
 }
 

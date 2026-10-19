@@ -3,13 +3,19 @@ eclipse.project.name = appName + '-core'
 // Only what the library really uses. Keep it this small.
 dependencies {
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
-  api "com.bladecoder.ink:blade-ink:$bladeInkVersion"
+  // Blade Ink is pinned to exactly this version: HdgifeStory overrides a package-private method and InkNativePatch uses
+  // package-private internals, which can change in any other release. `strictly` is written to the Gradle module
+  // metadata (so a consumer that asks for another version fails to resolve) and to the pom as an exact `[version]` range.
+  // UpstreamCanaryTest checks the internals by reflection, so a version bump shows up as a failing test.
+  api("com.bladecoder.ink:blade-ink") { version { strictly bladeInkVersion } }
   // Not in any public signature, so consumers get it at runtime only.
-  implementation "com.bladecoder.ink:blade-ink-compiler:$bladeInkVersion"
+  implementation("com.bladecoder.ink:blade-ink-compiler") { version { strictly bladeInkVersion } }
   api "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
 
   // Tests only. Not part of the published pom.
   testImplementation "org.jetbrains.kotlin:kotlin-test-junit5:$kotlinVersion"
+  // Pins the JUnit platform launcher (and Jupiter) to one consistent 5.x line, newer than the one kotlin-test-junit5 asks for.
+  testImplementation platform("org.junit:junit-bom:5.14.4")
   testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
 
@@ -36,6 +42,7 @@ kotlin {
 test {
   useJUnitPlatform()
   systemProperty 'hdgife.projectVersion', project.version.toString()
+  systemProperty 'hdgife.bladeInkVersion', bladeInkVersion
 }
 
 // Hdgife.VERSION comes from projectVersion in gradle.properties, the single source of truth.
@@ -124,6 +131,7 @@ apply plugin: 'maven-publish'
 
 java {
   withSourcesJar()
+  withJavadocJar()
 }
 
 publishing {
@@ -131,10 +139,42 @@ publishing {
     maven(MavenPublication) {
       from components.java
       artifactId = 'hdgife'
+      // Gradle writes `strictly` only to the module metadata. A plain pom version is a soft preference to Maven, so
+      // write the Blade Ink dependencies as an exact range, [1.3.2], which Maven honors as a hard requirement.
+      pom {
+        name = 'hdgife'
+        description = 'HDG Interactive Fiction Engine: Blade Ink narrative engine for Kotlin and libGDX games'
+        url = 'https://github.com/halfdeadgames/hdgife'
+        licenses {
+          license {
+            name = 'Apache License, Version 2.0'
+            url = 'https://www.apache.org/licenses/LICENSE-2.0.txt'
+            distribution = 'repo'
+          }
+        }
+        developers {
+          developer {
+            id = 'halfdeadgames'
+            name = 'halfdeadgames'
+          }
+        }
+        scm {
+          url = 'https://github.com/halfdeadgames/hdgife'
+          connection = 'scm:git:git://github.com/halfdeadgames/hdgife.git'
+          developerConnection = 'scm:git:ssh://git@github.com/halfdeadgames/hdgife.git'
+        }
+      }
+      pom.withXml {
+        asNode().dependencies.dependency.findAll { it.groupId.text() == 'com.bladecoder.ink' }.each {
+          it.version[0].value = "[${bladeInkVersion}]"
+        }
+      }
     }
   }
 }
 
 jar {
   duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+  from(rootProject.layout.projectDirectory.file('LICENSE')) { into 'META-INF' }
+  from(rootProject.layout.projectDirectory.file('NOTICE')) { into 'META-INF' }
 }

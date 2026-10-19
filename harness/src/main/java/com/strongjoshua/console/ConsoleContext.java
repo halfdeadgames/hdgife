@@ -1,3 +1,18 @@
+/*
+ * Copyright 2015 StrongJoshua (https://github.com/StrongJoshua/libgdx-inGameConsole)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.strongjoshua.console;
 
 import com.badlogic.gdx.Gdx;
@@ -13,11 +28,12 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.utils.reflect.ClassReflection;
 
 /**
- * Copy of sjInGameConsole 1.0.1's ConsoleContext (Apache License 2.0, StrongJoshua / tommyettinger), kept here only
- * so the browser build links. The library was compiled against libGDX 1.12, where Label.getText() returns a
- * StringBuilder; in libGDX 1.14 it returns a CharArray, and TeaVM refuses to compile a call to a missing method.
- * Compiled here against 1.14.2 the call links. The class body is unchanged. Delete this file when a console
- * release built for libGDX 1.14 exists.
+ * Copy of sjInGameConsole 1.0.1's ConsoleContext (Apache License 2.0), recompiled against libGDX 1.14.2. The released
+ * library was built against libGDX 1.12, where Label.getText() returns a StringBuilder; in 1.14 it returns a CharArray,
+ * so the original class throws NoSuchMethodError when the Copy action runs, and TeaVM refuses to compile the call.
+ * The class body is unchanged. The harness build leaves the original class out of the library jar (see
+ * harness/build.gradle), so this one is the only copy on every platform. Delete this file, and that filter, when a
+ * console release built for libGDX 1.14 exists.
  */
 public class ConsoleContext {
 	private Table root;

@@ -23,7 +23,7 @@
 //
 // The library has a version, below. StoryManager and validateStory compare it with the version of the engine and
 // refuse a story whose hdgife.ink is another one (recompile it). A missing version counts as 0, which is too old.
-CONST hdgife_version = 1
+CONST hdgife_version = 2
 //
 // Current speaker, kept here so it is part of the saved ink state. Set it with StoryManager.speaker or
 // speak() below.
@@ -42,6 +42,7 @@ EXTERNAL hdgife_emit0(hdg_seq, hdg_name)
 EXTERNAL hdgife_emit1(hdg_seq, hdg_name, hdg_a)
 EXTERNAL hdgife_emit2(hdg_seq, hdg_name, hdg_a, hdg_b)
 EXTERNAL hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c)
+EXTERNAL hdgife_speak(hdg_name)
 
 // Events for the game. Use as statements: ~ emit1("give_item", "sword")
 // The name and arguments come back, in order, on DialogStep.events and StoryManager.onEvent. The engine does
@@ -78,6 +79,9 @@ EXTERNAL hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c)
 === function hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c) ===
 ~ return 0
 
+=== function hdgife_speak(hdg_name) ===
+~ return 0
+
 // Stat of the current speaker (see StoryManager.beginScene). 0 if missing.
 === function stat(hdg_name) ===
 ~ return 0.0
@@ -87,11 +91,13 @@ EXTERNAL hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c)
 ~ return 0.0
 
 // Makes this entity the current speaker until changed: ~ speak("guard"). Use "" for no speaker.
-// This is a plain ink function, not an EXTERNAL, so it needs no binding (it works with fallbacks switched
-// off too). The speaker lives in hdgife_speaker, is saved with the story and is safe during ink's lookahead. Change who `stat()`
-// reads, and the speaker reported on following lines. A `# speaker: name` tag only names one line.
+// The speaker lives in hdgife_speaker, is saved with the story and is safe during ink's lookahead. It changes who
+// `stat()` reads, and the speaker reported on following lines. A `# speaker: name` tag only names one line.
+// It also tells StoryManager (hdgife_speak) when it happened, so a speak() after a line does not change the speaker
+// of that line. Without a StoryManager the call does nothing.
 === function speak(hdg_name) ===
 ~ hdgife_speaker = hdg_name
+~ hdgife_speak(hdg_name)
 
 // Number display. Use these inline: {stat_text("strength")} or {fmt(stat("strength"), 1, "round")}.
 //

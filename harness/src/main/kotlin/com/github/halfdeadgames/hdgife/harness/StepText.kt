@@ -129,6 +129,28 @@ internal fun describe(r: RequirementResult): String = when (r) {
     is RequirementResult.Met -> "${r.entity}.${r.stat} ${r.op.symbol} ${show(r.target)} (have ${show(r.actual)})"
     is RequirementResult.Unmet -> "${r.entity}.${r.stat} ${r.op.symbol} ${show(r.target)} (have ${show(r.actual)})"
     is RequirementResult.Mismatch -> "${r.entity}.${r.stat} ${r.op.symbol} ${show(r.target)} (have ${show(r.actual)}, type mismatch)"
+    is RequirementResult.AnyOf -> r.results.joinToString(" or ", transform = ::describe)
+    is RequirementResult.Not -> "not (${describe(r.result)})"
+}
+
+/** The leaf results under [r] with the nesting shown by indentation: an AnyOf lists its alternatives, a Not its operand. */
+private fun StringBuilder.requirementTree(r: RequirementResult, indent: Int) {
+    when (r) {
+        is RequirementResult.AnyOf -> {
+            repeat(indent) { append(' ') }
+            append("any of (isMet=").append(r.isMet).append(")\n")
+            for (alt in r.results) requirementTree(alt, indent + 2)
+        }
+        is RequirementResult.Not -> {
+            repeat(indent) { append(' ') }
+            append("not (isMet=").append(r.isMet).append(")\n")
+            requirementTree(r.result, indent + 2)
+        }
+        else -> {
+            repeat(indent) { append(' ') }
+            append(esc(describe(r))).append(" -> ").append(r::class.simpleName).append('\n')
+        }
+    }
 }
 
 /** Markup of a choice button: its text, and for an unavailable one what it needs. */
@@ -236,6 +258,7 @@ fun formatRaw(step: DialogStep, number: Int, note: String? = null, linesFrom: Di
                 is RequirementResult.Unmet -> requirementFields(r.entity, r.stat, r.op, r.target, r.actual)
                 is RequirementResult.Mismatch -> requirementFields(r.entity, r.stat, r.op, r.target, r.actual)
                 is RequirementResult.MissingStat -> requirementFields(r.entity, r.stat, r.op, r.target, null, hasActual = false)
+                is RequirementResult.AnyOf, is RequirementResult.Not -> requirementTree(r, 6)
                 is RequirementResult.Unreadable -> {}
             }
             append("      result=").append(r::class.simpleName).append(" isMet=").append(r.isMet).append('\n')

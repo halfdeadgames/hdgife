@@ -91,6 +91,10 @@ public class DialogChoice internal constructor(
  * after the call, so the event happened just before that line is shown. It equals `lines.size` when no
  * line follows in the step. The engine reports events and never acts on them.
  *
+ * The typed getters ([string], [int], [float], [bool], [size]) read [args] the way `FunctionArgs` does, with the same
+ * coercion, and throw [IllegalArgumentException] naming the event and the position for a missing or wrong-typed
+ * argument: `event.string(0)`, `event.int(1)`.
+ *
  * [id] counts the `emit` calls of the story timeline: the first emit is 1, the next 2, and so on. It is the value of
  * the ink variable `hdgife_event_seq` right after the call, so it is saved with the ink state. It is the same for the
  * same emit however many times ink ran ahead for glue, and it survives [StoryManager.saveState] and
@@ -106,6 +110,23 @@ public class StoryEvent internal constructor(
     public val lineIndex: Int,
     public val id: Int = 0,
 ) {
+    private val reader by lazy(LazyThreadSafetyMode.NONE) { ArgReader("event '$name'", args) }
+
+    /** How many arguments the event has. */
+    public val size: Int get() = args.size
+
+    /** Argument [index] as a string. Any value is accepted (`toString()`). Throws [IllegalArgumentException] if there is none. */
+    public fun string(index: Int): String = reader.string(index)
+
+    /** Argument [index] as an int. Only an ink int is accepted, else [IllegalArgumentException]. */
+    public fun int(index: Int): Int = reader.int(index)
+
+    /** Argument [index] as a float. An ink int is accepted. */
+    public fun float(index: Int): Float = reader.float(index)
+
+    /** Argument [index] as a bool. An ink int is accepted, nonzero is true. */
+    public fun bool(index: Int): Boolean = reader.bool(index)
+
     internal fun atLine(lineIndex: Int) = StoryEvent(name, args, lineIndex, id)
 
     override fun equals(other: Any?): Boolean = this === other || other is StoryEvent &&
