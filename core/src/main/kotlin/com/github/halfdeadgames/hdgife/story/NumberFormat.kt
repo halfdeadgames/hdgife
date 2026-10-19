@@ -56,13 +56,10 @@ public class NumberFormat @JvmOverloads public constructor(
         require(decimals in 0..9) { "decimals must be 0..9, was $decimals" }
     }
 
-    /** A copy with [decimals] digits after the point. */
     public fun withDecimals(decimals: Int): NumberFormat = NumberFormat(decimals, rounding, trimTrailingZeros)
 
-    /** A copy that rounds with [rounding]. */
     public fun withRounding(rounding: Rounding): NumberFormat = NumberFormat(decimals, rounding, trimTrailingZeros)
 
-    /** A copy that drops trailing zeros or keeps them, as [trimTrailingZeros] says. */
     public fun withTrimTrailingZeros(trimTrailingZeros: Boolean): NumberFormat = NumberFormat(decimals, rounding, trimTrailingZeros)
 
     override fun equals(other: Any?): Boolean = this === other || other is NumberFormat &&
@@ -75,10 +72,8 @@ public class NumberFormat @JvmOverloads public constructor(
     /** Formats [value]. NaN and infinities give `NaN`, `Infinity` and `-Infinity`. */
     public fun format(value: Float): String = formatDecimal(value.toString(), value.isNaN(), value.isInfinite(), value > 0f)
 
-    /** Same for a Double, using its shortest decimal form. */
     public fun format(value: Double): String = formatDecimal(value.toString(), value.isNaN(), value.isInfinite(), value > 0.0)
 
-    /** Same for a Long, exactly. */
     public fun format(value: Long): String = formatDecimal(value.toString(), false, false, true)
 
     /** Formats any [Number]: Int, Short, Byte and Long exactly, the rest through their Double or Float form. */

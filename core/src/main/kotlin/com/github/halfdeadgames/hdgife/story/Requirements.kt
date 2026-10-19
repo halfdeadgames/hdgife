@@ -45,13 +45,10 @@ public enum class Comparison(public val symbol: String) {
  * version, so a `when` over it should have an `else`.
  */
 public sealed interface RequirementResult {
-    /** The requirement text as written. */
     public val raw: String
 
-    /** True only for [Met]. */
     public val isMet: Boolean
 
-    /** The stat was found and the comparison holds. */
     public class Met internal constructor(
         override val raw: String,
         public val entity: String,
@@ -70,7 +67,6 @@ public sealed interface RequirementResult {
         override fun toString(): String = "Met(raw=$raw, entity=$entity, stat=$stat, op=$op, target=$target, actual=$actual)"
     }
 
-    /** The stat was found and the comparison does not hold. */
     public class Unmet internal constructor(
         override val raw: String,
         public val entity: String,

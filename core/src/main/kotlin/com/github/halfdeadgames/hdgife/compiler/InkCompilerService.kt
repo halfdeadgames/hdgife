@@ -16,9 +16,6 @@ import java.io.FileNotFoundException
  * Choosing the sources, their order and the thread is the game's job. To run a different set of sources,
  * compile again and build a new `StoryManager` from the new story.
  *
- * [HdgifeStory] is a normal Blade Ink [Story] with the lookahead-safe external function fix, and it is what
- * `StoryManager` takes. Everything else about it is the normal [Story] API.
- *
  * Every call is plain blocking. Run it on whatever thread or coroutine context you like, but don't use the
  * [Story] from two threads at once.
  *

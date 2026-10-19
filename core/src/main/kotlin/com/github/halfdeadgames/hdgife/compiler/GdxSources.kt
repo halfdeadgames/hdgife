@@ -3,10 +3,7 @@ package com.github.halfdeadgames.hdgife.compiler
 import com.badlogic.gdx.files.FileHandle
 import com.bladecoder.ink.runtime.HdgifeStory
 
-/**
- * libGDX conveniences, kept apart from the core API so that `InkSource` and `InkCompilerService` themselves do not
- * mention gdx types. Import the extensions you use, for example `import com.github.halfdeadgames.hdgife.compiler.of`.
- */
+// libGDX conveniences, kept out of InkSource and InkCompilerService so those mention no gdx types.
 
 /**
  * Source backed by a [FileHandle], read as UTF-8. The name is the file's path.

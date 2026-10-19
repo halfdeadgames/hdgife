@@ -16,10 +16,8 @@ import com.github.halfdeadgames.hdgife.story.TextSpan
  * Both panels draw with libGDX color markup (`[#rrggbbaa]text[]`), so a literal `[` is written `[[`.
  */
 
-/** Escapes engine text for color markup. */
 internal fun esc(text: String): String = text.replace("[", "[[")
 
-/** Section titles in the raw panel. */
 private const val TITLE = "[#9ecbff]"
 private const val DIM = "[#8a8a8a]"
 
@@ -33,7 +31,6 @@ internal val BOBS = setOf("wave", "bounce")
 /** Speaker name colors, given out in order of first appearance. All are in libGDX's Colors table. */
 private val SPEAKER_COLORS = arrayOf("SKY", "SALMON", "LIME", "GOLD", "VIOLET", "TEAL", "CORAL", "CHARTREUSE")
 
-/** Gives each speaker a color the first time it is seen and keeps it. */
 internal class SpeakerColors {
     private val assigned = HashMap<String, String>()
 
@@ -79,10 +76,8 @@ internal fun describeMarker(marker: TextMarker) = buildString {
     for ((k, v) in marker.params) append(' ').append(k).append('=').append(v)
 }
 
-/** Effect styles of a span (everything the harness does not draw as a color). */
 private fun effectsOf(span: TextSpan): List<Style> = span.styles.filter { it.name !in DRAWN }
 
-/** True when any span of the line carries a style whose name is in [names]. */
 internal fun hasEffect(spans: List<TextSpan>, names: Set<String>): Boolean = spans.any { s -> s.styles.any { it.name in names } }
 
 /**
@@ -116,7 +111,6 @@ internal fun toMarkup(spans: List<TextSpan>, markers: List<TextMarker>): String 
     while (m < markers.size) marker(markers[m++])
 }
 
-/** A line as the rendered panel shows it: the speaker in a name color, then the text. */
 internal fun lineMarkup(line: DialogLine, colors: SpeakerColors): String {
     val prefix = line.speaker?.let { "[${colors.of(it)}]${esc(it)}:[] " } ?: ""
     return prefix + toMarkup(line.spans, line.markers)
@@ -153,7 +147,6 @@ private fun StringBuilder.requirementTree(r: RequirementResult, indent: Int) {
     }
 }
 
-/** Markup of a choice button: its text, and for an unavailable one what it needs. */
 internal fun choiceMarkup(choice: DialogChoice): String = buildString {
     append(toMarkup(choice.spans, choice.markers))
     if (!choice.isAvailable) {
@@ -161,8 +154,6 @@ internal fun choiceMarkup(choice: DialogChoice): String = buildString {
         append("  [#ff8a80](needs ").append(esc(needs)).append(")[]")
     }
 }
-
-// ---- raw panel ------------------------------------------------------------------------------------------------
 
 private fun typeName(value: Any?): String = when (value) {
     null -> "null"

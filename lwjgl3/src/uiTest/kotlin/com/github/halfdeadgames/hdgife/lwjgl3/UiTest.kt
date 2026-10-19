@@ -62,13 +62,10 @@ internal class Ui(private val game: TestGame, val screen: DialogScreen, private 
         settle()
     }
 
-    /** Plain text of every rendered row, top to bottom. */
     val log: List<String> get() = screen.renderedLabels.map { plain(it.text.toString()) }
 
-    /** Markup (colour tags included) of every rendered row. */
     val markup: List<String> get() = screen.renderedLabels.map { it.text.toString() }
 
-    /** Plain text of the raw panel. */
     val raw: String get() = plain(screen.rawText)
 
     fun dump(name: String) {

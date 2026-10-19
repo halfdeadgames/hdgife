@@ -72,7 +72,6 @@ public class DialogChoice internal constructor(
     public val requirements: List<RequirementResult>,
     public val markers: List<TextMarker> = emptyList(),
 ) {
-    /** True when every requirement is met, or there are none. */
     public val isAvailable: Boolean = requirements.all { it.isMet }
 
     override fun equals(other: Any?): Boolean = this === other || other is DialogChoice &&
@@ -112,19 +111,14 @@ public class StoryEvent internal constructor(
 ) {
     private val reader by lazy(LazyThreadSafetyMode.NONE) { ArgReader("event '$name'", args) }
 
-    /** How many arguments the event has. */
     public val size: Int get() = args.size
 
-    /** Argument [index] as a string. Any value is accepted (`toString()`). Throws [IllegalArgumentException] if there is none. */
     public fun string(index: Int): String = reader.string(index)
 
-    /** Argument [index] as an int. Only an ink int is accepted, else [IllegalArgumentException]. */
     public fun int(index: Int): Int = reader.int(index)
 
-    /** Argument [index] as a float. An ink int is accepted. */
     public fun float(index: Int): Float = reader.float(index)
 
-    /** Argument [index] as a bool. An ink int is accepted, nonzero is true. */
     public fun bool(index: Int): Boolean = reader.bool(index)
 
     internal fun atLine(lineIndex: Int) = StoryEvent(name, args, lineIndex, id)

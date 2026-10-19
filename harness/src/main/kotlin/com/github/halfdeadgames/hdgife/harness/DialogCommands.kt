@@ -75,10 +75,8 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
         control.log(if (value == null) "$name is not a declared variable" else "$name = $value (${value.javaClass.simpleName})")
     }
 
-    /** Logs every change of an ink variable, with the old and new value. */
     fun observe(name: String) = control.observe(name)
 
-    /** Stops logging changes of an ink variable. */
     fun unobserve(name: String) = control.unobserve(name)
 
     /** Sets the variable using its current type in the story. */
@@ -198,13 +196,10 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
     /** Puts every stat back to the harness defaults (the story's cast and the player). */
     fun resetstats() = control.resetStats()
 
-    /** Keeps the story state (JSON) in memory. */
     fun save() = control.save()
 
-    /** Restores the last `save`. */
     fun load() = control.load()
 
-    /** Checks the story and its bindings and lists what is wrong or risky. */
     fun validate() = control.validate()
 
     fun reload() = control.reload()

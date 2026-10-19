@@ -12,7 +12,6 @@ import com.github.halfdeadgames.hdgife.HdgifeInk
 /** How serious a [ValidationIssue] is. More levels may be added in a later version, so a `when` over it should have an `else`. */
 @ExperimentalHdgifeApi
 public enum class Severity {
-    /** Worth knowing, nothing is wrong. */
     INFO,
 
     /** Probably a mistake or a risk, but the story runs. */
@@ -76,7 +75,6 @@ public class StoryReport internal constructor(public val issues: List<Validation
     public val warnings: List<ValidationIssue> get() = issues.filter { it.severity == Severity.WARNING }
     public val infos: List<ValidationIssue> get() = issues.filter { it.severity == Severity.INFO }
 
-    /** True when there are no errors. Warnings and infos do not count. */
     public val isOk: Boolean get() = errors.isEmpty()
 
     public fun of(kind: IssueKind): List<ValidationIssue> = issues.filter { it.kind == kind }

@@ -385,8 +385,6 @@ public class StoryManager private constructor(
         undelivered.clear()
     }
 
-    // ---- ink binding -------------------------------------------------------------------------------------------
-
     private fun bind(target: Story) {
         bindLibrary(target, "stat") { args -> statInk(speaker, args.getOrNull(0)) ?: 0f }
         bindLibrary(target, "stat_of") { args -> statInk(args.getOrNull(0)?.toString(), args.getOrNull(1)) ?: 0f }
@@ -542,8 +540,6 @@ public class StoryManager private constructor(
         }
     }
 
-    // ---- stats -------------------------------------------------------------------------------------------------
-
     /**
      * Maps [value] to the ink type the engine would use: `Int`, `Float`, `Boolean` or `String`, or null for null.
      * Rules are in [NarrativeStateProvider]. Anything unmapped goes through [valueConverter], then `toString()`.
@@ -626,8 +622,6 @@ public class StoryManager private constructor(
         }
         return skipped ?: emptyList()
     }
-
-    // ---- scenes, seed, save ------------------------------------------------------------------------------------
 
     /**
      * Sets the current [speaker] and jumps to [path] (`knot` or `knot.stitch`).
@@ -754,8 +748,6 @@ public class StoryManager private constructor(
         }
         openStyles = emptyList()
     }
-
-    // ---- output ------------------------------------------------------------------------------------------------
 
     /**
      * Continues until the next choice or the end and returns the cleaned result.
@@ -893,8 +885,6 @@ public class StoryManager private constructor(
         return next()
     }
 
-    // ---- requirements ------------------------------------------------------------------------------------------
-
     /**
      * Reads the requirement tags of a choice and checks them against [stateProvider]. Each term is
      * `[entity.]stat op value`, ops `> >= < <= == !=`, and the tag may repeat. Clauses are separated by commas
@@ -911,8 +901,6 @@ public class StoryManager private constructor(
         if (clauses.isEmpty()) return emptyList()
         return RequirementEvaluator(::statInk, speaker, log).evaluate(clauses)
     }
-
-    // ---- variables ---------------------------------------------------------------------------------------------
 
     /**
      * How many `emit` calls the story has made so far: the [StoryEvent.id] of the latest event, 0 before the first.

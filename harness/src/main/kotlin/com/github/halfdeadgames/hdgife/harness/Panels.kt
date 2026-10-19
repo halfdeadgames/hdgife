@@ -21,7 +21,6 @@ import com.github.halfdeadgames.hdgife.story.StoryEvent
 import ktx.scene2d.scene2d
 import ktx.scene2d.textButton
 
-/** How the two panels are laid out. */
 enum class ViewMode { SPLIT, RAW, RENDERED }
 
 /** How this harness treats choices whose requirements are not met. The engine leaves that to the game. */
@@ -96,7 +95,6 @@ class RawPanel(skin: Skin, font: BitmapFont, touch: Boolean = false) : Table() {
         add(pane).grow()
     }
 
-    /** The text on screen, with color markup. */
     val text: String get() = body.text.toString()
 
     /** Scroll position and its limit, so the UI test can check that the panel scrolls. */
@@ -161,7 +159,6 @@ class RenderedPanel(private val skin: Skin, private val touch: Boolean = false, 
     /** Every row of the text area, top to bottom: lines, event notes, tags and the open-style note. */
     val labels: List<Label> get() = lineTable.children.filterIsInstance<Label>()
 
-    /** The choice buttons on screen, top to bottom. */
     val choiceButtons: List<TextButton> get() = choiceTable.children.filterIsInstance<TextButton>()
 
     private fun addRow(markup: String, color: Color? = null): Label {

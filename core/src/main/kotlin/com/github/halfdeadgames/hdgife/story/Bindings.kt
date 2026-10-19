@@ -9,7 +9,6 @@ import com.bladecoder.ink.runtime.Story
  * naming the function and the position when an argument is missing or of the wrong type.
  */
 public class FunctionArgs internal constructor(public val function: String, public val values: List<Any?>) {
-    /** How many arguments ink passed. */
     public val size: Int get() = values.size
 
     /** Argument [index] as it came from ink, or null when there is none. */
@@ -17,13 +16,10 @@ public class FunctionArgs internal constructor(public val function: String, publ
 
     private val reader = ArgReader(function, values)
 
-    /** Argument [index] as a string. Any value is accepted (`toString()`). */
     public fun string(index: Int): String = reader.string(index)
 
-    /** Argument [index] as an int. Only an ink int is accepted. */
     public fun int(index: Int): Int = reader.int(index)
 
-    /** A float. An ink int is accepted. */
     public fun float(index: Int): Float = reader.float(index)
 
     /** A bool. An ink int is accepted, nonzero is true. */

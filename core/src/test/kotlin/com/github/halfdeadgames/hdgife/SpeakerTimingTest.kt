@@ -82,8 +82,6 @@ class SpeakerTimingTest {
         assertEquals(listOf("a"), other.choose(0).lines.map { it.speaker })
     }
 
-    // ---- plain Story ----
-
     @Test
     fun `a plain story also keeps a trailing speak off the previous line`() {
         assertEquals(listOf("guard"), plainManager(beforeChoice).next().lines.map { it.speaker })

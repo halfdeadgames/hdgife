@@ -1,5 +1,5 @@
 // THE LANTERN PASS: a short showcase story for the hdgife harness. A storm, a toll lodge and three people who
-// all want something. It uses every feature of the engine.
+// all want something.
 //
 // Cast (stats live in the game, ink reads them with stat(), stat_of(), has_stat(), stat_text()):
 //   varga  customs sergeant   sanity tiredness mood (0..100), trust (float), faction (string), is_injured (bool), stance (enum)

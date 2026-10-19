@@ -21,10 +21,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/** API review round two: NumberFormat, callback types, the configuration lambda, Tags, InkSource.lazy, StoryValidator. */
+/** Public API surface: NumberFormat, callback types, the configuration lambda, Tags, InkSource.lazy and StoryValidator. */
 class ApiSurfaceTest {
-    // ---- NumberFormat ----
-
     @Test
     fun `NumberFormat has value equality and with-copies`() {
         val base = NumberFormat(2, Rounding.FLOOR, true)
@@ -42,8 +40,6 @@ class ApiSurfaceTest {
     fun `NumberFormat rejects decimals out of range through withDecimals`() {
         kotlin.test.assertFailsWith<IllegalArgumentException> { NumberFormat().withDecimals(10) }
     }
-
-    // ---- callback types ----
 
     @Test
     fun `callback properties default to no-ops and accept both assignment styles`() {
@@ -64,8 +60,6 @@ class ApiSurfaceTest {
         m.valueConverter = ValueConverter { 4 }
         assertEquals(4, m.valueConverter.convert(Any()))
     }
-
-    // ---- configuration lambda ----
 
     @Test
     fun `the trailing lambda configures the manager before it is returned`() {
@@ -94,8 +88,6 @@ class ApiSurfaceTest {
         assertFalse(m.isLookaheadSafe)
     }
 
-    // ---- Tags ----
-
     @Test
     fun `Tags parse gives the shared EMPTY for nothing`() {
         assertSame(Tags.EMPTY, Tags.parse(emptyList()))
@@ -103,8 +95,6 @@ class ApiSurfaceTest {
         assertEquals(Tags.parse(listOf("a: 1")), Tags.parse(listOf(" a: 1 ")))
         assertEquals("1", Tags.parse(listOf("a: 1"))["a"])
     }
-
-    // ---- InkSource.lazy ----
 
     @Test
     fun `InkSource lazy reads only when asked`() {
@@ -117,8 +107,6 @@ class ApiSurfaceTest {
         assertEquals("b", InkSource.lazy("a.ink", sibling = { InkSource("b", "x") }) { "" }.sibling!!("q")!!.name)
     }
 
-    // ---- StoryValidator ----
-
     @Test
     fun `StoryValidator validates a story that has no manager`() {
         val ok = StoryValidator.validate(compileLib("Hi"))
@@ -126,8 +114,6 @@ class ApiSurfaceTest {
         val bad = StoryValidator.validate(compileInk("EXTERNAL gone()\n~ gone()\nHi"))
         assertFalse(bad.isOk)
     }
-
-    // ---- requirement results ----
 
     @Test
     fun `requirement results carry only the fields that apply and a stable raw`() {

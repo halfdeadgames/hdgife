@@ -81,8 +81,6 @@ class EventOrderTest {
         assertEquals(listOf("Hi"), ex.step.texts())
     }
 
-    // ---- ids ----
-
     @Test
     fun `ids count emits from one`() {
         val step = managerOf("~ emit(\"a\")\n~ emit1(\"b\", 1)\nLine\n~ emit(\"c\")").next()

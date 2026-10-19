@@ -96,8 +96,6 @@ class HelpersTest {
 
     private fun <T> assertNotEquals(a: T, b: T) = kotlin.test.assertNotEquals(a, b)
 
-    // ---- InkSource.of ----
-
     @Test
     fun `InkSource of reads the file and names it by its normalized path`() {
         val dir = Files.createTempDirectory("hdgife-src").toFile()
@@ -139,8 +137,6 @@ class HelpersTest {
         assertNull(InkSource("x.ink", "Hi").sibling)
     }
 
-    // ---- HdgifeStory.from ----
-
     @Test
     fun `HdgifeStory from keeps an HdgifeStory as it is`() {
         val story = compileInk("Hi") as HdgifeStory
@@ -155,8 +151,6 @@ class HelpersTest {
         assertNotSame<Story>(plain, rebuilt)
         assertEquals("Hi 1", rebuilt.Continue().trim())
     }
-
-    // ---- Comparison ----
 
     @Test
     fun `Comparison parses every symbol and nothing else`() {
@@ -179,8 +173,6 @@ class HelpersTest {
         assertTrue(Comparison.EQUAL.isEquality && Comparison.NOT_EQUAL.isEquality)
         assertFalse(Comparison.GREATER.isEquality)
     }
-
-    // ---- style values ----
 
     @Test
     fun `an unterminated quote in a style value makes the marker plain text and logs nothing fatal`() {

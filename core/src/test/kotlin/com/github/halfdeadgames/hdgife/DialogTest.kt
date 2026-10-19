@@ -15,8 +15,6 @@ import kotlin.test.assertTrue
 class DialogTest {
     private enum class Mood { CALM, ANGRY }
 
-    // ---- glue and lookahead ----
-
     @Test
     fun `glue joins across a stat call`() {
         val stats = MapStats().also { it["p", "hp"] = 7 }
@@ -78,8 +76,6 @@ class DialogTest {
         m.replacePlainStory(plain)
         assertFalse(m.isLookaheadSafe)
     }
-
-    // ---- speakers ----
 
     @Test
     fun `a speaker tag names one line only`() {
@@ -151,8 +147,6 @@ class DialogTest {
         assertEquals("merchant", m.speaker)
     }
 
-    // ---- tags ----
-
     @Test
     fun `tags parse key value pairs`() {
         val tags = Tags.parse(listOf("speaker: guard", " mood :  angry "))
@@ -222,8 +216,6 @@ class DialogTest {
         val m = managerOf("* [Go # style: loud] -> END")
         assertEquals("loud", m.next().choices.single().tags["style"])
     }
-
-    // ---- choice requirements ----
 
     private fun requirement(clause: String, stats: MapStats, speaker: String? = "p") =
         managerOf("* [Go # requires: $clause] -> END", stats).also { it.speaker = speaker }.next().choices.single()

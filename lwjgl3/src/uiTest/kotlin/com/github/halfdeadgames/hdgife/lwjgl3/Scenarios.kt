@@ -18,7 +18,6 @@ import ktx.async.skipFrame
  * The story is ink/main.ink (The Lantern Pass) and, for the older cases, ink/debug.ink.
  */
 
-/** Fails unless every part is in the raw panel. */
 internal fun Ui.expectRaw(vararg parts: String) {
     for (part in parts) expect(part in raw) { "Raw panel is missing <$part>.\n--- raw panel ---\n$raw" }
 }
@@ -29,7 +28,6 @@ internal fun Ui.expectRows(vararg rows: String) {
     for (row in rows) expect(row in have) { "Rendered panel is missing the row <$row>.\n--- rows ---\n${have.joinToString("\n")}" }
 }
 
-/** The first rendered row that contains [part], as markup. */
 internal fun Ui.markupRow(part: String): String =
     markup.firstOrNull { part in plain(it) } ?: throw Check("No rendered row contains <$part>.\n--- rows ---\n${log.joinToString("\n")}")
 
@@ -46,8 +44,6 @@ private fun pressKey(keycode: Int) {
 
 internal suspend fun scenarios(ui: Ui, report: Report) {
     ui.settle()
-
-    // ---- the showcase story: The Lantern Pass -----------------------------------------------------------------
 
     ui.scenario(report, "arrival: tags, speakers, styles, markers, an event and the hub", reset = false) {
         // the first step the harness shows, before anything was reset
@@ -339,8 +335,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expect(screen.restartButton.isVisible) { "Restart shows at the end" }
     }
 
-    // ---- the layouts -------------------------------------------------------------------------------------------
-
     ui.scenario(report, "layouts: split, raw only, rendered only, F2, and the raw panel scrolls") {
         expectEquals(ViewMode.SPLIT, screen.viewMode, "default view")
         expect(screen.rawVisible && screen.renderedVisible) { "Both panels in split view" }
@@ -378,8 +372,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expectRaw("STEP 2", "Papers.")
         command("view split")
     }
-
-    // ---- the debug scenes (the older test scenes) ------------------------------------------------------------
 
     ui.scenario(report, "debug: console set, divert and talk") {
         command("set player_hp 12")
@@ -611,5 +603,4 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
     }
 }
 
-/** A button's text with its colour tags kept. */
 private fun buttonMarkup(button: TextButton): String = button.label.text.toString()

@@ -22,10 +22,8 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The pre-1.0 API review: error model, final result classes, variables, replaceStory, library split and version. */
+/** Public API contracts: the error model, final result classes, variables, replaceStory, and the library split and version. */
 class ApiReviewTest {
-    // ---- the bundled libraries ----
-
     private fun resource(path: String) =
         ApiReviewTest::class.java.classLoader.getResourceAsStream(path)!!.use { String(it.readBytes(), Charsets.UTF_8) }
 
@@ -95,8 +93,6 @@ class ApiReviewTest {
         assertFailsWith<InkCompileException> { compileLib("{round_text(2.5, 1)}") }
     }
 
-    // ---- error model ----
-
     @Test
     fun `every deliberate exception is an HdgifeException`() {
         assertFailsWith<HdgifeException> { compiler.loadCompiled("not json") }
@@ -157,8 +153,6 @@ class ApiReviewTest {
         assertContains(sink.messages.joinToString(), "out of date")
     }
 
-    // ---- variables ----
-
     private val varInk = "VAR hp = 10\nVAR rate = 1.5\nVAR name = \"Ann\"\nHi"
 
     @Test
@@ -182,8 +176,6 @@ class ApiReviewTest {
         assertNull(m.variableAs<Int>("nope"))
         assertFailsWith<IllegalArgumentException> { m.variableAs<String>("hp") }
     }
-
-    // ---- replaceStory ----
 
     @Test
     fun `replaceStory keeps observers, functions and the speaker`() {
@@ -221,8 +213,6 @@ class ApiReviewTest {
         assertFalse(plain.isLookaheadSafe)
         assertEquals(listOf("3"), plain.next().texts())
     }
-
-    // ---- final result classes ----
 
     @Test
     fun `result classes have value equality and a readable toString`() {

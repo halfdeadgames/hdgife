@@ -21,13 +21,14 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/** Tests for the fixes from the core review. */
+/**
+ * Behaviours of StoryManager and the library: taking over a story, failures in next(), quoted names in requirements,
+ * seeding, INCLUDE handling, speak without fallbacks and unsafe functions inside strings.
+ */
 class ReviewFixesTest {
     private fun stats(entity: String, stat: String, value: Any?) = MapStats().also { it[entity, stat] = value }
 
     private fun causes(e: Throwable): List<Throwable> = generateSequence(e) { it.cause }.toList()
-
-    // ---- second manager on the same story, story setter ----
 
     @Test
     fun `a second manager on the same story takes over the library functions`() {
@@ -86,8 +87,6 @@ class ReviewFixesTest {
         assertEquals(saved, m.saveState(), "open styles and state are unchanged")
     }
 
-    // ---- next() failure ----
-
     private val boomInk = "EXTERNAL boom()\n~ emit(\"early\")\n<b>Line one\n~ boom()\nLine two\n-> END\n=== function boom() ===\n~ return 0"
 
     @Test
@@ -141,8 +140,6 @@ class ReviewFixesTest {
         val ex = assertFailsWith<IllegalStateException> { m.syncStats("p", listOf("hp")) }
         assertEquals("provider down", ex.message)
     }
-
-    // ---- requirements with quoted names ----
 
     private fun requirements(clause: String, stats: MapStats, log: LogSink? = null) =
         managerOf("* [Go # requires: $clause] -> END", stats).also { it.log = log; it.speaker = "p" }.next().choices.single().requirements
@@ -205,8 +202,6 @@ class ReviewFixesTest {
         assertEquals(listOf("a == \"x, y"), splitClauses("a == \"x, y"))
     }
 
-    // ---- seed ----
-
     @Test
     fun `seedRandom sets lastSeed`() {
         val m = managerOf("Hi")
@@ -219,8 +214,6 @@ class ReviewFixesTest {
         val m = managerOf("Hi", lib = false)
         assertFailsWith<IncompatibleLibraryException> { m.seedRandom(1) }
     }
-
-    // ---- INCLUDE handling ----
 
     private val bSource = "VAR bv = 7"
 
@@ -257,8 +250,6 @@ class ReviewFixesTest {
         }) { "// see /* later\nINCLUDE b.ink\n{bv}" }
         assertEquals("7", compiler.compile(main).Continue().trim())
     }
-
-    // ---- speak with fallbacks off ----
 
     @Test
     fun `speak works with external fallbacks switched off`() {
@@ -297,8 +288,6 @@ class ReviewFixesTest {
         assertEquals(listOf("guard", null), step.lines.map { it.speaker })
         assertNull(m.speaker)
     }
-
-    // ---- functions that are not lookahead safe inside strings ----
 
     private val stringInk = "EXTERNAL f()\n~ temp t = \"x{f()}\"\n{t}\n=== function f() ===\n~ return 1"
 
@@ -346,16 +335,12 @@ class ReviewFixesTest {
         assertContains(ex.message.orEmpty(), "string generation")
     }
 
-    // ---- version ----
-
     @Test
     fun `Hdgife VERSION matches projectVersion`() {
         val expected = System.getProperty("hdgife.projectVersion")
         assertNotNull(expected, "the build passes projectVersion to the tests")
         assertEquals(expected, Hdgife.VERSION)
     }
-
-    // ---- other coverage ----
 
     @Test
     fun `a custom variableNamer decides where stats are written`() {

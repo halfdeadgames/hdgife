@@ -19,8 +19,6 @@ class StyleTest {
     private fun plain(source: String, carried: List<Style> = emptyList(), log: LogSink? = null) =
         parseStyles(source, carried, { it }, log)
 
-    // ---- parsing ----
-
     @Test
     fun `text without markers is one unstyled span`() {
         val styled = plain("Hello")
@@ -119,8 +117,6 @@ class StyleTest {
         assertEquals("2", style.param("amp"))
     }
 
-    // ---- point markers ----
-
     @Test
     fun `a point marker takes no text and records its offset`() {
         val styled = plain("Hello<pause=0.5/> world")
@@ -157,8 +153,6 @@ class StyleTest {
         assertEquals("Hi there you", styled.text)
         assertEquals("Hi there ", styled.text.substring(0, styled.markers.single().offset))
     }
-
-    // ---- hex colors ----
 
     @Test
     fun `hex colors read in all lengths and prefixes`() {
@@ -203,8 +197,6 @@ class StyleTest {
         assertEquals(0x00ff00ff, line.spans.single().styles.single().hexColor())
     }
 
-    // ---- spans equal text ----
-
     private fun assertJoined(line: DialogLine) {
         assertEquals(line.text, line.spans.joinToString("") { it.text })
     }
@@ -237,8 +229,6 @@ class StyleTest {
         assertEquals("HELL0 W0RLD", styled.text)
         assertEquals(styled.text, styled.spans.joinToString("") { it.text })
     }
-
-    // ---- carry across lines, steps and choices ----
 
     @Test
     fun `an open style carries onto the next line`() {

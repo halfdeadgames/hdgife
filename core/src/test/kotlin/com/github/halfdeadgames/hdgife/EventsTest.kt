@@ -83,8 +83,6 @@ class EventsTest {
         assertEquals(listOf(1, 2), step.events.map { it.lineIndex })
     }
 
-    // ---- events ----
-
     @Test
     fun `events are reported once each and in order`() {
         val step = managerOf(eventInk).next()
@@ -229,8 +227,6 @@ class EventsTest {
         assertEquals("Hi", compileLib("~ emit(\"x\")\nHi").Continue().trim())
     }
 
-    // ---- bindFunction ----
-
     private val addInk = "{add(2, 3)}\n-> END\nEXTERNAL add(a, b)\n=== function add(a, b) ===\n~ return 0"
 
     @Test
@@ -312,8 +308,6 @@ class EventsTest {
         val message = generateSequence<Throwable>(e) { it.cause }.joinToString { it.message.orEmpty() }
         assertContains(message, "show: argument 0")
     }
-
-    // ---- variables ----
 
     private val varInk = "VAR hp = 10\nVAR rate = 1.5\nVAR name = \"Ann\"\nVAR alive = true\nHello\n* [Hit]\n  ~ hp -= 3\n  Ouch\n  -> END"
 

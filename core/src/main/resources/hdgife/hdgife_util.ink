@@ -1,18 +1,14 @@
-// hdgife math helpers. Optional: add `INCLUDE hdgife_util.ink` to your main ink file, with or without
-// `INCLUDE hdgife.ink`. This file stands on its own (it needs nothing from hdgife.ink and declares nothing that
-// hdgife.ink declares), so including both, in any order, is fine and nothing is declared twice.
+// hdgife math helpers. Optional: `INCLUDE hdgife_util.ink`, with or without hdgife.ink and in any order. It needs
+// nothing from hdgife.ink and declares nothing that hdgife.ink declares.
 //
-// All of it is plain ink, no EXTERNAL, so it works without a StoryManager. Parameters start with hdg_.
+// Plain ink, no EXTERNAL, so it works without a StoryManager. Parameters start with hdg_.
 // Reserved names: chance, clamp, avg2, avg3, blend, invert, scale100 and everything starting with hdgife_.
-// Don't define your own functions with these names. validateStory reports one that is defined without this file.
-//
-// This file contains no scenes and no story content. It is a helper library only.
+// Don't define your own with these names. validateStory reports one that is defined without this file.
 
 // True with a pct percent chance (0 or less never, 100 or more always).
 === function chance(hdg_pct) ===
 ~ return RANDOM(1, 100) <= hdg_pct
 
-// Limits x to the range lo..hi.
 === function clamp(hdg_x, hdg_lo, hdg_hi) ===
 {
 - hdg_x < hdg_lo: ~ return hdg_lo

@@ -15,7 +15,6 @@ public class Tags private constructor(public val raw: List<String>, public val m
     /** Value for [key], or null if there is no such tag. A bare tag gives an empty string. */
     public operator fun get(key: String): String? = map[key]
 
-    /** True if a tag with this key is present. */
     public fun has(key: String): Boolean = map.containsKey(key)
 
     public val isEmpty: Boolean get() = raw.isEmpty()
@@ -65,7 +64,6 @@ public class Tags private constructor(public val raw: List<String>, public val m
     override fun toString(): String = "Tags(raw=$raw, map=$map)"
 
     public companion object {
-        /** No tags. */
         @JvmField
         public val EMPTY: Tags = Tags(emptyList(), emptyMap())
 

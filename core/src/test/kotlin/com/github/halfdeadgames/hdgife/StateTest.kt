@@ -193,8 +193,6 @@ class StateTest {
         assertEquals(listOf("10 3.0 2"), m.next().texts())
     }
 
-    // ---- saved styles ----
-
     private val styledInk = "He said <color=red>stop\n* [Wait] and <b>go</b> now</color> then.\n-> END"
 
     @Test

@@ -1,5 +1,5 @@
-// hdgife core library. Add `INCLUDE hdgife.ink` at the top of your main ink file. The optional math helpers
-// (chance, clamp, avg2, avg3, blend, invert, scale100) are in hdgife_util.ink: `INCLUDE hdgife_util.ink`.
+// hdgife core library. Add `INCLUDE hdgife.ink` at the top of your main ink file. Optional math helpers are in
+// hdgife_util.ink.
 //
 // The stat, number-format and event functions are EXTERNAL: StoryManager binds them to your
 // NarrativeStateProvider, number format settings and event channel. The ink bodies below are fallbacks that run
@@ -86,7 +86,6 @@ EXTERNAL hdgife_speak(hdg_name)
 === function stat(hdg_name) ===
 ~ return 0.0
 
-// Stat of any entity. 0 if missing.
 === function stat_of(hdg_entity, hdg_name) ===
 ~ return 0.0
 
@@ -152,11 +151,9 @@ EXTERNAL hdgife_speak(hdg_name)
 - else: ~ return "0" + hdgife_zeros(hdg_width - 1, hdg_frac)
 }
 
-// True if the current speaker has this stat.
 === function has_stat(hdg_name) ===
 ~ return false
 
-// True if the entity has this stat.
 === function has_stat_of(hdg_entity, hdg_name) ===
 ~ return false
 

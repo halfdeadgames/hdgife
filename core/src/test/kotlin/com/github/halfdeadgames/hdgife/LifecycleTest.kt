@@ -20,8 +20,6 @@ import kotlin.test.assertTrue
 class LifecycleTest {
     private val usesFunction = "EXTERNAL twice(x)\nVAR n = 0\n~ n = twice(4)\nResult {n} {stat(\"hp\")}\n-> END\n=== function twice(x) ===\n~ return 0"
 
-    // ---- close ----
-
     @Test
     fun `a closed manager gives its story to a new one`() {
         val story = compileLib(usesFunction)
@@ -88,8 +86,6 @@ class LifecycleTest {
         StoryManager(story).use { assertEquals(false, it.isClosed) }
     }
 
-    // ---- failed loadState ----
-
     @Test
     fun `a failed loadState still closes styles, drops pending events and leaves a consistent manager`() {
         val m = managerOf("<em>Hi\n~ emit(\"a\")\n~ emit(\"b\")\n* [Go] -> END")
@@ -118,8 +114,6 @@ class LifecycleTest {
         assertFailsWith<SaveStateException> { m.loadState("{\"v\":99,\"ink\":\"{}\"}") }
         assertEquals(listOf(Style("em")), m.choose(0).lines.single().spans.first().styles)
     }
-
-    // ---- story id ----
 
     private val text = "Hi\n* [Go] Gone -> END"
 
@@ -165,8 +159,6 @@ class LifecycleTest {
         other.loadState(named.saveState())
         assertEquals(listOf("Gone"), other.choose(0).texts())
     }
-
-    // ---- fingerprint ----
 
     private fun fingerprintOf(m: StoryManager): String =
         Regex("\"fingerprint\":\"([0-9a-f]{16})\"").find(m.saveState())!!.groupValues[1]

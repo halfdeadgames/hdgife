@@ -100,8 +100,6 @@ class EventDeliveryTest {
         assertEquals(listOf("a", "b"), seen)
     }
 
-    // ---- typed getters ----
-
     @Test
     fun `event arguments have typed getters with the FunctionArgs coercion`() {
         val event = managerOf("~ emit3(\"x\", \"s\", 4, 1.5)\nHi").next().events.single()

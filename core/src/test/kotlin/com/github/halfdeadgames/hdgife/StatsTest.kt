@@ -28,8 +28,6 @@ class StatsTest {
         return managerOf(expression, stats).next().texts().single()
     }
 
-    // ---- value mapping ----
-
     @Test
     fun `an Int stat is an ink int`() {
         assertEquals("3", stat(7, "{stat_of(\"p\", \"s\") / 2}"))
@@ -126,8 +124,6 @@ class StatsTest {
         assertEquals("5", m.next().texts().single())
     }
 
-    // ---- reading stats ----
-
     @Test
     fun `a missing stat reads as zero and has_stat is false`() {
         assertEquals("0.0 no", stat(null, "{stat_of(\"p\", \"s\")} {has_stat(\"s\"): yes|no}"))
@@ -188,8 +184,6 @@ class StatsTest {
         assertEquals(listOf("player_mp", "player_xp"), m.syncStats("player", listOf("hp", "mp", "xp")))
         assertEquals(12, m.getVariable("player_hp"))
     }
-
-    // ---- number display ----
 
     @Test
     fun `NumberFormat applies every rounding mode to positive values`() {
@@ -355,8 +349,6 @@ class StatsTest {
         val story = compileLib("{fmt(2.5, 0, \"round\")} {fmt(-2.5, 0, \"round\")} {fmt(7.25, 1, \"floor\")} {fmt(3, 2, \"round\")}")
         assertEquals("3 -3 7.2 3.00", story.Continue().trim())
     }
-
-    // ---- FLOOR / CEILING / INT patch ----
 
     private fun math(expression: String): String = compileInk("{$expression}").Continue().trim()
 

@@ -17,7 +17,6 @@ public class Style internal constructor(
     /** [value] split at commas and trimmed: `shake=2,0.5` gives `["2", "0.5"]`. Empty if there is no value. */
     public val values: List<String> get() = splitValues(value)
 
-    /** The named parameter [key], or null. */
     public fun param(key: String): String? = params[key]
 
     /**
@@ -45,13 +44,10 @@ public class TextMarker internal constructor(
     public val value: String? = null,
     public val params: Map<String, String> = emptyMap(),
 ) {
-    /** [value] split at commas and trimmed. */
     public val values: List<String> get() = splitValues(value)
 
-    /** The named parameter [key], or null. */
     public fun param(key: String): String? = params[key]
 
-    /** Same as [Style.hexColor]. */
     public fun hexColor(key: String? = null): Int? = (if (key == null) value else params[key])?.let(::parseHexColor)
 
     internal fun atOffset(offset: Int) = TextMarker(name, offset, value, params)
@@ -274,7 +270,6 @@ private fun boundaryMap(raw: String, cleaned: String): IntArray {
 private fun isNameStart(c: Char) = c in 'a'..'z' || c in 'A'..'Z'
 private fun isNameChar(c: Char) = isNameStart(c) || c in '0'..'9' || c == '_' || c == '-'
 
-/** Reads a marker starting at the `<` at [start], or null when it isn't a well-formed one. */
 private fun readToken(s: String, start: Int): Token? {
     var i = start + 1
     if (i >= s.length) return null

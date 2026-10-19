@@ -18,17 +18,15 @@ package com.bladecoder.ink.runtime
  * bound as lookahead safe (through [bindLookaheadSafe] or `bindExternalFunction(..., true)`) are run here,
  * directly, with no guard at all: they are safe by contract, so they can run in lookahead and in strings.
  * A function bound as not safe gets the upstream rule: calling it while ink builds a string (choice text or
- * `"{...}"`) is a story error, as in upstream ink. Everything else goes to the original code unchanged.
- * No reflection. A story built any other way is a plain [Story] and keeps the old behavior, so use
+ * `"{...}"`) is a story error, as in upstream ink. A story built any other way is a plain [Story] and keeps the old behavior, so use
  * [from] to get one (the compiler service already does).
  */
 public class HdgifeStory internal constructor(json: String) : Story(json) {
     private val safeFunctions = mutableMapOf<String, ExternalFunction<*>>()
 
     /**
-     * Binds [function] for the ink EXTERNAL [name], safe to call during lookahead and inside strings (internal: the manager does it).
+     * Binds [function] for the ink EXTERNAL [name], safe to call during lookahead and inside strings.
      * Only do this for functions that read and have no side effects. Throws if [name] is already bound.
-     * Same as `bindExternalFunction(name, function, true)`.
      */
     internal fun bindLookaheadSafe(name: String, function: ExternalFunction<*>) = bindExternalFunction(name, function, true)
 

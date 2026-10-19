@@ -258,24 +258,18 @@ class DialogScreen(
         }
     }
 
-    /** The raw panel's text, with color markup. */
     val rawText: String get() = raw.text
 
-    /** Every row of the rendered panel's text area, top to bottom. */
     val renderedLabels: List<Label> get() = rendered.labels
 
-    /** The choice buttons on screen, top to bottom. */
     val choiceButtons: List<TextButton> get() = rendered.choiceButtons
 
-    /** How far the raw panel is scrolled, and how far it can go. */
     val rawScrollY: Float get() = raw.scrollY
     val rawMaxScrollY: Float get() = raw.maxScrollY
 
-    /** Which panels are on the stage. */
     val rawVisible: Boolean get() = raw.hasParent()
     val renderedVisible: Boolean get() = rendered.hasParent()
 
-    /** Reads an ink variable through the controller, for the UI test. */
     fun getVariable(name: String): Any? = controller.getVariable(name)
 
     /** Runs a console command line exactly as if it was typed into the console. */
@@ -382,8 +376,6 @@ class DialogScreen(
         skin.dispose()
         consoleSkin.dispose()
     }
-
-    // ---- DialogView --------------------------------------------------------------------------------------------
 
     override fun showStep(step: DialogStep, number: Int, note: String?, linesFrom: DialogStep) {
         raw.show(step, number, note, linesFrom)

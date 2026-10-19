@@ -15,13 +15,8 @@ package com.github.halfdeadgames.hdgife.state
  * | `null` | the stat is missing |
  * | anything else | `toString()`, or the result of `StoryManager.valueConverter` |
  *
- * Why `Any?` and not a sealed `StatValue` wrapper: games already hold plain Kotlin values, so a provider is
- * a one-liner with no wrapping (`NarrativeStateProvider { e, s -> hp[e] }`), a narrower return type is allowed
- * in an override (`override fun getStat(...): Float`), and one converter in the engine is the single place
- * where mapping rules live. The cost is no compile-time check on the type, so the mapping is documented and
- * lenient, and requirement comparisons that don't fit the type are reported as mismatches.
- *
- * This is a `fun interface`, so a simple numeric provider is a lambda.
+ * The return type is `Any?` so games can hand back plain values with no wrapper, at the cost of a compile-time type
+ * check: comparisons that don't fit the type are reported as mismatches instead.
  */
 public fun interface NarrativeStateProvider {
     /**

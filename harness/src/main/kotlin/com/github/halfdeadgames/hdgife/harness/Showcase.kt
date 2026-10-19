@@ -19,10 +19,10 @@ fun MapStateProvider.loadShowcaseStats() {
     setStat("varga", "sanity", 70f)
     setStat("varga", "tiredness", 55f)
     setStat("varga", "mood", 40f)
-    setStat("varga", "trust", 25.5f)                 // float
-    setStat("varga", "faction", "crown")             // string
-    setStat("varga", "is_injured", false)            // bool
-    setStat("varga", "stance", Demeanor.WARY)        // enum
+    setStat("varga", "trust", 25.5f)
+    setStat("varga", "faction", "crown")
+    setStat("varga", "is_injured", false)
+    setStat("varga", "stance", Demeanor.WARY)
     setStat("ilse", "sanity", 85f)
     setStat("ilse", "tiredness", 30f)
     setStat("ilse", "mood", 65f)
@@ -33,7 +33,7 @@ fun MapStateProvider.loadShowcaseStats() {
     setStat("tobin", "sanity", 22f)
     setStat("tobin", "tiredness", 80f)
     setStat("tobin", "mood", 35f)
-    setStat("tobin", "trust", 10)                    // int
+    setStat("tobin", "trust", 10)
     setStat("tobin", "faction", "lamplighters")
     setStat("tobin", "is_injured", false)
     setStat("tobin", "stance", Demeanor.ERRATIC)

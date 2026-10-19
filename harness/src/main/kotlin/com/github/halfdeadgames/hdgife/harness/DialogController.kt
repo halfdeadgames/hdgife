@@ -31,7 +31,6 @@ private class Snapshot(val state: String, val step: DialogStep, val number: Int)
 
 /** What the controller needs from the screen: somewhere to write, draw a step and change the layout. */
 interface DialogView {
-    /** Writes a line to the console. */
     fun say(message: String)
 
     /** Draws [step]. The panels take the lines and the step tags from [linesFrom]. [note] goes to the raw panel. */
@@ -40,7 +39,6 @@ interface DialogView {
     /** Draws a partial [step] from a failed continue, with [note] in the raw panel and a one line [status]. */
     fun showFailure(step: DialogStep, number: Int, note: String, status: String)
 
-    /** Sets the status line under the panels. */
     fun setStatus(text: String)
 
     /** Rewrites the info line (layout, choice mode and the watched variables from [DialogController.watched]). */
@@ -70,7 +68,6 @@ class DialogController(
     private var snapshot: Snapshot? = null
     private val observations = mutableMapOf<String, VariableObservation>()
 
-    /** The watched ink variables and their latest value, for the info line. */
     val watched: Map<String, String> get() = watchedValues
     private val watchedValues = LinkedHashMap<String, String>()
     private var rng = Random(1)
@@ -122,17 +119,12 @@ class DialogController(
         if (lastStep == null && !restoreAutosave()) advance()
     }
 
-    // ---- failures ----------------------------------------------------------------------------------------------
-
     /** The harness's one way to report a failure: to the log with its stack trace, and to the console. */
     private fun fail(what: String, e: Exception) {
         log.error(e) { what }
         view.say("$what: ${e.message}")
     }
 
-    // ---- showing a step ----------------------------------------------------------------------------------------
-
-    /** Continues the story and shows what comes out. */
     private fun advance() {
         showStep(readNext() ?: return)
     }
@@ -174,8 +166,6 @@ class DialogController(
         advance()
     }
 
-    // ---- autosave ----------------------------------------------------------------------------------------------
-
     /** Saves the story for the next launch. Phone only. Called when the app goes to the background. */
     fun autosave() {
         if (!mobile || lastStep == null) return
@@ -211,8 +201,6 @@ class DialogController(
         return true
     }
 
-    // ---- watching variables ------------------------------------------------------------------------------------
-
     /** Keeps the latest value of an ink variable for the info line, and logs each change to the console. */
     private fun watch(name: String) {
         observe(name)
@@ -223,8 +211,6 @@ class DialogController(
     private fun syncPlayer() {
         manager.syncStats("player", PLAYER_SYNCED_STATS)
     }
-
-    // ---- DialogControl -----------------------------------------------------------------------------------------
 
     override fun log(message: String) = view.say(message)
 

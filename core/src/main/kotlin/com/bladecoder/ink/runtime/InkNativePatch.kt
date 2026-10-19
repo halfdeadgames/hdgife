@@ -9,9 +9,8 @@ package com.bladecoder.ink.runtime
  *
  * Fix: ink looks these operations up in one shared table and the table has a package-private registration
  * method meant for exactly this. This file sits in Blade Ink's own package to call it and registers correct
- * versions. No reflection. Stories that are already compiled use the table too, so they are fixed as well.
+ * versions. Stories that are already compiled use the table too, so they are fixed as well.
  * Semantics follow ink: FLOOR and CEILING give a float, INT truncates toward zero and gives an int.
- * Safe to call any number of times, and harmless once Blade Ink fixes this itself.
  */
 internal object InkNativePatch {
     private var applied = false

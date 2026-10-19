@@ -5,7 +5,6 @@ import com.badlogic.gdx.backends.android.AndroidApplication
 import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration
 import com.github.halfdeadgames.hdgife.harness.TestGame
 
-/** Launches the Android application: the same harness as the desktop one. */
 class AndroidLauncher : AndroidApplication() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
