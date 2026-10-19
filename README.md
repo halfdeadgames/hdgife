@@ -4,7 +4,7 @@ HDG Interactive Fiction Engine. A game-agnostic interactive fiction library for 
 
 Ink does all the narrative: the branching story and the generated flavor text, through ink variables, functions and alternatives. The Kotlin side is a bridge to your game plus a runtime compiler.
 
-The engine takes ink source and stats and gives back lines, spans, markers, choices and events. It never renders anything, hides or blocks a choice, or acts on an event. Everything that is a decision (number format, colors, which sources to load, what a style name means) is a default you can replace, listed under "Defaults".
+The engine takes ink source and stats and gives back lines, spans, markers, choices and events. It never renders, hides a choice or acts on an event. Number format, colors, which sources to load and what a style name means are all defaults you can replace, listed under "Defaults".
 
 Version 1.0.0, the first release. Licensed under Apache-2.0, see "License".
 
@@ -67,7 +67,7 @@ What the library pulls in (`core/build.gradle`):
 | `com.bladecoder.ink:blade-ink-compiler` | implementation, so runtime for you, strictly 1.3.2 | no compiler type is in a public signature, so you get it at runtime and can't import it |
 | `org.jetbrains.kotlin:kotlin-stdlib` | api | Kotlin |
 
-No KTX, no coroutines, no logging library. Keep libGDX at 1.14.2 if you add it yourself. The build uses Kotlin 2.4.21 and a JVM 11 target. JitPack builds with openjdk17 and runs `:core:test` and `:core:publishToMavenLocal` (`jitpack.yml`).
+No KTX, no coroutines. Logging goes through `HdgifeLog` if you set one. Keep libGDX at 1.14.2 if you add it yourself. The build uses Kotlin 2.4.21 and a JVM 11 target. JitPack builds with openjdk17 and runs `:core:test` and `:core:publishToMavenLocal` (`jitpack.yml`).
 
 Blade Ink is pinned to exactly 1.3.2, on purpose. `HdgifeStory` overrides a package-private method and `InkNativePatch` uses package-private internals, which can change in any other release. The pin is `strictly` in the Gradle module metadata, so a consumer asking for another version fails to resolve, and the pom carries the exact range `[1.3.2]`, which Maven treats as a hard requirement. Don't override it. `UpstreamCanaryTest` checks the internals by reflection, so an upgrade shows up as a failing test (see "Testing").
 
@@ -96,7 +96,7 @@ val story = InkCompilerService().compile(InkSource("main.ink", """
 val manager = StoryManager(story, provider) {
     log = HdgifeLog { println(it) }
     numberFormat = NumberFormat(decimals = 1)
-    onEvent { event -> println("event ${event.name}") }
+    onEvent = StoryEventListener { event -> println("event ${event.name}") }
 }
 
 var step = manager.next()
@@ -208,7 +208,7 @@ OR and NOT work inside a clause:
 - A `|`, `,` or ` or ` inside quotes is literal.
 - NOT is met only when the inner requirement was really checked and came out unmet. If it is a `MissingStat`, `Mismatch` or `Unreadable`, nothing was decided and the negation is not met either. Without an entity the persistent speaker is used. They are evaluated against the state provider when `next` builds the step, and come back on `DialogChoice.requirements` as `RequirementResult`s. `DialogChoice.isAvailable` is true when all are met, or there are none. `choose` never refuses an unavailable choice. Whether to hide, grey or allow it is the game's call. Plain ink conditions (`+ {door_open} [Slip out]`) are different: ink hides those itself and the engine never sees them.
 
-Numbers compare with every op. Strings, enum names and booleans only with `==` and `!=`; a boolean value is `true` or `false` in any case; string comparison is exact. Values are bare or quoted.
+Numbers compare with every op. Strings, enum names and booleans only with `==` and `!=`; a boolean value is `true` or `false` in any case; string comparison is exact. Values are bare or quoted. A number is read like the `Tags` readers: optional sign, digits with `.`, optional exponent. `NaN`, `Infinity`, `1,5` and `1f` are not numbers (against a numeric stat that is a `Mismatch`).
 
 Quoted names: an entity, stat or value can be wrapped in `"` or `'` to hold spaces, dots and commas:
 
@@ -324,7 +324,7 @@ In ink:
 Tying a save to its story. Two optional settings, both off by default:
 
 - `storyId: String?`. When set, `saveState` writes it and `loadState` refuses a save with a different id.
-- `saveFingerprint: Boolean`. When true, `saveState` writes a hash of the story's structure (names of knots, stitches, labels and variables) and `loadState` refuses a save with another hash. It sees structure, not text, so an edited line passes. It is computed once and kept until `replaceStory`.
+- `saveFingerprint: Boolean`. When true, `saveState` writes a hash of the story's structure (names of knots, stitches, labels and variables) and `loadState` refuses a save with another hash. Text isn't hashed, so an edited line passes. It is computed once and kept until `replaceStory`.
 
 With either in use the envelope is version 2 and carries `storyId` and `fingerprint`. Without them it is written as version 1, as before. The engine reads both. A save without an id or fingerprint is accepted. A mismatch is a `SaveStateException`, checked before anything is touched, so the manager stays as it was.
 
@@ -427,21 +427,21 @@ Versioning. `CONST hdgife_version` in `hdgife.ink` is `HdgifeInk.VERSION` (curre
 
 ## Defaults
 
-Every default that is a game decision can be replaced.
+Swap any of these.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
 | `StoryManager` `stateProvider` | `null` | no stats: `stat` gives 0, `has_stat` false, requirements `MissingStat` |
-| `variableNamer` | `StoryManager.defaultVariableName`: `entity_stat`, characters outside `[A-Za-z0-9_]` become `_` | for `syncStats` |
+| `variableNamer` | `VariableNamer(StoryManager::defaultVariableName)`: `entity_stat`, characters outside `[A-Za-z0-9_]` become `_` | a `VariableNamer` (`nameFor`), for `syncStats` |
 | `numberFormat` | `NumberFormat(decimals = 0, rounding = ROUND, trimTrailingZeros = false)` | used by `stat_text` |
-| `formatOverride` | always returns null | per-stat `NumberFormat`, null falls back to `numberFormat`. Set with `formatOverride = NumberFormatOverride { entity, stat -> ... }` or `formatOverride { entity, stat -> ... }` |
-| `textCleaner` | `cleanLine`: collapse spaces and tabs, no space before `, . ; : ! ?`, trim | English punctuation. Runs on plain text after markers are removed. Replace it for other languages, or `{ it }` to turn it off |
+| `formatOverride` | always returns null | per-stat `NumberFormat`, null falls back to `numberFormat`. Set with `formatOverride = NumberFormatOverride { entity, stat -> ... }` |
+| `textCleaner` | `TextCleaner(::cleanLine)`: collapse spaces and tabs, no space before `, . ; : ! ?`, trim | English punctuation. Runs on plain text after markers are removed. Replace it for other languages, or `TextCleaner { it }` to turn it off |
 | `speakerTagKey` | `"speaker"` | case-sensitive |
 | `requirementsTagKey` | `"requires"` | |
 | `allowExternalFunctionFallbacks` | `true` | `hdgife.ink` relies on it. With false every `EXTERNAL` needs a binding (`speak` isn't one). Applied to the current story and any later one |
 | `log` (`StoryManager`, `InkCompilerService`) | `null` | the engine logs nothing unless you set one. Covers unknown `fmt` mode, unbalanced styles, requirement mismatches and unreadable clauses, dropped observers, ink warnings, refused libraries |
-| `valueConverter` | converts nothing | unmapped types become `toString()`. Set with `ValueConverter { value -> ... }` or `valueConverter { value -> ... }` |
-| `onEvent` | does nothing | events are on `DialogStep.events` either way. Set with `StoryEventListener { event -> ... }` or `onEvent { event -> ... }` |
+| `valueConverter` | converts nothing | unmapped types become `toString()`. Set with `valueConverter = ValueConverter { value -> ... }` |
+| `onEvent` | does nothing | events are on `DialogStep.events` either way. Set with `onEvent = StoryEventListener { event -> ... }` |
 | `bindFunction` `lookaheadSafe` | `false` | true for pure reads only |
 | constructor `configure` | `{}` | runs last, sets properties |
 | `compileFolder` `recursive` | `true` | also takes files in subfolders |
@@ -509,15 +509,15 @@ StoryManager.
 | `StoryManager.defaultVariableName(entityId: String, statName: String): String` | companion, `@JvmStatic` |
 | `val story: Story` | the wrapped story |
 | `var stateProvider: NarrativeStateProvider?` | |
-| `var variableNamer: (entityId: String, statName: String) -> String` | |
+| `var variableNamer: VariableNamer` | `nameFor(entityId, statName)` |
 | `var log: HdgifeLog?` | |
 | `var speakerTagKey: String`, `var requirementsTagKey: String` | |
-| `var textCleaner: (String) -> String` | |
+| `var textCleaner: TextCleaner` | `clean(text)` |
 | `var numberFormat: NumberFormat` | |
-| `var formatOverride: NumberFormatOverride`, `fun formatOverride(override: NumberFormatOverride)` | |
+| `var formatOverride: NumberFormatOverride` | |
 | `var allowExternalFunctionFallbacks: Boolean` | |
-| `var valueConverter: ValueConverter`, `fun valueConverter(converter: ValueConverter)` | |
-| `var onEvent: StoryEventListener`, `fun onEvent(listener: StoryEventListener)` | |
+| `var valueConverter: ValueConverter` | |
+| `var onEvent: StoryEventListener` | |
 | `var speaker: String?` | |
 | `var maxOpenStyles: Int` | default 16, at least 1 (`IllegalArgumentException` otherwise) |
 | `var closeStylesAtChoice: Boolean` | default false |
@@ -581,6 +581,8 @@ Callbacks and helpers.
 | `fun interface NumberFormatOverride` | `formatFor(entityId: String, statName: String): NumberFormat?` |
 | `fun interface ValueConverter` | `convert(value: Any): Any?` |
 | `fun interface StoryEventListener` | `onEvent(event: StoryEvent)` |
+| `fun interface VariableNamer` | `nameFor(entityId: String, statName: String): String` |
+| `fun interface TextCleaner` | `clean(text: String): String` |
 | `class FunctionArgs` | `function: String`, `values: List<Any?>`, `size: Int`, `get(index): Any?`, `string(index)`, `int(index)`, `float(index)`, `bool(index)` |
 | `class VariableObservation : AutoCloseable` | `name: String`, `isActive: Boolean`, `close()` |
 | `class NumberFormat(decimals: Int = 0, rounding: Rounding = Rounding.ROUND, trimTrailingZeros: Boolean = false)` | `decimals`, `rounding`, `trimTrailingZeros`, `withDecimals(Int)`, `withRounding(Rounding)`, `withTrimTrailingZeros(Boolean)`, `format(Float)`, `format(Double)`, `format(Long)`, `format(Number)` |
@@ -616,7 +618,7 @@ This is Blade Ink's own package, because the patch needs package-private access.
 
 ## Writing stat-driven ink
 
-A trimmed version of `assets/ink/main.ink`. The stats live in the game. Ink reads them with `stat()`, combines them with the util functions to scale flavor text, and sends events to the game with `emit`.
+A trimmed `assets/ink/main.ink`. Stats stay in the game and ink reads them with `stat()`. The util functions blend them into flavor text, and `emit` talks back to the game.
 
 ```ink
 INCLUDE hdgife.ink
@@ -708,10 +710,9 @@ The harness acts on events (the engine never does): `give_item` fills an invento
 | `set <name> <value>` | sets an ink variable keeping its current type |
 | `set <name> <value> <type>` | same with an explicit type: `int`, `float`, `bool` or `string`. Nothing changes if the value doesn't parse |
 | `stat <entity> <stat> <value>` | sets a stat on the test provider and syncs it to ink. The value is read as an int, a float, `true` or `false`, else text |
-| `hp <value>` | shortcut for `stat player hp <value>` |
 | `npc <entity> <stat> <value>` | sets a stat on the provider only. Ink reads it live, no sync |
 | `resetstats` | puts every stat back to the harness defaults (`Showcase.kt`) |
-| `talk <knot> [speaker]` | `beginScene`: sets the speaker and jumps to the knot |
+| `talk <path> [speaker]` | `beginScene`: sets the speaker and jumps to the path (`knot` or `knot.stitch`) |
 | `divert <path>` | jumps to an ink path (`knot` or `knot.stitch`) and continues. Open styles stay open |
 | `seed <n>` | seeds ink's random and the harness dice. `restart` first if you want the same result twice |
 | `fixroll <n\|off>` | makes the bound `roll(sides)` always give `n`, or random again |
@@ -744,7 +745,7 @@ In Android Studio, open the project, pick the `android` run configuration and st
 ./gradlew :android:run
 ```
 
-`installDebug` installs the app (`com.github.halfdeadgames.hdgife.harness`) and `run` starts it with adb. The layout stacks the panels in portrait and puts them side by side in landscape. The View button replaces F2 and the Console button replaces the backtick key; the console has a Submit button. It has been run on an emulator, not on a real device. When the app is paused it saves the story to `autosave.json` in the app's files and restores it on the next start (the lines are not part of a save, so only the choices show).
+`installDebug` installs the app (`com.github.halfdeadgames.hdgife.harness`) and `run` starts it with adb. The layout stacks the panels in portrait and puts them side by side in landscape. The View button replaces F2 and the Console button replaces the backtick key; the console has a Submit button. I've only run it on an emulator. When the app is paused it saves the story to `autosave.json` in the app's files and restores it on the next start (the lines are not part of a save, so only the choices show).
 
 By default the harness compiles `ink/main.ink` on the device at startup, which is what a game with mods would do. To ship the story precompiled instead, build with `-PprecompiledInk` (for example `./gradlew -PprecompiledInk :android:installDebug`). `:harness:compileInk` writes `ink/main.ink.json` and the harness loads it when no `extra/` files exist. The log line `Story ready in ... ms` says which path ran.
 

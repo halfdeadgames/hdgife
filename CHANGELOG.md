@@ -8,7 +8,7 @@ First public release. From here the public API in `core/api/core.api`, save form
 
 ### Added
 
-- `StoryManager` over a compiled Blade Ink story: `next()` and `choose()` return a `DialogStep` with lines, spans, markers, choices, tags, events and open styles. The engine never renders or acts on what it reports.
+- `StoryManager` over a compiled Blade Ink story: `next()` and `choose()` return a `DialogStep` with lines, spans, markers, choices, tags, events and open styles.
 - `InkCompilerService` with ordered `InkSource` lists, lazy sources, `INCLUDE` resolution, precompiled stories (`loadCompiled`) and libGDX helpers (`InkSource.of`, `compile(FileHandle)`, `compileFolder`).
 - Stats read live from a `NarrativeStateProvider` (`stat`, `stat_of`, `has_stat`, `has_stat_of`, `stat_text`, `stat_text_of`), `syncStats`, and `NumberFormat` with `fmt` and four rounding modes.
 - Speakers: persistent `speak()` kept in ink state, `# speaker:` line tags, and speaker timing where the last `speak()` before a line ends wins and a trailing one applies to the next lines.
@@ -17,11 +17,11 @@ First public release. From here the public API in `core/api/core.api`, save form
 - Events from `emit`, `emit1`, `emit2`, `emit3`: delivered exactly once with line index and a saved id, typed `StoryEvent` getters and `size`, and `onEvent` before choice requirements are read.
 - Bound game functions (`bindFunction`) with lookahead-safe support, typed `FunctionArgs`, variable access, `observe` and `seedRandom`.
 - Save and load in a versioned envelope that includes open styles, with optional `storyId` and `saveFingerprint` (envelope v2) to tie a save to its story.
-- `StoryManager` is `AutoCloseable` (`close()`, `isClosed`).
+- `StoryManager.close()` and `isClosed`.
 - `hdgife.ink` (version 2) and `hdgife_util.ink` bundled in the jar, with `HdgifeInk.VERSION` and `LIBRARY_FUNCTIONS`.
 - `validateStory` and `StoryValidator` (experimental).
 - A typed exception hierarchy under `HdgifeException`.
-- Test harness for desktop, Android and web (TeaVM), with a 23-scenario window UI test.
+- Test harness on desktop, Android and web (TeaVM). The desktop one has a 23-scenario UI test.
 - Apache-2.0 license, `NOTICE`, `THIRD_PARTY_NOTICES.md`, pom metadata, a binary compatibility dump and a CI workflow.
 
 ### Changed
@@ -37,5 +37,5 @@ First public release. From here the public API in `core/api/core.api`, save form
 - Blade Ink's inverted lookahead-safe guard (`HdgifeStory`) and `FLOOR`, `CEILING` and `INT` on floats (`InkNativePatch`).
 - Exactly-once events across glue lookahead.
 - A failed `loadState` leaves the manager consistent: styles closed, pending events dropped, observers rebased.
-- Observer changes are reported per Continue, which the docs now say.
+- Observer changes are reported per Continue. Docs now say so.
 - A tag after the closing `]` of a choice is dropped by Blade Ink, so `requires` must sit inside the brackets. Documented.
