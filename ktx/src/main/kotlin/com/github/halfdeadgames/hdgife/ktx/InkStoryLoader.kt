@@ -21,11 +21,11 @@ public class InkStoryLoader @JvmOverloads constructor(
     private val resolver: FileHandleResolver,
     private val compiler: InkCompilerService = InkCompilerService(),
 ) : AsynchronousAssetLoader<HdgifeStory, AssetLoaderParameters<HdgifeStory>>(resolver) {
-    private val loadedAsync = ConcurrentHashMap<String, HdgifeStory>()
+    private val compiledStories = ConcurrentHashMap<String, HdgifeStory>()
 
     override fun loadAsync(manager: AssetManager, fileName: String, file: FileHandle, parameter: AssetLoaderParameters<HdgifeStory>?) {
-        loadedAsync.remove(fileName)
-        loadedAsync[fileName] = if (fileName.endsWith(inkCompiledSuffix)) {
+        compiledStories.remove(fileName)
+        compiledStories[fileName] = if (fileName.endsWith(inkCompiledSuffix)) {
             compiler.loadCompiled(file.readString("UTF-8"))
         } else {
             compiler.compile(InkSource.of(fileName, resolver))
@@ -34,11 +34,11 @@ public class InkStoryLoader @JvmOverloads constructor(
 
     // AssetStorage never calls this hook; if it cancels between loadAsync and loadSync, the entry stays until the next load of that file replaces it.
     override fun unloadAsync(manager: AssetManager, fileName: String, file: FileHandle, parameter: AssetLoaderParameters<HdgifeStory>?) {
-        loadedAsync.remove(fileName)
+        compiledStories.remove(fileName)
     }
 
     override fun loadSync(manager: AssetManager, fileName: String, file: FileHandle, parameter: AssetLoaderParameters<HdgifeStory>?): HdgifeStory =
-        loadedAsync.remove(fileName) ?: error("'$fileName' was not loaded before loadSync")
+        compiledStories.remove(fileName) ?: error("'$fileName' was not loaded before loadSync")
 
     override fun getDependencies(
         fileName: String,

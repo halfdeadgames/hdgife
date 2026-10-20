@@ -63,7 +63,7 @@ class StoryFlowsTest {
 
     @Test
     fun `two event flows stop independently in either order`() = runBlocking {
-        for (cancelFirstFirst in listOf(true, false)) {
+        for (cancelFirstJob in listOf(true, false)) {
             val manager = managerOf(twoStepText)
             val first = ArrayList<String>()
             val second = ArrayList<String>()
@@ -72,12 +72,12 @@ class StoryFlowsTest {
             yield()
             manager.next()
             yield()
-            val (cancelled, kept) = if (cancelFirstFirst) firstJob to secondJob else secondJob to firstJob
+            val (cancelled, kept) = if (cancelFirstJob) firstJob to secondJob else secondJob to firstJob
             cancelled.cancelAndJoin()
             manager.choose(0)
             yield()
             kept.cancelAndJoin()
-            val (cancelledSeen, keptSeen) = if (cancelFirstFirst) first to second else second to first
+            val (cancelledSeen, keptSeen) = if (cancelFirstJob) first to second else second to first
             assertEquals(listOf("one"), cancelledSeen)
             assertEquals(listOf("one", "two"), keptSeen)
         }

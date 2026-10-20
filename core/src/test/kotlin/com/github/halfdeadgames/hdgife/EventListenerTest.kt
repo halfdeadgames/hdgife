@@ -8,7 +8,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class EventListenerTest {
-    private val three = "~ emit(\"a\")\n~ emit(\"b\")\n~ emit(\"c\")\nHi\n-> END"
+    private val threeEvents = "~ emit(\"a\")\n~ emit(\"b\")\n~ emit(\"c\")\nHi\n-> END"
 
     @Test
     fun `listeners run in order after the primary listener`() {
@@ -37,8 +37,8 @@ class EventListenerTest {
     }
 
     @Test
-    fun `a throwing listener keeps the undelivered rest for the next call`() {
-        val manager = managerOf(three)
+    fun `a throwing listener leaves the remaining events for the next call`() {
+        val manager = managerOf(threeEvents)
         val seen = ArrayList<String>()
         var thrown = false
         manager.addEventListener { event ->
@@ -55,7 +55,7 @@ class EventListenerTest {
     }
 
     @Test
-    fun `two routers coexist and do not replace the primary listener`() {
+    fun `routers do not replace the primary listener`() {
         val manager = managerOf("~ emit(\"a\")\n~ emit1(\"b\", 1)\nHi\n-> END")
         val primarySeen = ArrayList<String>()
         manager.onEvent = StoryEventListener { primarySeen += it.name }
@@ -89,8 +89,8 @@ class EventListenerTest {
     }
 
     @Test
-    fun `a router refuses unsupported argument types at registration`() {
-        val manager = managerOf(three)
+    fun `a router rejects unsupported argument types`() {
+        val manager = managerOf(threeEvents)
         assertFailsWith<IllegalArgumentException> { manager.events { on("a") { _: Long -> } } }
         assertFailsWith<IllegalArgumentException> { manager.events { on("a") { _: String, _: List<String> -> } } }
     }

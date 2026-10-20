@@ -49,7 +49,7 @@ class KotlinConveniencesTest {
     }
 
     @Test
-    fun `an ink variable delegate uses the property name`() {
+    fun `a delegate falls back to the property name`() {
         val manager = managerOf(variableInk)
         var hp by manager.inkVariable<Int>()
         var ratio by manager.inkVariable<Float>()
@@ -62,7 +62,7 @@ class KotlinConveniencesTest {
     }
 
     @Test
-    fun `an ink variable delegate can name a different variable and widen ints`() {
+    fun `a delegate with an explicit name widens int to double`() {
         val manager = managerOf(variableInk)
         val health by manager.inkVariable<Double>("hp")
         val title by manager.inkVariable<String>("name")
@@ -71,7 +71,7 @@ class KotlinConveniencesTest {
     }
 
     @Test
-    fun `an ink variable delegate fails on an undeclared variable and on a wrong type`() {
+    fun `a delegate throws for an undeclared variable or a wrong type`() {
         val manager = managerOf(variableInk)
         val missing by manager.inkVariable<Int>()
         val wrongType by manager.inkVariable<Boolean>("hp")
@@ -80,7 +80,7 @@ class KotlinConveniencesTest {
     }
 
     @Test
-    fun `lambda setters replace the listener, the format override and the value converter`() {
+    fun `lambda setters install the listener, format override and converter`() {
         val stats = mapStatProvider(mapOf("hero" to mapOf("gold" to 3.456f, "pet" to Pet)))
         val manager = managerOf("{stat_text_of(\"hero\", \"gold\")} {stat_text_of(\"hero\", \"pet\")}\n-> END", stats)
         val seen = ArrayList<String>()
@@ -92,7 +92,7 @@ class KotlinConveniencesTest {
     }
 
     @Test
-    fun `an event router sends each event to its typed handler`() {
+    fun `a router calls typed handlers and the fallback`() {
         val manager = managerOf(eventInk)
         val seen = ArrayList<String>()
         manager.events {
@@ -107,7 +107,7 @@ class KotlinConveniencesTest {
     }
 
     @Test
-    fun `an event router refuses two handlers for one event name`() {
+    fun `a router rejects a second handler for one event`() {
         val manager = managerOf(eventInk)
         assertFailsWith<IllegalArgumentException> {
             manager.events {
@@ -118,7 +118,7 @@ class KotlinConveniencesTest {
     }
 
     @Test
-    fun `an event handler with the wrong argument type fails the step`() {
+    fun `a handler with the wrong argument type fails the step`() {
         val manager = managerOf(eventInk)
         manager.events {
             on("giveItem") { item: Int -> println(item) }
@@ -127,7 +127,7 @@ class KotlinConveniencesTest {
     }
 
     @Test
-    fun `a story event argument reads as the requested type`() {
+    fun `event arguments convert to the requested type`() {
         val manager = managerOf(eventInk)
         val events = ArrayList<StoryEvent>()
         manager.onEvent { events += it }
@@ -139,7 +139,7 @@ class KotlinConveniencesTest {
     }
 
     @Test
-    fun `a closed variable observation stops reporting and works with use`() {
+    fun `a closed observation stops reporting`() {
         val manager = managerOf(variableInk)
         val changes = ArrayList<Any?>()
         manager.observe("hp") { _, new -> changes += new }.use { observation ->
@@ -154,7 +154,7 @@ class KotlinConveniencesTest {
     }
 
     @Test
-    fun `a map stat provider answers from the live map and returns null for unknowns`() {
+    fun `mapStatProvider reads the live map and returns null for unknowns`() {
         val stats = mutableMapOf<String, Map<String, Any?>>("hero" to mapOf("hp" to 7))
         val provider = mapStatProvider(stats)
         assertEquals(7, provider.getStat("hero", "hp"))

@@ -40,19 +40,19 @@ class InkStoryLoaderTest {
     }
 
     @Test
-    fun `an asset manager compiles a dot ink file`() {
+    fun `an asset manager compiles ink source`() {
         val story = loadWithManager(inkFile("scene.ink", eventStoryText).path())
         assertEquals("Start", StoryManager(story).next().lines.single().text)
     }
 
     @Test
-    fun `an asset manager loads a dot ink dot json file`() {
+    fun `an asset manager loads compiled json`() {
         val story = loadWithManager(inkFile("scene.ink.json", compileStory().toJson()).path())
         assertEquals("Start", StoryManager(story).next().lines.single().text)
     }
 
     @Test
-    fun `a dot ink file includes its sibling files`() {
+    fun `an INCLUDE finds sibling files`() {
         val directory = Files.createTempDirectory("hdgife-ktx-include")
         Files.writeString(directory.resolve("other.ink"), "=== other_knot ===\nOther line\n-> END\n")
         Files.writeString(directory.resolve("main.ink"), "INCLUDE other.ink\n-> other_knot\n")
@@ -61,7 +61,7 @@ class InkStoryLoaderTest {
     }
 
     @Test
-    fun `an asset storage loads a story and shares it between loads`() = runBlocking {
+    fun `an asset storage returns the same story on repeat loads`() = runBlocking {
         val storage = AssetStorage(fileResolver = pathResolver)
         val path = inkFile("scene.ink", eventStoryText).path()
         val first = storage.loadInkStory(path)
@@ -88,7 +88,7 @@ class InkStoryLoaderTest {
     }
 
     @Test
-    fun `an include resolves through the resolver of an asset manager`() {
+    fun `an INCLUDE resolves through the asset manager resolver`() {
         val manager = AssetManager(rootedResolver())
         manager.registerInkLoaders()
         manager.load("stories/main.ink", HdgifeStory::class.java)
@@ -99,7 +99,7 @@ class InkStoryLoaderTest {
     }
 
     @Test
-    fun `an include resolves through the resolver of an asset storage`() = runBlocking {
+    fun `an INCLUDE resolves through the asset storage resolver`() = runBlocking {
         val storage = AssetStorage(fileResolver = rootedResolver())
         val story = storage.loadInkStory("stories/main.ink")
         assertEquals("Rooted line", StoryManager.forPlainStory(story).next().lines.single().text)

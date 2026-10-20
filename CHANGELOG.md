@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [1.0.0] - 2026-10-18
 
-First public release. From here the public API in `core/api/core.api`, save format versions 1 and 2 and `hdgife.ink` version 2 are stable. Validation stays `@ExperimentalHdgifeApi`.
+First public release. From here the public APIs in `core/api/core.api` and `ktx/api/ktx.api`, save format versions 1 and 2 and `hdgife.ink` version 2 are stable. Validation stays `@ExperimentalHdgifeApi`.
 
 ### Added
 
@@ -18,11 +18,19 @@ First public release. From here the public API in `core/api/core.api`, save form
 - Bound game functions (`bindFunction`) with lookahead-safe support, typed `FunctionArgs`, variable access, `observe` and `seedRandom`.
 - Save and load in a versioned envelope that includes open styles, with optional `storyId` and `saveFingerprint` (envelope v2) to tie a save to its story.
 - `StoryManager.close()` and `isClosed`.
+- Kotlin conveniences in core: `mapStatProvider`, `manager["name"]` get and set, the `inkVariable<T>()` delegate, lambda forms of `onEvent`, `formatOverride` and `valueConverter`, `addEventListener` for extra event listeners, the `events { }` router with typed handlers (`EventRouter`, `StoryEvent.arg`), and `InkSource.of(path, FileHandleResolver)`.
+- The `hdgife-ktx` module, published as `com.github.halfdeadgames.hdgife:hdgife-ktx`, with its own API dump in `ktx/api/ktx.api`:
+  - `compileAsync` and `loadCompiledAsync`, on `Dispatchers.Default` unless you pass another context.
+  - `eventFlow` (cold, buffered), `eventSharedFlow` (hot) and `observeAsFlow`.
+  - `InkStoryLoader` with `registerInkLoaders` for `AssetManager` and `AssetStorage`, and `AssetStorage.loadInkStory`. `INCLUDE` resolves through the asset resolver, and `.ink.json` loads precompiled stories.
+  - `ktxHdgifeLog` for ktx-log.
+  - The scene2d `RichDialogLabel` and its `richDialogLabel` DSL (colors, `shake`, `wave` and `bounce` effects, typewriter, `pause` and `slam` markers), with `escapeMarkup`, `toMarkup`, `describeStyle` and `describeMarker`.
+- Coordinates `com.github.halfdeadgames.hdgife:hdgife` and `com.github.halfdeadgames.hdgife:hdgife-ktx`. The aggregate `com.github.halfdeadgames:hdgife` pulls every module.
 - `hdgife.ink` (version 2) and `hdgife_util.ink` bundled in the jar, with `HdgifeInk.version` and `libraryFunctions`.
 - `validateStory` and `StoryValidator` (experimental).
 - A typed exception hierarchy under `HdgifeException`.
-- Test harness on desktop, Android and web (TeaVM). The story is a feature showcase with a typewriter renderer and per-glyph effects. The desktop one has a 24-scenario UI test.
-- Apache-2.0 license, `NOTICE`, `THIRD_PARTY_NOTICES.md`, pom metadata, a binary compatibility dump and a CI workflow.
+- Test harness on desktop, Android and web (TeaVM). The story is a feature showcase and draws its lines with `RichDialogLabel` from hdgife-ktx. The desktop one has a 24-scenario UI test.
+- Apache-2.0 license, `NOTICE`, `THIRD_PARTY_NOTICES.md`, pom metadata, binary compatibility dumps for both modules and a CI workflow that tests both. JitPack builds `:core` and `:ktx`.
 
 ### Changed
 

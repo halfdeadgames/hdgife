@@ -2,13 +2,15 @@
 
 HDG Interactive Fiction Engine. A game-agnostic interactive fiction library for Kotlin and [libGDX](https://libgdx.com) games, built on [Blade Ink](https://github.com/bladecoder/blade-ink-java). It doesn't care what your UI looks like or whether you use an ECS.
 
+The library has two modules. `hdgife` is the engine and depends on libGDX and Blade Ink only. `hdgife-ktx` adds coroutines, Flow, asset loading, ktx-log and a scene2d label for [libKTX](https://libktx.github.io) projects.
+
 Ink does all the narrative: the branching story and the generated flavor text, through ink variables, functions and alternatives. The Kotlin side is a bridge to your game plus a runtime compiler.
 
 The engine takes ink source and stats and gives back lines, spans, markers, choices and events. It never renders, hides a choice or acts on an event. Number format, colors, which sources to load and what a style name means are all defaults you can replace, listed under "Defaults".
 
 Version 1.0.0, the first release. Licensed under Apache-2.0, see "License".
 
-What 1.0 freezes: the public API in `core/api/core.api` (checked by `checkKotlinAbi`), save format versions 1 and 2, and `hdgife.ink` version 2. What stays `@ExperimentalHdgifeApi` and may change in a minor release: validation (`validateStory`, `StoryValidator`, `StoryReport`, `ValidationIssue`, `Severity`, `IssueKind`). Anything not in `core.api` is internal.
+What 1.0 freezes: the public APIs in `core/api/core.api` and `ktx/api/ktx.api` (both checked by `checkKotlinAbi`), save format versions 1 and 2, and `hdgife.ink` version 2. What stays `@ExperimentalHdgifeApi` and may change in a minor release: validation (`validateStory`, `StoryValidator`, `StoryReport`, `ValidationIssue`, `Severity`, `IssueKind`). Anything not in those two dumps is internal.
 
 ## Contents
 
@@ -31,14 +33,22 @@ What 1.0 freezes: the public API in `core/api/core.api` (checked by `checkKotlin
    - [Errors](#errors)
    - [Lifecycle](#lifecycle)
    - [Threading](#threading)
-4. [The ink library reference](#the-ink-library-reference)
-5. [Defaults](#defaults)
-6. [API reference](#api-reference)
-7. [Writing stat-driven ink](#writing-stat-driven-ink)
-8. [Testing](#testing)
-9. [Test harness](#test-harness)
-10. [Known limits](#known-limits)
-11. [License](#license)
+4. [Kotlin conveniences](#kotlin-conveniences)
+5. [hdgife-ktx](#hdgife-ktx)
+   - [Async compile](#async-compile)
+   - [Events as Flow](#events-as-flow)
+   - [Variables as Flow](#variables-as-flow)
+   - [Loading stories as assets](#loading-stories-as-assets)
+   - [Logging](#logging)
+   - [RichDialogLabel](#richdialoglabel)
+6. [The ink library reference](#the-ink-library-reference)
+7. [Defaults](#defaults)
+8. [API reference](#api-reference)
+9. [Writing stat-driven ink](#writing-stat-driven-ink)
+10. [Testing](#testing)
+11. [Test harness](#test-harness)
+12. [Known limits](#known-limits)
+13. [License](#license)
 
 ## Setup
 
@@ -50,13 +60,16 @@ repositories {
 }
 ```
 
-Then add the dependency to your core module. JitPack builds from a git tag or a commit hash, so the version is a tag name or a hash:
+Then add the dependencies to your core module. JitPack builds from a git tag or a commit hash, so the version is a tag name or a hash:
 
 ```groovy
 dependencies {
-  api "com.github.halfdeadgames:hdgife:1.0.0"
+  api "com.github.halfdeadgames.hdgife:hdgife:1.0.0"       // the engine
+  api "com.github.halfdeadgames.hdgife:hdgife-ktx:1.0.0"   // optional, see "hdgife-ktx"
 }
 ```
+
+`hdgife-ktx` depends on `hdgife`, so the second line alone is enough if you want both. The aggregate coordinate `com.github.halfdeadgames:hdgife:1.0.0` pulls every module of the repository in one line. Use the per-module coordinates when you want only the engine.
 
 What the library pulls in (`core/build.gradle`):
 
@@ -67,13 +80,13 @@ What the library pulls in (`core/build.gradle`):
 | `com.bladecoder.ink:blade-ink-compiler` | implementation, so runtime for you, strictly 1.3.2 | no compiler type is in a public signature, so you get it at runtime and can't import it |
 | `org.jetbrains.kotlin:kotlin-stdlib` | api | Kotlin |
 
-No KTX, no coroutines. Logging goes through `HdgifeLog` if you set one. Keep libGDX at 1.14.2 if you add it yourself. The build uses Kotlin 2.4.21 and a JVM 11 target. JitPack builds with openjdk17 and runs `:core:test` and `:core:publishToMavenLocal` (`jitpack.yml`).
+Logging goes through `HdgifeLog` if you set one. Keep libGDX at 1.14.2 if you add it yourself. The build uses Kotlin 2.4.21 and a JVM 11 target. JitPack builds with openjdk17 and runs `:core:test`, `:ktx:test` and `publishToMavenLocal` for both modules (`jitpack.yml`). The dependencies of `hdgife-ktx` are listed under "hdgife-ktx".
 
 Blade Ink is pinned to exactly 1.3.2, on purpose. `HdgifeStory` overrides a package-private method and `InkNativePatch` uses package-private internals, which can change in any other release. The pin is `strictly` in the Gradle module metadata, so a consumer asking for another version fails to resolve, and the pom carries the exact range `[1.3.2]`, which Maven treats as a hard requirement. Don't override it. `UpstreamCanaryTest` checks the internals by reflection, so an upgrade shows up as a failing test (see "Testing").
 
 `Hdgife.version` is a `const val String` generated at build time from `projectVersion` in `gradle.properties` ("1.0.0"). `HdgifeInk.version` is the version of the bundled ink library (2), see "The ink library reference".
 
-The jar holds the engine, `LICENSE` and `NOTICE` in `META-INF`, the two ink libraries (`hdgife/hdgife.ink`, `hdgife/hdgife_util.ink`, functions only, no scenes) and two classes in Blade Ink's own package (see "Known limits"). Demo stories are in the test harness, not in the jar.
+The core jar holds the engine, `LICENSE` and `NOTICE` in `META-INF`, the two ink libraries (`hdgife/hdgife.ink`, `hdgife/hdgife_util.ink`, functions only, no scenes) and two classes in Blade Ink's own package (see "Known limits"). Demo stories are in the test harness, not in the jar.
 
 ## Quick start
 
@@ -379,7 +392,165 @@ StoryManager(story, provider).use { manager -> /* ... */ }
 
 ### Threading
 
-`Story` is not thread-safe, and neither is `StoryManager`. Use a manager and its story from one thread at a time, and every callback runs on the thread that called in: the state provider, bound functions, `onEvent`, observers and `HdgifeLog` all run inside `next`, `choose`, `setVariable` or whichever call triggered them. Compiling is plain blocking and CPU work, so run `InkCompilerService` calls on any thread or coroutine context you like (the harness compiles on a background thread and uses the manager on the render thread; in the browser build there are no threads, so it compiles on the render thread). The finished `HdgifeStory` is then handed over to the thread that uses it. `InkNativePatch` is applied once, synchronized.
+`Story` is not thread-safe, and neither is `StoryManager`. Use a manager and its story from one thread at a time, and every callback runs on the thread that called in: the state provider, bound functions, `onEvent`, observers and `HdgifeLog` all run inside `next`, `choose`, `setVariable` or whichever call triggered them. Compiling is blocking CPU work, so run `InkCompilerService` calls on any thread or coroutine context (the harness compiles on a background thread and uses the manager on the render thread; in the browser build there are no threads, so it compiles on the render thread). The finished `HdgifeStory` is then handed over to the thread that uses it (`compileAsync` in hdgife-ktx compiles on a dispatcher and hands the story back to the caller). Listeners added with `addEventListener`, and so the `Flow`s of hdgife-ktx, are called on the thread that runs `next` or `choose`. Collect anywhere, but call the manager from one thread. `InkNativePatch` is applied once, synchronized.
+
+## Kotlin conveniences
+
+Kotlin helpers in core (`StoryManagerExtensions.kt`, `EventRouter.kt`, `NarrativeStateProvider.kt`). They add no behavior the plain API lacks.
+
+Stats from a map:
+
+```kotlin
+val provider = mapStatProvider(mapOf(
+    "player" to mapOf("strength" to 12, "name" to "Ada"),
+    "guard" to mapOf("mood" to 40),
+))
+```
+
+Variables by operator and by delegate. `inkVariable` reads and writes through `getVariable` and `setVariable`, with the type checked as in `getVariable(name, type)`. A property whose ink variable isn't declared throws `IllegalArgumentException` on use:
+
+```kotlin
+manager["player_coins"] = 12                            // setVariable
+val coins = manager["player_coins"]                     // getVariable, Any?
+var player_coins by manager.inkVariable<Int>()          // name taken from the property
+var gold by manager.inkVariable<Int>("player_coins")    // explicit name
+```
+
+Callbacks as lambdas. These set the same properties as before, with a Kotlin function instead of a `fun interface`:
+
+```kotlin
+manager.onEvent { event -> println(event.name) }
+manager.formatOverride { entity, stat -> if (stat == "ratio") NumberFormat(decimals = 2) else null }
+manager.valueConverter { value -> if (value is Money) value.cents else null }
+```
+
+Several event listeners. `onEvent` holds one listener. `addEventListener(listener)` adds more and returns an `AutoCloseable` that removes it. For each event `onEvent` runs first, then the added ones in the order they were added. `close()` on the manager removes them all:
+
+```kotlin
+val registration = manager.addEventListener { event -> audit += event.name }
+registration.close()
+```
+
+Event routing. `events { }` registers one handler per event name and reads the arguments as the types you declare (`String`, `Int`, `Float`, `Double` or `Boolean`, up to three arguments). A name registered twice is an `IllegalArgumentException`. An event with no handler goes to `fallback`, which by default logs it when `log` is set. The result is an `EventRouter`, which is `AutoCloseable` and unregisters itself:
+
+```kotlin
+val router = manager.events {
+    on("ping") { beep() }
+    on<String>("giveItem") { item -> inventory += item }
+    on<String, Int>("spend") { what, amount -> wallet[what] = wallet.getValue(what) - amount }
+    fallback { event -> println("unhandled ${event.name}") }
+}
+router.close()
+```
+
+An argument that doesn't fit its declared type is the same `IllegalArgumentException` as `event.string(i)` and the other getters, and it comes out of `next` as a `StoryStepException`. `event.arg<Int>(0)` and `event.argAs(0, Int::class)` read one argument on their own.
+
+`InkSource.of(path, resolver)` is the `FileHandleResolver` version of `InkSource.of(file)`. It reads `path` through the resolver, and an `INCLUDE` that isn't in your source list is looked up next to it through the same resolver:
+
+```kotlin
+val source = InkSource.of("ink/main.ink", InternalFileHandleResolver())
+val story = InkCompilerService().compile(source)
+```
+
+## hdgife-ktx
+
+A second artifact for [libKTX](https://libktx.github.io) projects. It depends on `hdgife` and brings these as `api` dependencies (`ktx/build.gradle`):
+
+| Dependency | Why |
+| --- | --- |
+| `io.github.quillraven.libktx:ktx-async` | coroutines on the libGDX threads |
+| `io.github.quillraven.libktx:ktx-assets-async` | `AssetStorage` |
+| `io.github.quillraven.libktx:ktx-log` | `Logger` |
+| `io.github.quillraven.libktx:ktx-scene2d` | the label DSL |
+| `org.jetbrains.kotlinx:kotlinx-coroutines-core` | `Flow` and `suspend` |
+
+The versions are `ktxVersion` (1.14.2-rc2) and `kotlinxCoroutinesVersion` (1.11.0) in `gradle.properties`. The public API is in `ktx/api/ktx.api`, in the packages `com.github.halfdeadgames.hdgife.ktx` and `com.github.halfdeadgames.hdgife.ktx.scene2d`. The coroutine parts don't run in the TeaVM build, see "Web".
+
+### Async compile
+
+`compileAsync` and `loadCompiledAsync` are `suspend` versions of the compiler calls. They run on `Dispatchers.Default` unless you pass another `CoroutineContext` as the last argument. Errors come out as the usual `InkCompileException`. The story you get back isn't tied to a thread, so build the `StoryManager` on the thread that will use it:
+
+```kotlin
+val compiler = InkCompilerService()
+val story = compiler.compileAsync(Gdx.files.internal("ink/main.ink"))
+val fromJson = compiler.loadCompiledAsync(json, Dispatchers.IO)
+val manager = StoryManager(story, provider)
+```
+
+### Events as Flow
+
+`manager.eventFlow(capacity = Channel.BUFFERED)` is a cold `Flow<StoryEvent>`. It adds a listener when collection starts and removes it when collection ends. Events that fire before you collect are not replayed, so start collecting before `next()`. The buffer is filled from the thread that runs `next`, and a full buffer drops further events, so raise `capacity` if a step emits many. `eventSharedFlow(replay = 0, extraBufferCapacity = 64)` is hot: it registers at the call and stays registered until the manager is closed.
+
+```kotlin
+val job = scope.launch { manager.eventFlow().collect { event -> hud.show(event.name) } }
+val step = manager.next()          // events of this step reach the collector
+
+val shared = manager.eventSharedFlow(replay = 1)
+```
+
+Neither one touches `onEvent`, so a game that already sets it keeps working.
+
+### Variables as Flow
+
+`manager.observeAsFlow<T>(name)` is a `Flow<T?>`. It emits the current value on collection and the new value after each change that `observe` reports, so changes arrive in the batches described under "Variables". A value that can't be read as `T` comes out as null. Collecting an undeclared variable throws `IllegalArgumentException`. Cancelling the collector closes the observation:
+
+```kotlin
+manager.observeAsFlow<Int>("player_coins").collect { coins -> label.setText("Coins: $coins") }
+```
+
+### Loading stories as assets
+
+`InkStoryLoader` is an `AsynchronousAssetLoader<HdgifeStory, ...>` for `AssetManager` and `AssetStorage`. A `.ink` file is compiled with `InkSource.of(path, resolver)`, so `INCLUDE` works through the asset resolver. A `.ink.json` file (from `story.toJson()`) goes through `loadCompiled`. The suffixes are the constants `inkSourceSuffix` and `inkCompiledSuffix`. Compiling runs in the asynchronous step of the loader, off the render thread.
+
+```kotlin
+// AssetManager
+assetManager.registerInkLoaders()
+assetManager.load("ink/main.ink", HdgifeStory::class.java)
+assetManager.finishLoading()
+val story = assetManager.get("ink/main.ink", HdgifeStory::class.java)
+
+// AssetStorage (ktx-assets-async)
+val storage = AssetStorage()
+storage.registerInkLoaders(InkCompilerService().apply { log = ktxHdgifeLog() })
+val story = storage.loadInkStory("ink/main.ink")   // suspend
+```
+
+`registerInkLoaders(compiler)` takes the `InkCompilerService` to use, a new one by default. `AssetStorage.loadInkStory` registers the default loaders first if the storage has none for the path.
+
+### Logging
+
+`ktxHdgifeLog(logger = Logger("hdgife"))` returns an `HdgifeLog` that writes to a ktx-log `Logger` at info level:
+
+```kotlin
+manager.log = ktxHdgifeLog()
+manager.log = ktxHdgifeLog(Logger("story"))
+```
+
+### RichDialogLabel
+
+A scene2d `Widget` that draws one `DialogLine` from its spans and markers. The harness uses it for its rendered panel.
+
+- Colors come from `color` styles by name (through libGDX's `Colors`) or hex (`hexColor()`), with fixed colors for `em` and `b`. `baseColor` is the default.
+- `shake`, `wave` and `bounce` spans move per glyph.
+- The typewriter reveals 70 characters a second. A `pause` marker holds the reveal for its value in seconds (0.5 with none). A `slam` or `flash` marker flashes `flashBackground`. `skip()` shows the rest at once.
+- Other markers are written dim where they sit, and styles still open at the end of the step are noted after the text.
+- An optional speaker prefix is colored by `speakerColorName`.
+
+Nothing advances until `started` is true. `text` is the plain text and `markup` the libGDX markup string the label draws from. `isDone`, `isPaused`, `isFlashing`, `hasEffects`, `revealedChars`, `totalChars` and `animationTime` report the state. The DSL function works inside any ktx-scene2d `KWidget`:
+
+```kotlin
+scene2d.table {
+    for (line in step.lines) {
+        richDialogLabel(font, flashDrawable, line.spans, line.markers,
+            speaker = line.speaker, speakerColorName = "CYAN",
+            stillOpen = step.openStyles) { cell -> cell.growX().row() }.started = true
+    }
+}
+```
+
+The lambda gets the cell, like other ktx-scene2d widgets. The constructor takes `baseColor` in third place, and the DSL function takes it after `markers`.
+
+Helpers for a text widget of your own: `escapeMarkup(text)` doubles `[` so libGDX markup shows it literally, `toMarkup(spans, markers, stillOpen = emptyList())` turns a line into the markup string, and `describeStyle(style)` and `describeMarker(marker)` print `name=value key=value`.
 
 ## The ink library reference
 
@@ -463,7 +634,7 @@ Swap any of these.
 
 ## API reference
 
-Everything public in `core/api/core.api`, grouped by package. Properties are listed as Kotlin properties. The `is`-prefixed Boolean properties (`isMet`, `isAvailable`, `isEnded`, `isEmpty`, `isOk`, `isActive`, `isEquality`, `isLookaheadSafe`) are `isX()` in Java.
+Everything public in `core/api/core.api`, grouped by package. The hdgife-ktx API follows under "hdgife-ktx API". Properties are listed as Kotlin properties. The `is`-prefixed Boolean properties (`isMet`, `isAvailable`, `isEnded`, `isEmpty`, `isOk`, `isActive`, `isEquality`, `isLookaheadSafe`) are `isX()` in Java.
 
 Experimental (`@ExperimentalHdgifeApi`, `RequiresOptIn` level WARNING, so using it compiles with a warning): `Severity`, `IssueKind`, `ValidationIssue`, `StoryReport`, `StoryValidator` and `StoryManager.validateStory()`. These may change in a minor release. Everything else is frozen for 1.x. Opt in with `@OptIn(ExperimentalHdgifeApi::class)` or the compiler option `-opt-in=com.github.halfdeadgames.hdgife.ExperimentalHdgifeApi`. The core module opts in for its own code. The library is built with explicit API mode.
 
@@ -492,6 +663,7 @@ Experimental (`@ExperimentalHdgifeApi`, `RequiresOptIn` level WARNING, so using 
 | `InkSource.name`, `read(): String`, `toString()` | `read` is called at most once per compile |
 | `InkSource.lazy(name: String, sibling: ((relativePath: String) -> InkSource?)? = null, text: () -> String): InkSource` | companion, `@JvmStatic` |
 | `InkSource.of(file: FileHandle): InkSource` | extension on the companion. Name is the file's path. Unlisted includes are looked up next to the file |
+| `InkSource.of(path: String, resolver: FileHandleResolver): InkSource` | extension on the companion. Reads through the resolver. Unlisted includes are looked up next to the path through the resolver |
 | `class InkCompileException : HdgifeException` | `errors: List<String>`, `source: String?` |
 
 ### com.github.halfdeadgames.hdgife.state
@@ -499,6 +671,7 @@ Experimental (`@ExperimentalHdgifeApi`, `RequiresOptIn` level WARNING, so using 
 | Declaration | Notes |
 | --- | --- |
 | `fun interface NarrativeStateProvider` | `getStat(entityId: String, statName: String): Any?` |
+| `fun mapStatProvider(stats: Map<String, Map<String, Any?>>): NarrativeStateProvider` | entity to stat to value |
 
 ### com.github.halfdeadgames.hdgife.story
 
@@ -545,9 +718,26 @@ StoryManager.
 | `fun setVariable(name: String, value: Any)` | |
 | `fun observe(name: String, observer: (old: Any?, new: Any?) -> Unit): VariableObservation` | |
 | `fun unobserve(observation: VariableObservation)`, `fun unobserve(name: String)` | |
+| `fun addEventListener(listener: StoryEventListener): AutoCloseable` | an extra listener, called after `onEvent`. Close the result to remove it. `close()` on the manager removes all of them |
 | `@ExperimentalHdgifeApi fun validateStory(): StoryReport` | |
 
 Top-level functions: `cleanLine(raw: String): String` (the default `textCleaner`) and `parseHexColor(text: String): Int?`.
+
+Kotlin conveniences (see "Kotlin conveniences").
+
+| Declaration | Notes |
+| --- | --- |
+| `operator fun StoryManager.get(name: String): Any?`, `operator fun StoryManager.set(name: String, value: Any)` | `getVariable`, `setVariable` |
+| `fun StoryManager.onEvent(listener: (StoryEvent) -> Unit)` | sets `onEvent` |
+| `fun StoryManager.formatOverride(override: (entityId: String, statName: String) -> NumberFormat?)` | sets `formatOverride` |
+| `fun StoryManager.valueConverter(converter: (Any) -> Any?)` | sets `valueConverter` |
+| `fun <T : Any> StoryManager.inkVariable(type: KClass<T>, name: String? = null): InkVariable<T>` | property delegate. The name defaults to the property name |
+| `class InkVariable<T : Any> : ReadWriteProperty<Any?, T>` | `getValue`, `setValue`. Made by `inkVariable` |
+| `fun StoryManager.events(configure: EventRouter.() -> Unit): EventRouter` | registers the router as an event listener |
+| `class EventRouter : AutoCloseable` | `on(name: String, handler: () -> Unit)`, `fallback(handler: (StoryEvent) -> Unit)`, `register(name: String, argumentTypes: List<KClass<*>>, handler: (StoryEvent) -> Unit)` (the target of the inline `on`), `close()` |
+| `fun <T : Any> StoryEvent.argAs(index: Int, type: KClass<T>): T` | `String`, `Int`, `Float`, `Double` or `Boolean` |
+
+The reified inline forms `inkVariable<T>()`, `EventRouter.on<A>(...)` with up to three type arguments and `StoryEvent.arg<T>(index)` are public, but like `variableAs` they are not in `core.api`.
 
 Output types.
 
@@ -618,6 +808,42 @@ This is Blade Ink's own package, because the patch needs package-private access.
 | `class HdgifeStory : Story` | a Blade Ink `Story` with the lookahead-safe function fix. Made by the compiler service, or by `HdgifeStory.from(story)` (a companion `@JvmStatic`). A plain story is rebuilt from its compiled JSON, so its state is fresh; an `HdgifeStory` is returned as is |
 | `bindExternalFunction(funcName: String, func: ExternalFunction<*>, lookaheadSafe: Boolean)`, `unbindExternalFunction(funcName: String)` | overrides, the normal `Story` API |
 
+### hdgife-ktx API
+
+Everything public in `ktx/api/ktx.api`. The module uses explicit API mode and has no experimental parts.
+
+#### com.github.halfdeadgames.hdgife.ktx
+
+| Declaration | Notes |
+| --- | --- |
+| `suspend fun InkCompilerService.compileAsync(sources: List<InkSource>, dispatcher: CoroutineContext = Dispatchers.Default): HdgifeStory` | |
+| `suspend fun InkCompilerService.compileAsync(main: FileHandle, extras: List<FileHandle> = emptyList(), dispatcher: CoroutineContext = Dispatchers.Default): HdgifeStory` | |
+| `suspend fun InkCompilerService.loadCompiledAsync(json: String, dispatcher: CoroutineContext = Dispatchers.Default): HdgifeStory` | |
+| `fun StoryManager.eventFlow(capacity: Int = Channel.BUFFERED): Flow<StoryEvent>` | cold, buffered |
+| `fun StoryManager.eventSharedFlow(replay: Int = 0, extraBufferCapacity: Int = 64): SharedFlow<StoryEvent>` | hot |
+| `inline fun <reified T : Any> StoryManager.observeAsFlow(name: String): Flow<T?>` | inline. It calls `observeVariableFlow(name, type)`, which is in `ktx.api` only because the inline body needs it, and is not part of the contract |
+| `class InkStoryLoader(resolver: FileHandleResolver, compiler: InkCompilerService = InkCompilerService())` | `AsynchronousAssetLoader<HdgifeStory, AssetLoaderParameters<HdgifeStory>>`, `@JvmOverloads` |
+| `const val inkSourceSuffix: String`, `const val inkCompiledSuffix: String` | `".ink"`, `".ink.json"` |
+| `fun AssetManager.registerInkLoaders(compiler: InkCompilerService = InkCompilerService())` | registers the loader for both suffixes |
+| `fun AssetStorage.registerInkLoaders(compiler: InkCompilerService = InkCompilerService())` | the same for `AssetStorage` |
+| `suspend fun AssetStorage.loadInkStory(path: String): HdgifeStory` | registers the default loaders if none is set for the path |
+| `fun ktxHdgifeLog(logger: Logger = Logger("hdgife")): HdgifeLog` | info level |
+
+#### com.github.halfdeadgames.hdgife.ktx.scene2d
+
+| Declaration | Notes |
+| --- | --- |
+| `class RichDialogLabel(font: BitmapFont, flashBackground: Drawable, baseColor: Color, spans: List<TextSpan>, markers: List<TextMarker>, speaker: String? = null, speakerColorName: String? = null, stillOpen: List<Style> = emptyList(), typewriter: Boolean = true) : Widget` | |
+| `RichDialogLabel.markup: String`, `text: String` | the markup it draws from, the plain text |
+| `RichDialogLabel.started: Boolean` | read and write. The typewriter waits until it is true |
+| `RichDialogLabel.isDone`, `isPaused`, `isFlashing`, `hasEffects`: `Boolean` | |
+| `RichDialogLabel.revealedChars: Int`, `totalChars: Int`, `animationTime: Float` | |
+| `RichDialogLabel.skip()` | reveals the rest |
+| `inline fun <S> KWidget<S>.richDialogLabel(font: BitmapFont, flashBackground: Drawable, spans: List<TextSpan>, markers: List<TextMarker> = emptyList(), baseColor: Color = Color.WHITE, speaker: String? = null, speakerColorName: String? = null, stillOpen: List<Style> = emptyList(), typewriter: Boolean = true, init: RichDialogLabel.(S) -> Unit = {}): RichDialogLabel` | `@Scene2dDsl` |
+| `fun escapeMarkup(text: String): String` | |
+| `fun toMarkup(spans: List<TextSpan>, markers: List<TextMarker>, stillOpen: List<Style> = emptyList()): String` | |
+| `fun describeStyle(style: Style): String`, `fun describeMarker(marker: TextMarker): String` | |
+
 ## Writing stat-driven ink
 
 Excerpts of `assets/ink/main.ink`. Stats stay in the game and ink reads them with `stat()`. The util functions blend them into flavor text, and `emit` talks back to the game.
@@ -673,14 +899,19 @@ A requirement without an entity reads the speaker (`tester` here), and `subject.
 
 ```
 ./gradlew :core:test            JUnit 5 unit tests of the engine
+./gradlew :ktx:test             JUnit 5 tests of hdgife-ktx
 ./gradlew :core:checkKotlinAbi  compares the public API with core/api/core.api (also part of :core:check and build)
 ./gradlew :core:updateKotlinAbi rewrites core/api/core.api after an intended API change
-./gradlew :core:publishToMavenLocal   to try a build in another project (add mavenLocal(), use version 1.0.0)
+./gradlew :ktx:checkKotlinAbi   the same for ktx/api/ktx.api
+./gradlew :ktx:updateKotlinAbi  rewrites ktx/api/ktx.api
+./gradlew :core:publishToMavenLocal :ktx:publishToMavenLocal   to try a build in another project (add mavenLocal(), use version 1.0.0)
 ```
 
-`core/api/core.api` is committed. `checkKotlinAbi` fails when the code and the dump differ, so after an API change run `updateKotlinAbi` and commit the dump with the change. The JitPack build runs only `:core:test` and `:core:publishToMavenLocal`, which don't run `checkKotlinAbi`, so a stale dump never fails JitPack. Every public declaration says `public` and names its type (explicit API mode).
+`core/api/core.api` and `ktx/api/ktx.api` are committed. `checkKotlinAbi` fails when the code and a dump differ, so after an API change run `updateKotlinAbi` for that module and commit the dump with the change. The JitPack build runs `:core:test`, `:ktx:test` and the two `publishToMavenLocal` tasks, which don't run `checkKotlinAbi`, so a stale dump never fails JitPack. Every public declaration says `public` and names its type (explicit API mode).
 
-CI (`.github/workflows/ci.yml`) runs on pushes to master and on pull requests. The `core` job runs `:core:check :core:publishToMavenLocal` on JDK 17 and 21. The `desktop` job compiles the harness and `lwjgl3`. The `android` (`:android:assembleDebug`) and `web` (TeaVM release build) jobs are allowed to fail. `uiTest` needs a display, so CI doesn't run it.
+CI (`.github/workflows/ci.yml`) runs on pushes to master and on pull requests. The `core` job runs `:core:check :ktx:check :core:publishToMavenLocal :ktx:publishToMavenLocal` on JDK 17 and 21, so the tests and ABI checks of both modules run there. The `desktop` job compiles the harness and `lwjgl3`. The `android` (`:android:assembleDebug`) and `web` (TeaVM release build) jobs are allowed to fail. `uiTest` needs a display, so CI doesn't run it.
+
+The ktx tests (`ktx/src/test`) cover `compileAsync` and `loadCompiledAsync` (`CompilerAsyncTest`), the asset loader on `AssetManager` and `AssetStorage` including `INCLUDE` through the resolver (`InkStoryLoaderTest`), `eventFlow`, `eventSharedFlow` and `observeAsFlow` (`StoryFlowsTest`) and `ktxHdgifeLog` (`StoryLoggingTest`). `RichDialogLabel` is exercised by the harness UI test. The Kotlin conveniences in core are tested in `KotlinConveniencesTest`.
 
 `LibraryPinTest` pins the sorted function names and arities of the two ink libraries to `hdgife_version`.
 
@@ -694,7 +925,7 @@ When a Blade Ink upgrade fixes one, a canary fails. That is the signal to revisi
 
 ## Test harness
 
-The harness is a small app for poking at things. None of it is published. The UI lives in the `harness` module (KTX, scene2d, the console, the load policy: `ink/main.ink` plus any `.ink` files under `assets/extra/`, sorted by path). `lwjgl3` runs it on the desktop and `android` runs the same UI on a phone or emulator. Both use the shared root `assets/` folder (UI skin and the demo ink). Run it on the desktop with:
+The harness is a small app for poking at things. None of it is published. The label it draws lines with lives in hdgife-ktx. The UI lives in the `harness` module (KTX, scene2d, the `RichDialogLabel` from hdgife-ktx, the console, the load policy: `ink/main.ink` plus any `.ink` files under `assets/extra/`, sorted by path). `lwjgl3` runs it on the desktop and `android` runs the same UI on a phone or emulator. Both use the shared root `assets/` folder (UI skin and the demo ink). Run it on the desktop with:
 
 ```
 ./gradlew runDesktop
@@ -707,7 +938,7 @@ The root `run` tasks are in the `run` group: `runDesktop`, `runWeb` and `runAndr
 The harness shows only the latest `DialogStep`, in two panels:
 
 - RAW (left): the exact engine output as text, in a small monospace-ish font, scrollable with the mouse wheel. Every field is there: each line with text, speaker, raw and parsed tags, spans with their styles (hex colors also as `hexColor()` reads them) and markers with offsets; the step tags; each choice with `available`, tags, spans, markers and every requirement (`raw`, entity, stat, op, target and actual with their types, the result class and `isMet`); events with typed arguments, `lineIndex` and `id`; `openStyles`; `ended`. After a `StoryStepException` it shows the partial step with the error. After a `load` a note says the lines were kept by the harness.
-- RENDERED (right): the same step the way a game might draw it. Each line is a `RichLine` drawn glyph by glyph. Speaker names get a color, spans are colored (names through libGDX's `Colors` table, hex through `hexColor()`, `em` and `b` fixed colors), and `shake`, `wave` and `bounce` spans move per glyph. Point markers are written dim where they sit. Tags are dim under their line with their type (bare, int, float, bool or text). Events are gold `!` rows where they happened, with typed arguments. A style still open is noted. Choices are buttons that follow `choicemode`, with unmet requirements and the current values.
+- RENDERED (right): the same step the way a game might draw it. Each line is a `RichDialogLabel` from hdgife-ktx, drawn glyph by glyph. Speaker names get a color, spans are colored (names through libGDX's `Colors` table, hex through `hexColor()`, `em` and `b` fixed colors), and `shake`, `wave` and `bounce` spans move per glyph. Point markers are written dim where they sit. Tags are dim under their line with their type (bare, int, float, bool or text). Events are gold `!` rows where they happened, with typed arguments. A style still open is noted. Choices are buttons that follow `choicemode`, with unmet requirements and the current values.
 
 The typewriter reveals each line at 70 characters per second. A `pause` marker holds the reveal for its seconds (0.5 without a value), a `slam` marker flashes the line, and a tap or click on the panel shows the rest at once. `typewriter off` turns it off and shows everything.
 
@@ -766,7 +997,7 @@ The harness acts on events (the engine never does): `spend` takes the named amou
 
 ### Android
 
-The `android` module needs the Android SDK (`sdk.dir` in `local.properties`, or `ANDROID_HOME`). Without it the module is left out of the build, and `-PskipAndroid` leaves it out on purpose. JitPack builds only `:core`.
+The `android` module needs the Android SDK (`sdk.dir` in `local.properties`, or `ANDROID_HOME`). Without it the module is left out of the build, and `-PskipAndroid` leaves it out on purpose. JitPack builds only `:core` and `:ktx`.
 
 In Android Studio, open the project, pick the `android` run configuration and start an emulator or device. From the command line:
 
@@ -782,7 +1013,7 @@ By default the harness compiles `ink/main.ink` on the device at startup, which i
 
 ### Web
 
-The `teavm` module runs the same harness in a browser. It uses [gdx-teavm](https://github.com/xpenatan/gdx-teavm), which compiles the JVM bytecode (so Kotlin works) to JavaScript. GWT is not an option, because it cannot compile Kotlin. The module is left out with `-PskipWeb`. JitPack skips both the web and android modules (`jitpack.yml` passes `-PskipAndroid -PskipWeb`) and builds only `:core`. It needs JDK 17 or newer and a browser with WebGL. It has been run in headless Chrome only, not in other browsers.
+The `teavm` module runs the same harness in a browser. It uses [gdx-teavm](https://github.com/xpenatan/gdx-teavm), which compiles the JVM bytecode (so Kotlin works) to JavaScript. GWT is not an option, because it cannot compile Kotlin. The module is left out with `-PskipWeb`. JitPack skips both the web and android modules (`jitpack.yml` passes `-PskipAndroid -PskipWeb`) and builds only `:core` and `:ktx`. It needs JDK 17 or newer and a browser with WebGL. It has been run in headless Chrome only, not in other browsers.
 
 ```
 ./gradlew runWeb
@@ -796,7 +1027,7 @@ What works: the whole harness, including the Blade Ink runtime, the split-packag
 What differs or does not work:
 
 - There is no `extra/` folder, because the browser has no local files, so mods cannot be added.
-- There are no threads. The harness compiles on the render thread, and it uses plain threads instead of coroutines on the other platforms, because kotlinx.coroutines does not run under TeaVM. Keep `ktx-async` and `kotlinx-coroutines` out of code the web build reaches.
+- There are no threads. The harness compiles on the render thread, and it uses plain threads instead of coroutines on the other platforms, because kotlinx.coroutines does not run under TeaVM. Keep the coroutine parts of hdgife-ktx (`compileAsync`, `eventFlow`, `eventSharedFlow`, `observeAsFlow` and the asset loaders) out of code the web build reaches. `RichDialogLabel` and `toMarkup` use no coroutines and run in the browser build.
 - The console finds its commands by reflection. `teavm/build.gradle` lists the command class and the console package for gdx-teavm's reflection metadata. TeaVM's `Method.invoke` rejects a null argument array, so the web build uses `BrowserConsole`, which passes an empty array.
 - `teavm/src/main/java/com/strongjoshua/console/ConsoleContext.java` is a copy of that class from sjInGameConsole 1.0.1, rebuilt against libGDX 1.14 (the library calls `Label.getText()` as it was in 1.12 and TeaVM refuses to link the call). Delete it when the console is released for libGDX 1.14.
 - The ink libraries bundled in core and the console skin are shipped as classpath assets (`classpathAssets` in `teavm/build.gradle`), since the browser has no class loader resources.
@@ -812,7 +1043,7 @@ What differs or does not work:
 
 `uiTest` has 24 scenarios. It plays the harness through its real UI and checks what is on screen. It starts `TestGame` in a real LWJGL3 window (1280x720), clicks the choice buttons with real touch events at their stage coordinates, presses F2, scrolls the raw panel, and uses the console for setup, including a check that the console's Copy action works. Each scenario asserts on both panels: the raw text, the rendered rows and the buttons. It walks the hub and the feature groups, the three layouts, the debug scenes and the console. The window is hidden unless you pass `-PuiShow`.
 
-It takes screenshots into `lwjgl3/build/ui-shots/` and, with the window shown, fails if one is blank (with a hidden window it only warns, since a hidden window may not render on every system). On failure it prints the reason per scenario, saves a `FAILED-...png` and exits non-zero. On success it prints a summary and exits 0. It gives up after 180 seconds. It needs a display and a GPU driver, so it isn't part of `:core:test`, `build` or JitPack. The code is in `lwjgl3/src/uiTest`, a separate source set that isn't in the harness jar. So far it has only been run on Windows.
+It takes screenshots into `lwjgl3/build/ui-shots/` and, with the window shown, fails if one is blank (with a hidden window it only warns, since a hidden window may not render on every system). On failure it prints the reason per scenario, saves a `FAILED-...png` and exits non-zero. On success it prints a summary and exits 0. It gives up after 180 seconds. It needs a display and a GPU driver, so it isn't part of `:core:test`, `:ktx:test`, `build` or JitPack. The code is in `lwjgl3/src/uiTest`, a separate source set that isn't in the harness jar. So far it has only been run on Windows.
 
 ## Known limits
 
@@ -825,7 +1056,8 @@ It takes screenshots into `lwjgl3/build/ui-shots/` and, with the window shown, f
 - The `emit` functions are numbered by argument count because ink has no overloads.
 - A bare requirement value can't contain a comma. A quoted one can.
 - Validation of `requires` tags only sees tags written literally in the source.
-- There's no reusable UI in the library.
+- The only UI in the library is the scene2d `RichDialogLabel` in hdgife-ktx. There is no dialog screen or choice widget.
+- The coroutine parts of hdgife-ktx don't run in the TeaVM build.
 
 ## License
 
