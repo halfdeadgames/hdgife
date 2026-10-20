@@ -112,9 +112,9 @@ class StoryFlowsTest {
     }
 
     @Test
-    fun `observeAsFlow emits the current value and then every change`() = runBlocking {
+    fun `variableFlow emits the current value and then every change`() = runBlocking {
         val manager = managerOf()
-        val collected = async(start = CoroutineStart.UNDISPATCHED) { manager.observeAsFlow<Int>("hp").take(3).toList() }
+        val collected = async(start = CoroutineStart.UNDISPATCHED) { manager.variableFlow<Int>("hp").take(3).toList() }
         yield()
         manager["hp"] = 7
         manager["hp"] = 3
@@ -122,16 +122,16 @@ class StoryFlowsTest {
     }
 
     @Test
-    fun `observeAsFlow emits null when the value has another type`() = runBlocking {
+    fun `variableFlow emits null when the value has another type`() = runBlocking {
         val manager = managerOf()
-        val collected = async(start = CoroutineStart.UNDISPATCHED) { manager.observeAsFlow<String>("hp").take(1).toList() }
+        val collected = async(start = CoroutineStart.UNDISPATCHED) { manager.variableFlow<String>("hp").take(1).toList() }
         assertEquals(listOf<String?>(null), collected.await())
     }
 
     @Test
-    fun `observeAsFlow widens an int variable like getVariable does`() = runBlocking {
+    fun `variableFlow widens an int variable like getVariable does`() = runBlocking {
         val manager = managerOf()
-        val collected = async(start = CoroutineStart.UNDISPATCHED) { manager.observeAsFlow<Float>("hp").take(3).toList() }
+        val collected = async(start = CoroutineStart.UNDISPATCHED) { manager.variableFlow<Float>("hp").take(3).toList() }
         yield()
         manager["hp"] = 7
         manager["hp"] = 3

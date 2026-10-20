@@ -18,12 +18,12 @@ First public release. From here the public APIs in `core/api/core.api` and `ktx/
 - Bound game functions (`bindFunction`) with lookahead-safe support, typed `FunctionArgs`, variable access, `observe` and `seedRandom`.
 - Save and load in a versioned envelope that includes open styles, with optional `storyId` and `saveFingerprint` (envelope v2) to tie a save to its story.
 - `StoryManager.close()` and `isClosed`.
-- Kotlin conveniences in core: `mapStatProvider`, `manager["name"]` get and set, the `inkVariable<T>()` delegate, lambda forms of `onEvent`, `formatOverride` and `valueConverter`, `addEventListener` for extra event listeners, the `events { }` router with typed handlers (`EventRouter`, `StoryEvent.arg`), and `InkSource.of(path, FileHandleResolver)`.
+- Kotlin conveniences in core: `mapStatProvider`, `manager["name"]` get and set, the `inkVariable<T>()` delegate, lambda forms `overrideFormat` and `convertValues`, `addEventListener` for event listeners, the `events { }` router with typed handlers (`EventRouter`, `StoryEvent.arg`), and `InkSource.of(path, FileHandleResolver)`.
 - The `hdgife-ktx` module, published as `com.github.halfdeadgames.hdgife:hdgife-ktx`, with its own API dump in `ktx/api/ktx.api`:
   - `compileAsync` and `loadCompiledAsync`, on `Dispatchers.Default` unless you pass another context.
-  - `eventFlow` (cold, buffered), `eventSharedFlow` (hot) and `observeAsFlow`.
+  - `eventFlow` (cold, buffered), `eventSharedFlow` (hot) and `variableFlow`.
   - `InkStoryLoader` with `registerInkLoaders` for `AssetManager` and `AssetStorage`, and `AssetStorage.loadInkStory`. `INCLUDE` resolves through the asset resolver, and `.ink.json` loads precompiled stories.
-  - `ktxHdgifeLog` for ktx-log.
+  - `hdgifeLog` for ktx-log.
   - The scene2d `RichDialogLabel` and its `richDialogLabel` DSL (colors, `shake`, `wave` and `bounce` effects, typewriter, `pause` and `slam` markers), with `escapeMarkup`, `toMarkup`, `describeStyle` and `describeMarker`.
 - Coordinates `com.github.halfdeadgames.hdgife:hdgife` and `com.github.halfdeadgames.hdgife:hdgife-ktx`. The aggregate `com.github.halfdeadgames:hdgife` pulls every module.
 - `hdgife.ink` (version 2) and `hdgife_util.ink` bundled in the jar, with `HdgifeInk.version` and `libraryFunctions`.

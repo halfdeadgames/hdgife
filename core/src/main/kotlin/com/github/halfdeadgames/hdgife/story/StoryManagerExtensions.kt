@@ -8,15 +8,11 @@ public operator fun StoryManager.get(name: String): Any? = getVariable(name)
 
 public operator fun StoryManager.set(name: String, value: Any): Unit = setVariable(name, value)
 
-public fun StoryManager.onEvent(listener: (StoryEvent) -> Unit) {
-    onEvent = StoryEventListener(listener)
-}
-
-public fun StoryManager.formatOverride(override: (entityId: String, statName: String) -> NumberFormat?) {
+public fun StoryManager.overrideFormat(override: (entityId: String, statName: String) -> NumberFormat?) {
     formatOverride = NumberFormatOverride(override)
 }
 
-public fun StoryManager.valueConverter(converter: (Any) -> Any?) {
+public fun StoryManager.convertValues(converter: (Any) -> Any?) {
     valueConverter = ValueConverter(converter)
 }
 

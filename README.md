@@ -419,9 +419,9 @@ var gold by manager.inkVariable<Int>("player_coins")    // explicit name
 Callbacks as lambdas. These set the same properties as before, with a Kotlin function instead of a `fun interface`:
 
 ```kotlin
-manager.onEvent { event -> println(event.name) }
-manager.formatOverride { entity, stat -> if (stat == "ratio") NumberFormat(decimals = 2) else null }
-manager.valueConverter { value -> if (value is Money) value.cents else null }
+manager.addEventListener { event -> println(event.name) }
+manager.overrideFormat { entity, stat -> if (stat == "ratio") NumberFormat(decimals = 2) else null }
+manager.convertValues { value -> if (value is Money) value.cents else null }
 ```
 
 Several event listeners. `onEvent` holds one listener. `addEventListener(listener)` adds more and returns an `AutoCloseable` that removes it. For each event `onEvent` runs first, then the added ones in the order they were added. `close()` on the manager removes them all:
@@ -492,10 +492,10 @@ Neither one touches `onEvent`, so a game that already sets it keeps working.
 
 ### Variables as Flow
 
-`manager.observeAsFlow<T>(name)` is a `Flow<T?>`. It emits the current value on collection and the new value after each change that `observe` reports, so changes arrive in the batches described under "Variables". A value that can't be read as `T` comes out as null. Collecting an undeclared variable throws `IllegalArgumentException`. Cancelling the collector closes the observation:
+`manager.variableFlow<T>(name)` is a `Flow<T?>`. It emits the current value on collection and the new value after each change that `observe` reports, so changes arrive in the batches described under "Variables". A value that can't be read as `T` comes out as null. Collecting an undeclared variable throws `IllegalArgumentException`. Like `eventFlow` it is cold, so start collecting, and let the collector start (launch it before calling `next()`), before the variable changes, or the change is missed. Cancelling the collector closes the observation:
 
 ```kotlin
-manager.observeAsFlow<Int>("player_coins").collect { coins -> label.setText("Coins: $coins") }
+manager.variableFlow<Int>("player_coins").collect { coins -> label.setText("Coins: $coins") }
 ```
 
 ### Loading stories as assets
@@ -511,7 +511,7 @@ val story = assetManager.get("ink/main.ink", HdgifeStory::class.java)
 
 // AssetStorage (ktx-assets-async)
 val storage = AssetStorage()
-storage.registerInkLoaders(InkCompilerService().apply { log = ktxHdgifeLog() })
+storage.registerInkLoaders(InkCompilerService().apply { log = hdgifeLog() })
 val story = storage.loadInkStory("ink/main.ink")   // suspend
 ```
 
@@ -519,11 +519,11 @@ val story = storage.loadInkStory("ink/main.ink")   // suspend
 
 ### Logging
 
-`ktxHdgifeLog(logger = Logger("hdgife"))` returns an `HdgifeLog` that writes to a ktx-log `Logger` at info level:
+`hdgifeLog(logger = Logger("hdgife"))` returns an `HdgifeLog` that writes to a ktx-log `Logger` at info level:
 
 ```kotlin
-manager.log = ktxHdgifeLog()
-manager.log = ktxHdgifeLog(Logger("story"))
+manager.log = hdgifeLog()
+manager.log = hdgifeLog(Logger("story"))
 ```
 
 ### RichDialogLabel
@@ -728,13 +728,12 @@ Kotlin conveniences (see "Kotlin conveniences").
 | Declaration | Notes |
 | --- | --- |
 | `operator fun StoryManager.get(name: String): Any?`, `operator fun StoryManager.set(name: String, value: Any)` | `getVariable`, `setVariable` |
-| `fun StoryManager.onEvent(listener: (StoryEvent) -> Unit)` | sets `onEvent` |
-| `fun StoryManager.formatOverride(override: (entityId: String, statName: String) -> NumberFormat?)` | sets `formatOverride` |
-| `fun StoryManager.valueConverter(converter: (Any) -> Any?)` | sets `valueConverter` |
+| `fun StoryManager.overrideFormat(override: (entityId: String, statName: String) -> NumberFormat?)` | sets `formatOverride` |
+| `fun StoryManager.convertValues(converter: (Any) -> Any?)` | sets `valueConverter` |
 | `fun <T : Any> StoryManager.inkVariable(type: KClass<T>, name: String? = null): InkVariable<T>` | property delegate. The name defaults to the property name |
 | `class InkVariable<T : Any> : ReadWriteProperty<Any?, T>` | `getValue`, `setValue`. Made by `inkVariable` |
 | `fun StoryManager.events(configure: EventRouter.() -> Unit): EventRouter` | registers the router as an event listener |
-| `class EventRouter : AutoCloseable` | `on(name: String, handler: () -> Unit)`, `fallback(handler: (StoryEvent) -> Unit)`, `register(name: String, argumentTypes: List<KClass<*>>, handler: (StoryEvent) -> Unit)` (the target of the inline `on`), `close()` |
+| `class EventRouter : AutoCloseable` | `on(name: String, handler: () -> Unit)`, `fallback(handler: (StoryEvent) -> Unit)`, `addHandler(name: String, argumentTypes: List<KClass<*>>, handler: (StoryEvent) -> Unit)` (the target of the inline `on`), `close()` |
 | `fun <T : Any> StoryEvent.argAs(index: Int, type: KClass<T>): T` | `String`, `Int`, `Float`, `Double` or `Boolean` |
 
 The reified inline forms `inkVariable<T>()`, `EventRouter.on<A>(...)` with up to three type arguments and `StoryEvent.arg<T>(index)` are public, but like `variableAs` they are not in `core.api`.
@@ -821,13 +820,13 @@ Everything public in `ktx/api/ktx.api`. The module uses explicit API mode and ha
 | `suspend fun InkCompilerService.loadCompiledAsync(json: String, dispatcher: CoroutineContext = Dispatchers.Default): HdgifeStory` | |
 | `fun StoryManager.eventFlow(capacity: Int = Channel.BUFFERED): Flow<StoryEvent>` | cold, buffered |
 | `fun StoryManager.eventSharedFlow(replay: Int = 0, extraBufferCapacity: Int = 64): SharedFlow<StoryEvent>` | hot |
-| `inline fun <reified T : Any> StoryManager.observeAsFlow(name: String): Flow<T?>` | inline. It calls `observeVariableFlow(name, type)`, which is in `ktx.api` only because the inline body needs it, and is not part of the contract |
+| `inline fun <reified T : Any> StoryManager.variableFlow(name: String): Flow<T?>` | inline. It calls `observeVariableFlow(name, type)`, which is in `ktx.api` only because the inline body needs it, and is not part of the contract |
 | `class InkStoryLoader(resolver: FileHandleResolver, compiler: InkCompilerService = InkCompilerService())` | `AsynchronousAssetLoader<HdgifeStory, AssetLoaderParameters<HdgifeStory>>`, `@JvmOverloads` |
 | `const val inkSourceSuffix: String`, `const val inkCompiledSuffix: String` | `".ink"`, `".ink.json"` |
 | `fun AssetManager.registerInkLoaders(compiler: InkCompilerService = InkCompilerService())` | registers the loader for both suffixes |
 | `fun AssetStorage.registerInkLoaders(compiler: InkCompilerService = InkCompilerService())` | the same for `AssetStorage` |
 | `suspend fun AssetStorage.loadInkStory(path: String): HdgifeStory` | registers the default loaders if none is set for the path |
-| `fun ktxHdgifeLog(logger: Logger = Logger("hdgife")): HdgifeLog` | info level |
+| `fun hdgifeLog(logger: Logger = Logger("hdgife")): HdgifeLog` | info level |
 
 #### com.github.halfdeadgames.hdgife.ktx.scene2d
 
@@ -911,7 +910,7 @@ A requirement without an entity reads the speaker (`tester` here), and `subject.
 
 CI (`.github/workflows/ci.yml`) runs on pushes to master and on pull requests. The `core` job runs `:core:check :ktx:check :core:publishToMavenLocal :ktx:publishToMavenLocal` on JDK 17 and 21, so the tests and ABI checks of both modules run there. The `desktop` job compiles the harness and `lwjgl3`. The `android` (`:android:assembleDebug`) and `web` (TeaVM release build) jobs are allowed to fail. `uiTest` needs a display, so CI doesn't run it.
 
-The ktx tests (`ktx/src/test`) cover `compileAsync` and `loadCompiledAsync` (`CompilerAsyncTest`), the asset loader on `AssetManager` and `AssetStorage` including `INCLUDE` through the resolver (`InkStoryLoaderTest`), `eventFlow`, `eventSharedFlow` and `observeAsFlow` (`StoryFlowsTest`) and `ktxHdgifeLog` (`StoryLoggingTest`). `RichDialogLabel` is exercised by the harness UI test. The Kotlin conveniences in core are tested in `KotlinConveniencesTest`.
+The ktx tests (`ktx/src/test`) cover `compileAsync` and `loadCompiledAsync` (`CompilerAsyncTest`), the asset loader on `AssetManager` and `AssetStorage` including `INCLUDE` through the resolver (`InkStoryLoaderTest`), `eventFlow`, `eventSharedFlow` and `variableFlow` (`StoryFlowsTest`) and `hdgifeLog` (`StoryLoggingTest`). `RichDialogLabel` is exercised by the harness UI test. The Kotlin conveniences in core are tested in `KotlinConveniencesTest`.
 
 `LibraryPinTest` pins the sorted function names and arities of the two ink libraries to `hdgife_version`.
 
@@ -1027,7 +1026,7 @@ What works: the whole harness, including the Blade Ink runtime, the split-packag
 What differs or does not work:
 
 - There is no `extra/` folder, because the browser has no local files, so mods cannot be added.
-- There are no threads. The harness compiles on the render thread, and it uses plain threads instead of coroutines on the other platforms, because kotlinx.coroutines does not run under TeaVM. Keep the coroutine parts of hdgife-ktx (`compileAsync`, `eventFlow`, `eventSharedFlow`, `observeAsFlow` and the asset loaders) out of code the web build reaches. `RichDialogLabel` and `toMarkup` use no coroutines and run in the browser build.
+- There are no threads. The harness compiles on the render thread, and it uses plain threads instead of coroutines on the other platforms, because kotlinx.coroutines does not run under TeaVM. Keep the coroutine parts of hdgife-ktx (`compileAsync`, `eventFlow`, `eventSharedFlow`, `variableFlow` and the asset loaders) out of code the web build reaches. `RichDialogLabel` and `toMarkup` use no coroutines and run in the browser build.
 - The console finds its commands by reflection. `teavm/build.gradle` lists the command class and the console package for gdx-teavm's reflection metadata. TeaVM's `Method.invoke` rejects a null argument array, so the web build uses `BrowserConsole`, which passes an empty array.
 - `teavm/src/main/java/com/strongjoshua/console/ConsoleContext.java` is a copy of that class from sjInGameConsole 1.0.1, rebuilt against libGDX 1.14 (the library calls `Label.getText()` as it was in 1.12 and TeaVM refuses to link the call). Delete it when the console is released for libGDX 1.14.
 - The ink libraries bundled in core and the console skin are shipped as classpath assets (`classpathAssets` in `teavm/build.gradle`), since the browser has no class loader resources.

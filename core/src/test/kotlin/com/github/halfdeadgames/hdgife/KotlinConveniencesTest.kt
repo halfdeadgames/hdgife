@@ -7,12 +7,11 @@ import com.github.halfdeadgames.hdgife.story.StoryEvent
 import com.github.halfdeadgames.hdgife.story.StoryStepException
 import com.github.halfdeadgames.hdgife.story.arg
 import com.github.halfdeadgames.hdgife.story.events
-import com.github.halfdeadgames.hdgife.story.formatOverride
+import com.github.halfdeadgames.hdgife.story.overrideFormat
 import com.github.halfdeadgames.hdgife.story.get
 import com.github.halfdeadgames.hdgife.story.inkVariable
-import com.github.halfdeadgames.hdgife.story.onEvent
 import com.github.halfdeadgames.hdgife.story.set
-import com.github.halfdeadgames.hdgife.story.valueConverter
+import com.github.halfdeadgames.hdgife.story.convertValues
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -84,9 +83,9 @@ class KotlinConveniencesTest {
         val stats = mapStatProvider(mapOf("hero" to mapOf("gold" to 3.456f, "pet" to Pet)))
         val manager = managerOf("{stat_text_of(\"hero\", \"gold\")} {stat_text_of(\"hero\", \"pet\")}\n-> END", stats)
         val seen = ArrayList<String>()
-        manager.onEvent { seen += it.name }
-        manager.formatOverride { _, statName -> if (statName == "gold") NumberFormat(decimals = 1, rounding = Rounding.Round) else null }
-        manager.valueConverter { if (it === Pet) "cat" else null }
+        manager.addEventListener { seen += it.name }
+        manager.overrideFormat { _, statName -> if (statName == "gold") NumberFormat(decimals = 1, rounding = Rounding.Round) else null }
+        manager.convertValues { if (it === Pet) "cat" else null }
         assertEquals("3.5 cat", manager.next().lines.single().text)
         assertTrue(seen.isEmpty())
     }
@@ -130,7 +129,7 @@ class KotlinConveniencesTest {
     fun `event arguments convert to the requested type`() {
         val manager = managerOf(eventInk)
         val events = ArrayList<StoryEvent>()
-        manager.onEvent { events += it }
+        manager.addEventListener { events += it }
         manager.next()
         assertEquals("sword", events[0].arg<String>(0))
         assertEquals(5, events[1].arg<Int>(1))

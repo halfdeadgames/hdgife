@@ -139,10 +139,10 @@ public final class com/github/halfdeadgames/hdgife/story/DialogStep {
 }
 
 public final class com/github/halfdeadgames/hdgife/story/EventRouter : java/lang/AutoCloseable {
+	public final fun addHandler (Ljava/lang/String;Ljava/util/List;Lkotlin/jvm/functions/Function1;)V
 	public fun close ()V
 	public final fun fallback (Lkotlin/jvm/functions/Function1;)V
 	public final fun on (Ljava/lang/String;Lkotlin/jvm/functions/Function0;)V
-	public final fun register (Ljava/lang/String;Ljava/util/List;Lkotlin/jvm/functions/Function1;)V
 }
 
 public final class com/github/halfdeadgames/hdgife/story/EventRouterKt {
@@ -422,13 +422,12 @@ public final class com/github/halfdeadgames/hdgife/story/StoryManager$Companion 
 }
 
 public final class com/github/halfdeadgames/hdgife/story/StoryManagerExtensionsKt {
-	public static final fun formatOverride (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/jvm/functions/Function2;)V
+	public static final fun convertValues (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/jvm/functions/Function1;)V
 	public static final fun get (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Ljava/lang/String;)Ljava/lang/Object;
 	public static final fun inkVariable (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/reflect/KClass;Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/InkVariable;
 	public static synthetic fun inkVariable$default (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/reflect/KClass;Ljava/lang/String;ILjava/lang/Object;)Lcom/github/halfdeadgames/hdgife/story/InkVariable;
-	public static final fun onEvent (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/jvm/functions/Function1;)V
+	public static final fun overrideFormat (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/jvm/functions/Function2;)V
 	public static final fun set (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Ljava/lang/String;Ljava/lang/Object;)V
-	public static final fun valueConverter (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/jvm/functions/Function1;)V
 }
 
 public final class com/github/halfdeadgames/hdgife/story/StoryManagerKt {

@@ -40,8 +40,8 @@ public final class com/github/halfdeadgames/hdgife/ktx/StoryFlowsKt {
 }
 
 public final class com/github/halfdeadgames/hdgife/ktx/StoryLoggingKt {
-	public static final fun ktxHdgifeLog (Lktx/log/Logger;)Lcom/github/halfdeadgames/hdgife/HdgifeLog;
-	public static synthetic fun ktxHdgifeLog$default (Lktx/log/Logger;ILjava/lang/Object;)Lcom/github/halfdeadgames/hdgife/HdgifeLog;
+	public static final fun hdgifeLog (Lktx/log/Logger;)Lcom/github/halfdeadgames/hdgife/HdgifeLog;
+	public static synthetic fun hdgifeLog$default (Lktx/log/Logger;ILjava/lang/Object;)Lcom/github/halfdeadgames/hdgife/HdgifeLog;
 }
 
 public final class com/github/halfdeadgames/hdgife/ktx/scene2d/MarkupTextKt {

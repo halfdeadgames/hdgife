@@ -24,7 +24,7 @@ public fun StoryManager.eventSharedFlow(replay: Int = 0, extraBufferCapacity: In
     return shared.asSharedFlow()
 }
 
-public inline fun <reified T : Any> StoryManager.observeAsFlow(name: String): Flow<T?> = observeVariableFlow(name, T::class)
+public inline fun <reified T : Any> StoryManager.variableFlow(name: String): Flow<T?> = observeVariableFlow(name, T::class)
 
 @PublishedApi
 internal fun <T : Any> StoryManager.observeVariableFlow(name: String, type: KClass<T>): Flow<T?> = callbackFlow {

@@ -10,19 +10,19 @@ public class EventRouter internal constructor(manager: StoryManager) : AutoClose
     internal var registration: AutoCloseable? = null
 
     public fun on(name: String, handler: () -> Unit) {
-        register(name, emptyList()) { handler() }
+        addHandler(name, emptyList()) { handler() }
     }
 
     public inline fun <reified A : Any> on(name: String, crossinline handler: (A) -> Unit) {
-        register(name, listOf(A::class)) { event -> handler(event.arg<A>(0)) }
+        addHandler(name, listOf(A::class)) { event -> handler(event.arg<A>(0)) }
     }
 
     public inline fun <reified A : Any, reified B : Any> on(name: String, crossinline handler: (A, B) -> Unit) {
-        register(name, listOf(A::class, B::class)) { event -> handler(event.arg<A>(0), event.arg<B>(1)) }
+        addHandler(name, listOf(A::class, B::class)) { event -> handler(event.arg<A>(0), event.arg<B>(1)) }
     }
 
     public inline fun <reified A : Any, reified B : Any, reified C : Any> on(name: String, crossinline handler: (A, B, C) -> Unit) {
-        register(name, listOf(A::class, B::class, C::class)) { event -> handler(event.arg<A>(0), event.arg<B>(1), event.arg<C>(2)) }
+        addHandler(name, listOf(A::class, B::class, C::class)) { event -> handler(event.arg<A>(0), event.arg<B>(1), event.arg<C>(2)) }
     }
 
     public fun fallback(handler: (StoryEvent) -> Unit) {
@@ -30,7 +30,7 @@ public class EventRouter internal constructor(manager: StoryManager) : AutoClose
     }
 
     @PublishedApi
-    internal fun register(name: String, argumentTypes: List<KClass<*>>, handler: (StoryEvent) -> Unit) {
+    internal fun addHandler(name: String, argumentTypes: List<KClass<*>>, handler: (StoryEvent) -> Unit) {
         for ((index, type) in argumentTypes.withIndex()) {
             require(type in supportedArgumentTypes) {
                 "Event '$name': argument $index as ${type.simpleName} is not supported, use String, Int, Float, Double or Boolean"
