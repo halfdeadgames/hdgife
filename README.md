@@ -697,8 +697,10 @@ When a Blade Ink upgrade fixes one, a canary fails. That is the signal to revisi
 The harness is a small app for poking at things. None of it is published. The UI lives in the `harness` module (KTX, scene2d, the console, the load policy: `ink/main.ink` plus any `.ink` files under `assets/extra/`, sorted by path). `lwjgl3` runs it on the desktop and `android` runs the same UI on a phone or emulator. Both use the shared root `assets/` folder (UI skin and the demo ink). Run it on the desktop with:
 
 ```
-./gradlew lwjgl3:run
+./gradlew runDesktop
 ```
+
+The root `run` tasks are in the `run` group: `runDesktop`, `runWeb` and `runAndroid`. Plain `run` is the same as `runDesktop`.
 
 ### Display
 
@@ -771,10 +773,10 @@ In Android Studio, open the project, pick the `android` run configuration and st
 ```
 ./gradlew :android:assembleDebug
 ./gradlew :android:installDebug
-./gradlew :android:run
+./gradlew runAndroid
 ```
 
-`installDebug` installs the app (`com.github.halfdeadgames.hdgife.harness`) and `run` starts it with adb. The layout stacks the panels in portrait and puts them side by side in landscape. The View button replaces F2 and the Console button replaces the backtick key; the console has a Submit button. I've only run it on an emulator. When the app is paused it saves the story to `autosave.json` in the app's files and restores it on the next start (the lines are not part of a save, so only the choices show).
+`installDebug` installs the app (`com.github.halfdeadgames.hdgife.harness`). `runAndroid` installs it and starts it with adb. The layout stacks the panels in portrait and puts them side by side in landscape. The View button replaces F2 and the Console button replaces the backtick key; the console has a Submit button. I've only run it on an emulator. When the app is paused it saves the story to `autosave.json` in the app's files and restores it on the next start (the lines are not part of a save, so only the choices show).
 
 By default the harness compiles `ink/main.ink` on the device at startup, which is what a game with mods would do. To ship the story precompiled instead, build with `-PprecompiledInk` (for example `./gradlew -PprecompiledInk :android:installDebug`). `:harness:compileInk` writes `ink/main.ink.json` and the harness loads it when no `extra/` files exist. The log line `Story ready in ... ms` says which path ran.
 
@@ -783,11 +785,11 @@ By default the harness compiles `ink/main.ink` on the device at startup, which i
 The `teavm` module runs the same harness in a browser. It uses [gdx-teavm](https://github.com/xpenatan/gdx-teavm), which compiles the JVM bytecode (so Kotlin works) to JavaScript. GWT is not an option, because it cannot compile Kotlin. The module is left out with `-PskipWeb`. JitPack skips both the web and android modules (`jitpack.yml` passes `-PskipAndroid -PskipWeb`) and builds only `:core`. It needs JDK 17 or newer and a browser with WebGL. It has been run in headless Chrome only, not in other browsers.
 
 ```
-./gradlew :teavm:run
+./gradlew runWeb
 ./gradlew :teavm:build
 ```
 
-`run` builds the readable development build and serves it at http://localhost:8080 (stop it with Ctrl+C). `build` makes the optimized, obfuscated release app in `teavm/build/dist/js/release/webapp`; serve that folder from any static web server, or run `./gradlew :teavm:gdx_teavm_web_js_release_run` (port 8180). Open the page over http, not from a `file:` URL. Add `-PprecompiledInk` to ship the story compiled at build time (`ink/main.ink.json`, as on Android) instead of compiling it in the page.
+`runWeb` builds the readable development build and serves it at http://localhost:8080 (stop it with Ctrl+C). `build` makes the optimized, obfuscated release app in `teavm/build/dist/js/release/webapp`; serve that folder from any static web server, or run `./gradlew :teavm:gdx_teavm_web_js_release_run` (port 8180). Open the page over http, not from a `file:` URL. Add `-PprecompiledInk` to ship the story compiled at build time (`ink/main.ink.json`, as on Android) instead of compiling it in the page.
 
 What works: the whole harness, including the Blade Ink runtime, the split-package patch classes, number formatting, saving, the console commands and `reload`. Compiling ink in the page works too (about 0.5 s for `main.ink`).
 

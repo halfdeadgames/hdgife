@@ -47,3 +47,49 @@ subprojects {
 }
 
 eclipse.project.name = 'hdgife' + '-parent'
+
+def androidSdkDir = {
+  def local = file('local.properties')
+  def dir = null
+  if (local.exists()) {
+    def props = new Properties()
+    local.withInputStream { props.load(it) }
+    dir = props.getProperty('sdk.dir')
+  }
+  dir ?: System.getenv('ANDROID_HOME') ?: System.getenv('ANDROID_SDK_ROOT')
+}
+
+tasks.register('runDesktop') {
+  group = 'run'
+  description = 'Runs the harness on the desktop (lwjgl3).'
+  dependsOn ':lwjgl3:run'
+}
+
+tasks.register('run') {
+  group = 'run'
+  description = 'Same as runDesktop.'
+  dependsOn 'runDesktop'
+}
+
+if (findProject(':teavm')) {
+  tasks.register('runWeb') {
+    group = 'run'
+    description = 'Builds the harness for the browser and serves it at http://localhost:8080.'
+    dependsOn ':teavm:gdx_teavm_web_js_run'
+  }
+}
+
+if (findProject(':android')) {
+  tasks.register('runAndroid', Exec) {
+    group = 'run'
+    description = 'Installs the debug build and starts it on the connected device or emulator with adb.'
+    dependsOn ':android:installDebug'
+    doFirst {
+      def sdk = androidSdkDir()
+      if (!sdk) throw new GradleException('No sdk.dir in local.properties and no ANDROID_HOME')
+      def adb = new File(sdk, 'platform-tools/' + (org.gradle.internal.os.OperatingSystem.current().windows ? 'adb.exe' : 'adb'))
+      commandLine adb.absolutePath, 'shell', 'am', 'start', '-n',
+        'com.github.halfdeadgames.hdgife.harness/com.github.halfdeadgames.hdgife.android.AndroidLauncher'
+    }
+  }
+}

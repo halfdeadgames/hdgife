@@ -39,12 +39,6 @@ gdxTeaVM {
 }
 
 build.dependsOn 'gdx_teavm_web_js_release_build'
-tasks.register('run') {
-  group = 'application'
-  description = 'Builds the harness for the browser and serves it at http://localhost:8080.'
-  dependsOn 'gdx_teavm_web_js_run'
-}
-
 if (project.hasProperty('precompiledInk')) {
   gdxTeaVM {
     assets.from(files(project(':harness').layout.buildDirectory.dir('precompiled')) {
