@@ -27,6 +27,13 @@ jobs:
           java-version: ${{ matrix.java }}
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew -PskipAndroid -PskipWeb :core:check :ktx:check :core:publishToMavenLocal :ktx:publishToMavenLocal
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-reports-java-${{ matrix.java }}
+          path: |
+            core/build/reports/tests
+            ktx/build/reports/tests
 
   # The desktop harness has to compile. The window test (uiTest) needs a display, so it is not run here.
   desktop:
@@ -51,8 +58,10 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew -PskipWeb :android:assembleDebug
+      - run: ./gradlew -PskipWeb --stacktrace -Dorg.gradle.jvmargs="-Xmx3g -Dfile.encoding=UTF-8" :android:assembleDebug
 
   # Optional: a failure here does not fail the run.
   web:

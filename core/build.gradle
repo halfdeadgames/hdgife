@@ -23,6 +23,10 @@ kotlin {
 
 test {
   useJUnitPlatform()
+  testLogging {
+    exceptionFormat 'full'
+    events 'failed'
+  }
   systemProperty 'hdgife.projectVersion', project.version.toString()
   systemProperty 'hdgife.bladeInkVersion', bladeInkVersion
 }

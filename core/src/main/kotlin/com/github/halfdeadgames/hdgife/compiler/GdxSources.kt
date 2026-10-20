@@ -10,7 +10,7 @@ public fun InkSource.Companion.of(path: String, resolver: FileHandleResolver): I
 
 private fun resolvedSource(resolver: FileHandleResolver, path: String): InkSource =
     InkSource.lazy(path, { relative ->
-        val siblingPath = normalizePath(path.substringBeforeLast('/', "") + "/" + relative)
+        val siblingPath = siblingPath(path, relative)
         val sibling = resolver.resolve(siblingPath)
         if (sibling.exists() && !sibling.isDirectory) resolvedSource(resolver, siblingPath) else null
     }) { resolver.resolve(path).readString("UTF-8") }
@@ -19,7 +19,7 @@ private fun fileSource(file: FileHandle, name: String): InkSource =
     InkSource.lazy(name, { relative ->
         val child = file.parent().child(relative)
         if (child.exists() && !child.isDirectory) {
-            fileSource(child, normalizePath(name.substringBeforeLast('/', "") + "/" + relative))
+            fileSource(child, siblingPath(name, relative))
         } else null
     }) { file.readString("UTF-8") }
 

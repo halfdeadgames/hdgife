@@ -85,14 +85,13 @@ public class InkCompilerService {
 
         fun prepare(source: InkSource, text: String): String {
             loaded += source.name
-            val directory = source.name.substringBeforeLast('/', "")
             val blockCommentRanges = blockComments(text)
             return includeLine.replace(text) { match ->
                 if (blockCommentRanges.any { match.range.first in it }) return@replace match.value
                 val target = match.groupValues[2].substringBefore("//").substringBefore("/*").trim()
                 if (target.isEmpty()) return@replace match.value
                 if (target in bundledLibraryPaths) return@replace match.value
-                val fullPath = normalizePath("$directory/$target")
+                val fullPath = siblingPath(source.name, target)
                 if (fullPath !in listed) source.sibling?.invoke(target)?.let { listed[fullPath] = it }
                 match.groupValues[1] + fullPath
             }

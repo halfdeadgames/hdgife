@@ -20,13 +20,21 @@ public class InkSource private constructor(
 }
 
 internal fun normalizePath(path: String): String {
+    val unified = path.replace('\\', '/')
     val parts = ArrayList<String>()
-    for (part in path.replace('\\', '/').split('/')) {
+    for (part in unified.split('/')) {
         when {
             part.isEmpty() || part == "." -> {}
             part == ".." && parts.isNotEmpty() && parts.last() != ".." -> parts.removeAt(parts.lastIndex)
             else -> parts += part
         }
     }
-    return parts.joinToString("/")
+    val joined = parts.joinToString("/")
+    return if (unified.startsWith("/")) "/$joined" else joined
+}
+
+internal fun siblingPath(path: String, relative: String): String {
+    val slash = path.lastIndexOf('/')
+    val directory = if (slash < 0) "" else path.substring(0, slash + 1)
+    return normalizePath(directory + relative)
 }

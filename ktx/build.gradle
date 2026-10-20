@@ -22,6 +22,10 @@ kotlin {
 
 test {
   useJUnitPlatform()
+  testLogging {
+    exceptionFormat 'full'
+    events 'failed'
+  }
 }
 
 apply plugin: 'maven-publish'
