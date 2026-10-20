@@ -82,14 +82,14 @@ internal class Ui(private val game: TestGame, val screen: DialogScreen, private 
 
     suspend fun tap(target: Actor, name: String) {
         val stage = screen.stage
-        val centre = target.localToStageCoordinates(Vector2(target.width / 2f, target.height / 2f))
-        val screenPoint = stage.stageToScreenCoordinates(Vector2(centre))
+        val center = target.localToStageCoordinates(Vector2(target.width / 2f, target.height / 2f))
+        val screenPoint = stage.stageToScreenCoordinates(Vector2(center))
         val screenX = screenPoint.x.toInt()
         val screenY = screenPoint.y.toInt()
-        expect(target.stage === stage && centre.y in 0f..stage.height) { "$name is not on the visible stage: $centre" }
-        val hit = stage.hit(centre.x, centre.y, true)
+        expect(target.stage === stage && center.y in 0f..stage.height) { "$name is not on the visible stage: $center" }
+        val hit = stage.hit(center.x, center.y, true)
         expect(hit != null && (hit === target || hit.isDescendantOf(target))) {
-            "Click at $centre would hit ${hit?.javaClass?.simpleName ?: "nothing"}, not $name (covered or off screen?)"
+            "Click at $center would hit ${hit?.javaClass?.simpleName ?: "nothing"}, not $name (covered or off screen?)"
         }
         stage.touchDown(screenX, screenY, 0, Input.Buttons.LEFT)
         stage.touchUp(screenX, screenY, 0, Input.Buttons.LEFT)

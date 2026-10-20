@@ -129,8 +129,8 @@ public class InkCompilerService {
             val classpathStream = InkCompilerService::class.java.classLoader?.getResourceAsStream(path)
             if (classpathStream != null) return classpathStream.use { String(it.readBytes(), Charsets.UTF_8) }
             val gdxFiles = Gdx.files ?: return null
-            val handle = gdxFiles.classpath(path)
-            return if (handle.exists()) handle.readString("UTF-8") else null
+            val classpathFile = gdxFiles.classpath(path)
+            return if (classpathFile.exists()) classpathFile.readString("UTF-8") else null
         }
 
         fun blockComments(text: String): List<IntRange> {

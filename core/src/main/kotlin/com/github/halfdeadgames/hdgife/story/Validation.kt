@@ -74,7 +74,7 @@ internal fun validateStory(
     val issues = ArrayList<ValidationIssue>()
     val variables = story.variablesState
     val core = includesCoreLibrary(story)
-    val util = includesUtilLibrary(story)
+    val usesUtil = includesUtilLibrary(story)
 
     val externals = LinkedHashSet<String>()
     val requirementTags = ArrayList<Pair<String, String>>()
@@ -94,7 +94,7 @@ internal fun validateStory(
 
     for ((names, included, file) in listOf(
         Triple(HdgifeInk.coreFunctions, core, "hdgife.ink"),
-        Triple(HdgifeInk.utilFunctions, util, "hdgife_util.ink"),
+        Triple(HdgifeInk.utilFunctions, usesUtil, "hdgife_util.ink"),
     )) {
         if (included) continue
         for (name in names) {

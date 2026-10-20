@@ -19,7 +19,7 @@ EXTERNAL hdgife_emit2(hdg_seq, hdg_name, hdg_a, hdg_b)
 EXTERNAL hdgife_emit3(hdg_seq, hdg_name, hdg_a, hdg_b, hdg_c)
 EXTERNAL hdgife_speak(hdg_name)
 
-// Events: call as statements, ~ emit1("give_item", "sword"). Not in choice text, where they fire when the choice is created.
+// Events: call as statements, ~ emit1("giveItem", "sword"). Not in choice text, where they fire when the choice is created.
 === function emit(hdg_name) ===
 ~ hdgife_event_seq++
 ~ hdgife_emit0(hdgife_event_seq, hdg_name)

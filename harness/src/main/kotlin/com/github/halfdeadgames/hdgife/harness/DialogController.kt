@@ -134,9 +134,9 @@ class DialogController(
     fun autosave() {
         if (!mobile || lastStep == null) return
         try {
-            val temp = Gdx.files.local("$autosaveFile.tmp")
-            temp.writeString(manager.saveState(), false, "UTF-8")
-            temp.moveTo(Gdx.files.local(autosaveFile))
+            val tempFile = Gdx.files.local("$autosaveFile.tmp")
+            tempFile.writeString(manager.saveState(), false, "UTF-8")
+            tempFile.moveTo(Gdx.files.local(autosaveFile))
         } catch (e: Exception) {
             fail("Autosave failed", e)
         }
