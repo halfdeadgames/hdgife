@@ -65,6 +65,7 @@ class TestGame(
                 val story = outcome.getOrThrow()
                 val manager = StoryManager(story, provider) {
                     log = HdgifeLog { logger.info { it } }
+                    maxOpenStyles = showcaseMaxOpenStyles
                 }
                 val screen = DialogScreen(manager, provider, compiler, fonts)
                 addScreen(screen)

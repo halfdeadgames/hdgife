@@ -20,7 +20,7 @@ import kotlin.random.Random
 
 private val log = logger<DialogController>()
 
-private val watchedVariables = listOf("suspicion", "door_open", "player_coin")
+private val watchedVariables = listOf("counter", "switchOn", "player_coins")
 
 private const val autosaveFile = "autosave.json"
 
@@ -40,6 +40,8 @@ interface DialogView {
     fun setChoiceMode(mode: ChoiceMode)
 
     fun setViewMode(mode: ViewMode?)
+
+    fun setTypewriter(enabled: Boolean)
 }
 
 class DialogController(
@@ -60,8 +62,6 @@ class DialogController(
     private var random = Random(1)
     private var fixedRoll: Int? = null
 
-    private val inventory = mutableMapOf<String, Int>()
-
     fun start() {
         val engineLog = manager.log
         manager.log = HdgifeLog { message ->
@@ -71,21 +71,15 @@ class DialogController(
         manager.formatOverride = NumberFormatOverride { entityId, statName -> harnessFormatOverride(entityId, statName) }
         manager.onEvent = StoryEventListener { event ->
             view.say("event #${event.id} ${event.name}(${event.args.joinToString { show(it) }}) before line ${event.lineIndex}")
-            val first = event.args.firstOrNull()?.toString()
-            when (event.name) {
-                "give_item" -> if (first != null) inventory.merge(first, 1, Int::plus)
-                "spend" -> {
-                    val amount = event.args.getOrNull(1) as? Int
-                    if (first != null && amount != null) {
-                        val have = manager.stateProvider?.getStat("player", first) as? Int ?: 0
-                        applyStat(manager, provider, "player", first, have - amount)
-                    }
-                }
+            val statName = event.args.firstOrNull()?.toString()
+            val amount = event.args.getOrNull(1) as? Int
+            if (event.name == "spend" && statName != null && amount != null) {
+                val have = manager.stateProvider?.getStat("player", statName) as? Int ?: 0
+                applyStat(manager, provider, "player", statName, have - amount)
             }
         }
-        manager.bindFunction("inventory_count", lookaheadSafe = true) { args -> inventory[args.string(0)] ?: 0 }
-        manager.bindFunction("player_name", lookaheadSafe = true) { "Wren" }
-        manager.bindFunction("roll") { args -> fixedRoll ?: random.nextInt(1, args.int(0) + 1) }
+        manager.bindFunction("safeDouble", lookaheadSafe = true) { args -> args.int(0) * 2 }
+        manager.bindFunction("unsafeRoll") { args -> fixedRoll ?: random.nextInt(1, args.int(0) + 1) }
         syncPlayer()
         for (name in watchedVariables) watch(name)
     }
@@ -283,6 +277,8 @@ class DialogController(
 
     override fun setViewMode(mode: ViewMode?) = view.setViewMode(mode)
 
+    override fun setTypewriter(enabled: Boolean) = view.setTypewriter(enabled)
+
     override fun save() {
         val step = lastStep
         if (step == null) {
@@ -342,8 +338,7 @@ class DialogController(
 
     override fun restart() {
         manager.reset()
-        inventory.clear()
-        applyStat(manager, provider, "player", "coin", startCoin)
+        applyStat(manager, provider, "player", "coins", startCoins)
         syncPlayer()
         restartView()
     }

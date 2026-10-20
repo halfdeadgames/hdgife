@@ -222,7 +222,15 @@ class DialogScreen(
 
     val rawText: String get() = raw.text
 
-    val renderedLabels: List<Label> get() = rendered.labels
+    val renderedMarkup: List<String> get() = rendered.rowMarkup
+
+    val renderedLines: List<RichLine> get() = rendered.richLines
+
+    val isRevealing: Boolean get() = rendered.isRevealing
+
+    fun finishReveal() = rendered.finishReveal()
+
+    fun scrollToChoice(button: TextButton) = rendered.scrollToChoice(button)
 
     val choiceButtons: List<TextButton> get() = rendered.choiceButtons
 
@@ -256,9 +264,9 @@ class DialogScreen(
             compact = nowCompact
             applyViewMode()
         }
+        rendered.limitChoices(stage.viewport.worldHeight * 0.45f)
         if (mobile) {
             applyInsets()
-            rendered.limitChoices(stage.viewport.worldHeight * 0.45f)
             placeConsole(width, height)
         }
     }
@@ -395,6 +403,12 @@ class DialogScreen(
         controller.lastStep?.let { rendered.showChoices(it, mode) }
         refreshInfo()
         say("Choice mode: ${mode.name.lowercase()}")
+    }
+
+    override fun setTypewriter(enabled: Boolean) {
+        rendered.typewriter = enabled
+        if (!enabled) rendered.finishReveal()
+        say("Typewriter: ${if (enabled) "on" else "off"}")
     }
 
     override fun setViewMode(mode: ViewMode?) {

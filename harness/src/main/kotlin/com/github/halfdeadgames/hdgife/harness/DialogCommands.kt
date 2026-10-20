@@ -48,6 +48,7 @@ interface DialogControl {
     fun restart()
     fun setChoiceMode(mode: ChoiceMode)
     fun setViewMode(mode: ViewMode?)
+    fun setTypewriter(enabled: Boolean)
     fun fixRoll(value: Int?)
     fun resetStats()
     fun save()
@@ -165,6 +166,14 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
     fun view(mode: String) {
         val parsed = ViewMode.entries.firstOrNull { it.name.equals(mode, ignoreCase = true) }
         if (parsed == null) control.log("Mode must be split, raw or rendered") else control.setViewMode(parsed)
+    }
+
+    fun typewriter(mode: String) {
+        when (mode.lowercase()) {
+            "on" -> control.setTypewriter(true)
+            "off" -> control.setTypewriter(false)
+            else -> control.log("Typewriter takes on or off")
+        }
     }
 
     fun fixroll(value: String) {

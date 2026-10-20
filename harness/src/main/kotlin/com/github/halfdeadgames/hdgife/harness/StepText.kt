@@ -6,6 +6,7 @@ import com.github.halfdeadgames.hdgife.story.DialogChoice
 import com.github.halfdeadgames.hdgife.story.DialogLine
 import com.github.halfdeadgames.hdgife.story.DialogStep
 import com.github.halfdeadgames.hdgife.story.RequirementResult
+import com.github.halfdeadgames.hdgife.story.StoryEvent
 import com.github.halfdeadgames.hdgife.story.Style
 import com.github.halfdeadgames.hdgife.story.Tags
 import com.github.halfdeadgames.hdgife.story.TextMarker
@@ -16,10 +17,9 @@ internal fun esc(text: String): String = text.replace("[", "[[")
 private const val titleMarkup = "[#9ecbff]"
 private const val dimMarkup = "[#8a8a8a]"
 
-private val drawnStyleNames = setOf("em", "b", "color")
+internal val animatedStyleNames = setOf("shake", "wave", "bounce")
 
-internal val shakeStyleNames = setOf("shake")
-internal val bobStyleNames = setOf("wave", "bounce")
+internal val flashMarkerNames = setOf("slam", "flash")
 
 private val speakerColorNames = arrayOf("SKY", "SALMON", "LIME", "GOLD", "VIOLET", "TEAL", "CORAL", "CHARTREUSE")
 
@@ -29,24 +29,26 @@ internal class SpeakerColors {
     fun of(name: String): String = assigned.getOrPut(name) { speakerColorNames[assigned.size % speakerColorNames.size] }
 }
 
+private fun colorOf(style: Style): String? {
+    val hex = style.hexColor()
+    if (hex != null) return "#%08x".format(hex)
+    val name = style.value?.uppercase()
+    return if (name != null && Colors.get(name) != null) name else null
+}
+
+private fun isDrawn(style: Style) = style.name == "color" && colorOf(style) != null
+
 internal fun styleColor(span: TextSpan): String? {
-    var color: String? = null
+    var emphasis: String? = null
+    var explicit: String? = null
     for (style in span.styles) {
         when (style.name) {
-            "em" -> color = "#ffd27f"
-            "b" -> color = "#ffffff"
-            "color" -> {
-                val hex = style.hexColor()
-                if (hex != null) {
-                    color = "#%08x".format(hex)
-                } else {
-                    val name = style.value?.uppercase()
-                    if (name != null && Colors.get(name) != null) color = name
-                }
-            }
+            "em" -> emphasis = "#ffd27f"
+            "b" -> emphasis = "#ffffff"
+            "color" -> colorOf(style)?.let { explicit = it }
         }
     }
-    return color
+    return explicit ?: emphasis
 }
 
 internal fun show(value: Any?): String = if (value is Float && value % 1f == 0f) value.toInt().toString() else value.toString()
@@ -63,49 +65,62 @@ internal fun describeMarker(marker: TextMarker) = buildString {
     for ((key, value) in marker.params) append(' ').append(key).append('=').append(value)
 }
 
-private fun effectsOf(span: TextSpan): List<Style> = span.styles.filter { it.name !in drawnStyleNames }
+internal enum class RunKind { Text, Marker, Note }
 
-internal fun hasEffect(spans: List<TextSpan>, names: Set<String>): Boolean = spans.any { span -> span.styles.any { it.name in names } }
+internal fun interface RunSink {
+    fun run(kind: RunKind, text: String, color: String?, effect: Style?, marker: TextMarker?)
+}
 
-internal fun toMarkup(spans: List<TextSpan>, markers: List<TextMarker>): String = buildString {
+internal fun walkRuns(spans: List<TextSpan>, markers: List<TextMarker>, stillOpen: List<Style>, sink: RunSink) {
     var written = 0
     var markerIndex = 0
-    fun marker(marker: TextMarker) = append(dimMarkup).append('|').append(esc(describeMarker(marker))).append("|[]")
+    fun emitMarker(marker: TextMarker) = sink.run(RunKind.Marker, "|" + describeMarker(marker) + "|", null, null, marker)
     for ((spanIndex, span) in spans.withIndex()) {
         val color = styleColor(span)
+        val effect = span.styles.firstOrNull { it.name in animatedStyleNames }
         val text = span.text
         var start = 0
         while (start < text.length) {
-            while (markerIndex < markers.size && markers[markerIndex].offset <= written) marker(markers[markerIndex++])
+            while (markerIndex < markers.size && markers[markerIndex].offset <= written) emitMarker(markers[markerIndex++])
             val untilMarker = if (markerIndex < markers.size) markers[markerIndex].offset - written else Int.MAX_VALUE
             val end = if (untilMarker >= text.length - start) text.length else start + untilMarker
-            if (color != null) append('[').append(color).append(']')
-            append(esc(text.substring(start, end)))
-            if (color != null) append("[]")
+            sink.run(RunKind.Text, text.substring(start, end), color, effect, null)
             written += end - start
             start = end
         }
-        val following = spans.getOrNull(spanIndex + 1)
-        for (effect in effectsOf(span)) {
-            if (following == null || effect !in following.styles) append(dimMarkup).append('~').append(esc(effect.name)).append("[]")
+        val continuing = spans.getOrNull(spanIndex + 1)?.styles ?: stillOpen
+        for (style in span.styles) {
+            if (!isDrawn(style) && style !in continuing) {
+                sink.run(RunKind.Note, "[" + describeStyle(style) + "]", null, null, null)
+            }
         }
     }
-    while (markerIndex < markers.size) marker(markers[markerIndex++])
+    while (markerIndex < markers.size) emitMarker(markers[markerIndex++])
 }
 
-internal fun lineMarkup(line: DialogLine, colors: SpeakerColors): String {
-    val prefix = line.speaker?.let { "[${colors.of(it)}]${esc(it)}:[] " } ?: ""
-    return prefix + toMarkup(line.spans, line.markers)
+internal fun toMarkup(spans: List<TextSpan>, markers: List<TextMarker>, stillOpen: List<Style> = emptyList()): String = buildString {
+    walkRuns(spans, markers, stillOpen) { kind, text, color, _, _ ->
+        if (kind == RunKind.Text && color != null) {
+            append('[').append(color).append(']').append(esc(text)).append("[]")
+        } else if (kind == RunKind.Text) {
+            append(esc(text))
+        } else {
+            append(dimMarkup).append(esc(text)).append("[]")
+        }
+    }
 }
 
-internal fun describe(requirement: RequirementResult): String = when (requirement) {
-    is RequirementResult.Unreadable -> "bad requirement '${requirement.raw}'"
-    is RequirementResult.MissingStat -> "${requirement.entity ?: "?"}.${requirement.stat} ${requirement.op.symbol} ${show(requirement.target)} (stat missing)"
-    is RequirementResult.Met -> "${requirement.entity}.${requirement.stat} ${requirement.op.symbol} ${show(requirement.target)} (have ${show(requirement.actual)})"
-    is RequirementResult.Unmet -> "${requirement.entity}.${requirement.stat} ${requirement.op.symbol} ${show(requirement.target)} (have ${show(requirement.actual)})"
-    is RequirementResult.Mismatch -> "${requirement.entity}.${requirement.stat} ${requirement.op.symbol} ${show(requirement.target)} (have ${show(requirement.actual)}, type mismatch)"
-    is RequirementResult.AnyOf -> requirement.results.joinToString(" or ", transform = ::describe)
-    is RequirementResult.Not -> "not (${describe(requirement.operand)})"
+internal fun describe(requirement: RequirementResult, nested: Boolean = false): String {
+    val verdict = if (nested) (if (requirement.isMet) " = ok" else " = no") else ""
+    return when (requirement) {
+        is RequirementResult.Unreadable -> "bad requirement '${requirement.raw}'$verdict"
+        is RequirementResult.MissingStat -> "${requirement.entity ?: "?"}.${requirement.stat} ${requirement.op.symbol} ${show(requirement.target)} (stat missing)$verdict"
+        is RequirementResult.Met -> "${requirement.entity}.${requirement.stat} ${requirement.op.symbol} ${show(requirement.target)} (have ${show(requirement.actual)})$verdict"
+        is RequirementResult.Unmet -> "${requirement.entity}.${requirement.stat} ${requirement.op.symbol} ${show(requirement.target)} (have ${show(requirement.actual)})$verdict"
+        is RequirementResult.Mismatch -> "${requirement.entity}.${requirement.stat} ${requirement.op.symbol} ${show(requirement.target)} (have ${show(requirement.actual)}, type mismatch)$verdict"
+        is RequirementResult.AnyOf -> "any of [" + requirement.results.joinToString(" | ") { describe(it, true) } + "]$verdict"
+        is RequirementResult.Not -> "not [" + describe(requirement.operand, true) + "]$verdict"
+    }
 }
 
 private fun StringBuilder.requirementTree(requirement: RequirementResult, indent: Int) {
@@ -130,12 +145,32 @@ private fun StringBuilder.requirementTree(requirement: RequirementResult, indent
 internal fun choiceMarkup(choice: DialogChoice): String = buildString {
     append(toMarkup(choice.spans, choice.markers))
     if (!choice.isAvailable) {
-        val needs = choice.requirements.filterNot { it.isMet }.joinToString("; ", transform = ::describe)
+        val needs = choice.requirements.filterNot { it.isMet }.joinToString("; ") { describe(it) }
         append("  [#ff8a80](needs ").append(esc(needs)).append(")[]")
+    } else if (choice.requirements.isNotEmpty()) {
+        append("  [#7fbf7f](met ").append(esc(choice.requirements.joinToString("; ") { describe(it) })).append(")[]")
     }
 }
 
-private fun typeName(value: Any?): String = when (value) {
+internal fun describeTag(raw: String, all: Tags): String {
+    val single = Tags.parse(listOf(raw))
+    val key = single.map.keys.firstOrNull() ?: return raw
+    val type = when {
+        ':' !in raw -> "bare"
+        single.int(key) != null -> "int"
+        single.float(key) != null -> "float"
+        single.bool(key) != null -> "bool"
+        else -> "text"
+    }
+    val repeats = all.all(key).size
+    val order = if (repeats > 1) ", ${all.raw.filter { it.substringBefore(':').trim() == key }.indexOf(raw) + 1} of $repeats" else ""
+    return "# $raw ($type$order)"
+}
+
+internal fun describeEvent(event: StoryEvent): String =
+    event.name + "(" + event.args.joinToString(", ") { "${it ?: "null"}: ${typeName(it)}" } + ")"
+
+internal fun typeName(value: Any?): String = when (value) {
     null -> "null"
     is Int -> "Int"
     is Float -> "Float"

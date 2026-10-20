@@ -10,6 +10,7 @@ import com.badlogic.gdx.files.FileHandle
 import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.PixmapIO
 import com.badlogic.gdx.math.Vector2
+import com.badlogic.gdx.scenes.scene2d.Actor
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.utils.BufferUtils
 import com.badlogic.gdx.utils.ScreenUtils
@@ -51,9 +52,9 @@ internal class Ui(private val game: TestGame, val screen: DialogScreen, private 
         settle()
     }
 
-    val log: List<String> get() = screen.renderedLabels.map { plain(it.text.toString()) }
+    val log: List<String> get() = screen.renderedMarkup.map(::plain)
 
-    val markup: List<String> get() = screen.renderedLabels.map { it.text.toString() }
+    val markup: List<String> get() = screen.renderedMarkup
 
     val raw: String get() = plain(screen.rawText)
 
@@ -75,19 +76,32 @@ internal class Ui(private val game: TestGame, val screen: DialogScreen, private 
         ?: throw Check("No choice button starting with \"$prefix\". On screen: ${buttons.map(::buttonText)}")
 
     suspend fun click(button: TextButton) {
+        screen.scrollToChoice(button)
+        tap(button, "\"${buttonText(button)}\"")
+    }
+
+    suspend fun tap(target: Actor, name: String) {
         val stage = screen.stage
-        val centre = button.localToStageCoordinates(Vector2(button.width / 2f, button.height / 2f))
+        val centre = target.localToStageCoordinates(Vector2(target.width / 2f, target.height / 2f))
         val screenPoint = stage.stageToScreenCoordinates(Vector2(centre))
         val screenX = screenPoint.x.toInt()
         val screenY = screenPoint.y.toInt()
-        expect(button.stage === stage && centre.y in 0f..stage.height) { "Button is not on the visible stage: $centre" }
+        expect(target.stage === stage && centre.y in 0f..stage.height) { "$name is not on the visible stage: $centre" }
         val hit = stage.hit(centre.x, centre.y, true)
-        expect(hit != null && (hit === button || hit.isDescendantOf(button))) {
-            "Click at $centre would hit ${hit?.javaClass?.simpleName ?: "nothing"}, not \"${buttonText(button)}\" (covered or off screen?)"
+        expect(hit != null && (hit === target || hit.isDescendantOf(target))) {
+            "Click at $centre would hit ${hit?.javaClass?.simpleName ?: "nothing"}, not $name (covered or off screen?)"
         }
         stage.touchDown(screenX, screenY, 0, Input.Buttons.LEFT)
         stage.touchUp(screenX, screenY, 0, Input.Buttons.LEFT)
         settle()
+    }
+
+    suspend fun waitUntil(what: String, frames: Int = 900, condition: () -> Boolean) {
+        var waited = 0
+        while (!condition()) {
+            if (++waited > frames) throw Check("Gave up waiting for $what after $frames frames")
+            skipFrame()
+        }
     }
 
     suspend fun click(prefix: String) = click(button(prefix))
@@ -127,7 +141,7 @@ internal class Ui(private val game: TestGame, val screen: DialogScreen, private 
     val blankShots = ArrayList<String>()
 
     suspend fun reset() {
-        for (line in listOf("resetstats", "restart", "choicemode grey", "view split", "fixroll off", "numfmt 0 round")) {
+        for (line in listOf("typewriter off", "resetstats", "restart", "choicemode grey", "view split", "fixroll off", "numfmt 0 round")) {
             screen.runCommand(line)
         }
         settle()
