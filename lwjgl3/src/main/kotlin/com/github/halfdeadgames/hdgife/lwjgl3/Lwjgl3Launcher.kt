@@ -7,7 +7,6 @@ import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration
 import com.github.halfdeadgames.hdgife.harness.TestGame
 
 fun main() {
-    // This handles macOS support and helps on Windows.
     if (StartupHelper.startNewJvmIfRequired())
       return
     Lwjgl3Application(TestGame(), Lwjgl3ApplicationConfiguration().apply {

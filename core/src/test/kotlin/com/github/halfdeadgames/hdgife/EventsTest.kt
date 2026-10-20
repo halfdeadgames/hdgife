@@ -43,7 +43,7 @@ class EventsTest {
         val ex = assertFailsWith<IncompatibleLibraryException> { StoryManager(old) }
         assertContains(ex.message.orEmpty(), "out of date")
         assertEquals(0, ex.found)
-        assertEquals(HdgifeInk.VERSION, ex.expected)
+        assertEquals(HdgifeInk.version, ex.expected)
     }
 
     @Test
@@ -64,7 +64,7 @@ class EventsTest {
 
     @Test
     fun `reset after a throwing textCleaner drops late events`() {
-        val m = managerOf("""
+        val manager = managerOf("""
             Line
             ~ emit("a")
             Next
@@ -72,12 +72,12 @@ class EventsTest {
             End
         """.trimIndent())
         var calls = 0
-        val cleaner = m.textCleaner
-        m.textCleaner = TextCleaner { if (++calls == 2) throw IllegalStateException("boom") else cleaner.clean(it) }
-        assertIs<IllegalStateException>(assertFailsWith<StoryStepException> { m.next() }.cause)
-        m.textCleaner = cleaner
-        m.reset()
-        val step = m.next()
+        val cleaner = manager.textCleaner
+        manager.textCleaner = TextCleaner { if (++calls == 2) throw IllegalStateException("boom") else cleaner.clean(it) }
+        assertIs<IllegalStateException>(assertFailsWith<StoryStepException> { manager.next() }.cause)
+        manager.textCleaner = cleaner
+        manager.reset()
+        val step = manager.next()
         assertEquals(listOf("a", "b"), step.events.map { it.name })
         assertEquals(listOf("Line", "Next", "End"), step.texts())
         assertEquals(listOf(1, 2), step.events.map { it.lineIndex })
@@ -95,15 +95,15 @@ class EventsTest {
 
     @Test
     fun `an event is not reported again by a later step`() {
-        val m = managerOf("~ emit(\"once\")\nHi\n* [Go] Bye -> END")
-        assertEquals(1, m.next().events.size)
-        assertTrue(m.choose(0).events.isEmpty())
+        val manager = managerOf("~ emit(\"once\")\nHi\n* [Go] Bye -> END")
+        assertEquals(1, manager.next().events.size)
+        assertTrue(manager.choose(0).events.isEmpty())
     }
 
     @Test
     fun `glue lookahead does not duplicate events`() {
-        val m = managerOf("A <>\n~ emit(\"x\")\nB\n~ emit(\"y\")\nC")
-        val step = m.next()
+        val manager = managerOf("A <>\n~ emit(\"x\")\nB\n~ emit(\"y\")\nC")
+        val step = manager.next()
         assertEquals(listOf("x", "y"), step.events.map { it.name })
         assertEquals(listOf("A B", "C"), step.texts())
     }
@@ -124,18 +124,18 @@ class EventsTest {
 
     @Test
     fun `several emits around glue and breaks keep order and line index`() {
-        val m = managerOf(
+        val manager = managerOf(
             "One\n~ emit(\"a\")\n<> two\n~ emit(\"b\")\n~ emit(\"c\")\nThree <>\n~ emit(\"d\")\n<> four\n~ emit(\"e\")\n-> END",
         )
-        val step = m.next()
+        val step = manager.next()
         assertEquals(listOf("One two", "Three four"), step.texts())
         assertEquals(listOf("a" to 0, "b" to 1, "c" to 1, "d" to 1, "e" to 2), step.events.map { it.name to it.lineIndex })
     }
 
     @Test
     fun `an emit inside an ink function is reported once across glue`() {
-        val m = managerOf("Gold\n~ reward(3)\n<> up.\nDone\n=== function reward(n) ===\n~ emit1(\"gold\", n)\n~ return n")
-        val step = m.next()
+        val manager = managerOf("Gold\n~ reward(3)\n<> up.\nDone\n=== function reward(n) ===\n~ emit1(\"gold\", n)\n~ return n")
+        val step = manager.next()
         assertEquals(listOf("Gold up.", "Done"), step.texts())
         assertEquals(listOf("gold"), step.events.map { it.name })
         assertEquals(listOf<Any?>(3), step.events.single().args)
@@ -143,7 +143,7 @@ class EventsTest {
 
     @Test
     fun `events are exactly once over a whole run with choices`() {
-        val m = managerOf(
+        val manager = managerOf(
             """
             Start
             ~ emit("s")
@@ -160,11 +160,11 @@ class EventsTest {
             """.trimIndent(),
         )
         val seen = ArrayList<String>()
-        m.onEvent = StoryEventListener { seen += it.name }
-        val first = m.next()
+        manager.onEvent = StoryEventListener { seen += it.name }
+        val first = manager.next()
         assertEquals(listOf("Start here"), first.texts())
         assertEquals(listOf("s"), first.events.map { it.name })
-        val second = m.choose(0)
+        val second = manager.choose(0)
         assertEquals(listOf("Went left fully", "End"), second.texts())
         assertEquals(listOf("l", "d"), second.events.map { it.name })
         assertEquals(listOf("s", "l", "d"), seen)
@@ -182,21 +182,21 @@ class EventsTest {
 
     @Test
     fun `an emit in choice text fires once when the choice is created`() {
-        val m = managerOf("Pick\n* [Buy {cost()}] -> END\n=== function cost() ===\n~ emit1(\"shown\", 1)\n~ return 5")
-        val step = m.next()
+        val manager = managerOf("Pick\n* [Buy {cost()}] -> END\n=== function cost() ===\n~ emit1(\"shown\", 1)\n~ return 5")
+        val step = manager.next()
         assertEquals("Buy 5", step.choices.single().text)
         assertEquals(listOf("shown" to 0), step.events.map { it.name to it.lineIndex })
-        assertTrue(m.next().events.isEmpty())
+        assertTrue(manager.next().events.isEmpty())
     }
 
     @Test
     fun `events after a load are reported once`() {
-        val m = managerOf("A\n* [Go]\n  ~ emit(\"go\")\n  B\n  -> END")
-        m.next()
-        val saved = m.saveState()
-        assertEquals(listOf("go"), m.choose(0).events.map { it.name })
-        m.loadState(saved)
-        assertEquals(listOf("go"), m.choose(0).events.map { it.name })
+        val manager = managerOf("A\n* [Go]\n  ~ emit(\"go\")\n  B\n  -> END")
+        manager.next()
+        val saved = manager.saveState()
+        assertEquals(listOf("go"), manager.choose(0).events.map { it.name })
+        manager.loadState(saved)
+        assertEquals(listOf("go"), manager.choose(0).events.map { it.name })
     }
 
     @Test
@@ -208,18 +208,18 @@ class EventsTest {
 
     @Test
     fun `onEvent receives each event in order after the step is built`() {
-        val m = managerOf(eventInk)
+        val manager = managerOf(eventInk)
         val seen = ArrayList<StoryEvent>()
-        m.onEvent = StoryEventListener { seen += it }
-        val step = m.next()
+        manager.onEvent = StoryEventListener { seen += it }
+        val step = manager.next()
         assertEquals(step.events, seen)
     }
 
     @Test
     fun `reset drops pending events`() {
-        val m = managerOf("~ emit(\"a\")\nHi")
-        m.reset()
-        assertEquals(1, m.next().events.size)
+        val manager = managerOf("~ emit(\"a\")\nHi")
+        manager.reset()
+        assertEquals(1, manager.next().events.size)
     }
 
     @Test
@@ -231,9 +231,9 @@ class EventsTest {
 
     @Test
     fun `a bound function replaces the ink fallback`() {
-        val m = managerOf(addInk)
-        m.bindFunction("add") { it.int(0) + it.int(1) }
-        assertEquals(listOf("5"), m.next().texts())
+        val manager = managerOf(addInk)
+        manager.bindFunction("add") { it.int(0) + it.int(1) }
+        assertEquals(listOf("5"), manager.next().texts())
     }
 
     @Test
@@ -243,68 +243,68 @@ class EventsTest {
 
     @Test
     fun `a bound function can return null for statements`() {
-        val m = managerOf("~ ping()\nDone\n-> END\nEXTERNAL ping()\n=== function ping() ===\n~ return 0")
+        val manager = managerOf("~ ping()\nDone\n-> END\nEXTERNAL ping()\n=== function ping() ===\n~ return 0")
         var calls = 0
-        m.bindFunction("ping") { calls++; null }
-        assertEquals(listOf("Done"), m.next().texts())
+        manager.bindFunction("ping") { calls++; null }
+        assertEquals(listOf("Done"), manager.next().texts())
         assertEquals(1, calls)
     }
 
     @Test
     fun `a lookahead safe bound function works in choice text`() {
-        val m = managerOf("* [Cost {price()}] -> END\nEXTERNAL price()\n=== function price() ===\n~ return 0")
-        m.bindFunction("price", lookaheadSafe = true) { 42 }
-        assertEquals("Cost 42", m.next().choices.single().text)
+        val manager = managerOf("* [Cost {price()}] -> END\nEXTERNAL price()\n=== function price() ===\n~ return 0")
+        manager.bindFunction("price", lookaheadSafe = true) { 42 }
+        assertEquals("Cost 42", manager.next().choices.single().text)
     }
 
     @Test
     fun `a bound function can be replaced after unbind`() {
-        val m = managerOf(addInk)
-        m.bindFunction("add") { 1 }
-        m.unbindFunction("add")
-        m.bindFunction("add") { 2 }
-        assertEquals(listOf("2"), m.next().texts())
+        val manager = managerOf(addInk)
+        manager.bindFunction("add") { 1 }
+        manager.unbindFunction("add")
+        manager.bindFunction("add") { 2 }
+        assertEquals(listOf("2"), manager.next().texts())
     }
 
     @Test
     fun `binding the same name twice replaces the first`() {
-        val m = managerOf(addInk)
-        m.bindFunction("add") { 1 }
-        m.bindFunction("add") { 7 }
-        assertEquals(listOf("7"), m.next().texts())
+        val manager = managerOf(addInk)
+        manager.bindFunction("add") { 1 }
+        manager.bindFunction("add") { 7 }
+        assertEquals(listOf("7"), manager.next().texts())
     }
 
     @Test
     fun `a name bound by the library cannot be rebound`() {
-        val m = managerOf("Hi")
-        assertFailsWith<IllegalArgumentException> { m.bindFunction("stat") { 0 } }
+        val manager = managerOf("Hi")
+        assertFailsWith<IllegalArgumentException> { manager.bindFunction("stat") { 0 } }
     }
 
     @Test
     fun `bindings survive assigning a new story`() {
-        val m = managerOf(addInk)
-        m.bindFunction("add") { it.int(0) * 10 }
-        m.replaceStory(compileLib(addInk))
-        assertEquals(listOf("20"), m.next().texts())
+        val manager = managerOf(addInk)
+        manager.bindFunction("add") { it.int(0) * 10 }
+        manager.replaceStory(compileLib(addInk))
+        assertEquals(listOf("20"), manager.next().texts())
     }
 
     @Test
     fun `function args are typed and coerced`() {
-        val m = managerOf("{show(2, 2.5, \"s\", true)}\n-> END\nEXTERNAL show(a, b, c, d)\n=== function show(a, b, c, d) ===\n~ return 0")
+        val manager = managerOf("{show(2, 2.5, \"s\", true)}\n-> END\nEXTERNAL show(a, b, c, d)\n=== function show(a, b, c, d) ===\n~ return 0")
         var captured = ""
-        m.bindFunction("show") { args ->
+        manager.bindFunction("show") { args ->
             captured = "${args.int(0)} ${args.float(0)} ${args.float(1)} ${args.string(2)} ${args.bool(3)} ${args.size} ${args[9]}"
             0
         }
-        m.next()
+        manager.next()
         assertEquals("2 2.0 2.5 s true 4 null", captured)
     }
 
     @Test
     fun `function args name the function and position on a wrong type`() {
-        val m = managerOf("{show(\"s\")}\n-> END\nEXTERNAL show(a)\n=== function show(a) ===\n~ return 0")
-        m.bindFunction("show") { it.int(0) }
-        val e = assertFailsWith<Exception> { m.next() }
+        val manager = managerOf("{show(\"s\")}\n-> END\nEXTERNAL show(a)\n=== function show(a) ===\n~ return 0")
+        manager.bindFunction("show") { it.int(0) }
+        val e = assertFailsWith<Exception> { manager.next() }
         val message = generateSequence<Throwable>(e) { it.cause }.joinToString { it.message.orEmpty() }
         assertContains(message, "show: argument 0")
     }
@@ -313,41 +313,41 @@ class EventsTest {
 
     @Test
     fun `variable returns the ink value or null`() {
-        val m = managerOf(varInk)
-        assertEquals(10, m.getVariable("hp"))
-        assertEquals(1.5f, m.getVariable("rate"))
-        assertEquals("Ann", m.getVariable("name"))
-        assertEquals(true, m.getVariable("alive"))
-        assertNull(m.getVariable("nope"))
+        val manager = managerOf(varInk)
+        assertEquals(10, manager.getVariable("hp"))
+        assertEquals(1.5f, manager.getVariable("rate"))
+        assertEquals("Ann", manager.getVariable("name"))
+        assertEquals(true, manager.getVariable("alive"))
+        assertNull(manager.getVariable("nope"))
     }
 
     @Test
     fun `typed variable coerces ints to wider numbers`() {
-        val m = managerOf(varInk)
-        assertEquals(10, m.variableAs<Int>("hp"))
-        assertEquals(10f, m.variableAs<Float>("hp"))
-        assertEquals(10.0, m.variableAs<Double>("hp"))
-        assertEquals(10L, m.variableAs<Long>("hp"))
-        assertEquals(1.5, m.variableAs<Double>("rate"))
-        assertNull(m.variableAs<Int>("nope"))
+        val manager = managerOf(varInk)
+        assertEquals(10, manager.variableAs<Int>("hp"))
+        assertEquals(10f, manager.variableAs<Float>("hp"))
+        assertEquals(10.0, manager.variableAs<Double>("hp"))
+        assertEquals(10L, manager.variableAs<Long>("hp"))
+        assertEquals(1.5, manager.variableAs<Double>("rate"))
+        assertNull(manager.variableAs<Int>("nope"))
     }
 
     @Test
     fun `typed variable throws on a real mismatch`() {
-        val m = managerOf(varInk)
-        assertFailsWith<IllegalArgumentException> { m.variableAs<String>("hp") }
-        assertFailsWith<IllegalArgumentException> { m.variableAs<Int>("rate") }
+        val manager = managerOf(varInk)
+        assertFailsWith<IllegalArgumentException> { manager.variableAs<String>("hp") }
+        assertFailsWith<IllegalArgumentException> { manager.variableAs<Int>("rate") }
     }
 
     @Test
     fun `setVariable changes the ink value`() {
-        val m = managerOf(varInk)
-        m.setVariable("hp", 99)
-        m.setVariable("name", "Bo")
-        m.setVariable("rate", 2.0)
-        assertEquals(99, m.getVariable("hp"))
-        assertEquals("Bo", m.getVariable("name"))
-        assertEquals(2.0f, m.getVariable("rate"))
+        val manager = managerOf(varInk)
+        manager.setVariable("hp", 99)
+        manager.setVariable("name", "Bo")
+        manager.setVariable("rate", 2.0)
+        assertEquals(99, manager.getVariable("hp"))
+        assertEquals("Bo", manager.getVariable("name"))
+        assertEquals(2.0f, manager.getVariable("rate"))
     }
 
     @Test
@@ -357,10 +357,10 @@ class EventsTest {
 
     @Test
     fun `setVariable keeps an InkList`() {
-        val m = managerOf("LIST items = sword, shield\nVAR bag = (sword)\nHi")
-        val list = InkList(m.getVariable("bag") as InkList)
-        m.setVariable("bag", list)
-        assertTrue(m.getVariable("bag") is InkList)
+        val manager = managerOf("LIST items = sword, shield\nVAR bag = (sword)\nHi")
+        val list = InkList(manager.getVariable("bag") as InkList)
+        manager.setVariable("bag", list)
+        assertTrue(manager.getVariable("bag") is InkList)
     }
 
     @Test
@@ -377,57 +377,57 @@ class EventsTest {
 
     @Test
     fun `observe reports the old and new value when ink changes a variable`() {
-        val m = managerOf(varInk)
+        val manager = managerOf(varInk)
         val changes = ArrayList<Pair<Any?, Any?>>()
-        m.observe("hp") { old, new -> changes += old to new }
-        m.next()
+        manager.observe("hp") { old, new -> changes += old to new }
+        manager.next()
         assertTrue(changes.isEmpty())
-        m.choose(0)
+        manager.choose(0)
         assertEquals(listOf<Pair<Any?, Any?>>(10 to 7), changes)
     }
 
     @Test
     fun `observe reports changes made with setVariable`() {
-        val m = managerOf(varInk)
+        val manager = managerOf(varInk)
         val changes = ArrayList<Pair<Any?, Any?>>()
-        m.observe("hp") { old, new -> changes += old to new }
-        m.setVariable("hp", 4)
-        m.setVariable("hp", 5)
+        manager.observe("hp") { old, new -> changes += old to new }
+        manager.setVariable("hp", 4)
+        manager.setVariable("hp", 5)
         assertEquals(listOf<Pair<Any?, Any?>>(10 to 4, 4 to 5), changes)
     }
 
     @Test
     fun `unobserve stops the callbacks`() {
-        val m = managerOf(varInk)
+        val manager = managerOf(varInk)
         var calls = 0
-        val observation = m.observe("hp") { _, _ -> calls++ }
-        m.setVariable("hp", 1)
-        m.unobserve(observation)
-        m.setVariable("hp", 2)
+        val observation = manager.observe("hp") { _, _ -> calls++ }
+        manager.setVariable("hp", 1)
+        manager.unobserve(observation)
+        manager.setVariable("hp", 2)
         assertEquals(1, calls)
         assertFalse(observation.isActive)
-        m.unobserve(observation)
+        manager.unobserve(observation)
     }
 
     @Test
     fun `unobserve by name stops every observer of that variable`() {
-        val m = managerOf(varInk)
+        val manager = managerOf(varInk)
         var calls = 0
-        m.observe("hp") { _, _ -> calls++ }
-        m.observe("hp") { _, _ -> calls++ }
-        m.observe("name") { _, _ -> calls += 100 }
-        m.unobserve("hp")
-        m.setVariable("hp", 1)
-        m.setVariable("name", "Cy")
+        manager.observe("hp") { _, _ -> calls++ }
+        manager.observe("hp") { _, _ -> calls++ }
+        manager.observe("name") { _, _ -> calls += 100 }
+        manager.unobserve("hp")
+        manager.setVariable("hp", 1)
+        manager.setVariable("name", "Cy")
         assertEquals(100, calls)
     }
 
     @Test
     fun `an observation closes like AutoCloseable`() {
-        val m = managerOf(varInk)
+        val manager = managerOf(varInk)
         var calls = 0
-        m.observe("hp") { _, _ -> calls++ }.use { }
-        m.setVariable("hp", 1)
+        manager.observe("hp") { _, _ -> calls++ }.use { }
+        manager.setVariable("hp", 1)
         assertEquals(0, calls)
     }
 
@@ -438,27 +438,27 @@ class EventsTest {
 
     @Test
     fun `observers keep working after reset and see the restored value as the baseline`() {
-        val m = managerOf(varInk)
+        val manager = managerOf(varInk)
         val changes = ArrayList<Pair<Any?, Any?>>()
-        m.observe("hp") { old, new -> changes += old to new }
-        m.setVariable("hp", 1)
-        m.reset()
+        manager.observe("hp") { old, new -> changes += old to new }
+        manager.setVariable("hp", 1)
+        manager.reset()
         changes.clear()
-        m.setVariable("hp", 2)
+        manager.setVariable("hp", 2)
         assertEquals(listOf<Pair<Any?, Any?>>(10 to 2), changes)
     }
 
     @Test
     fun `observers move to a new story and drop when it lacks the variable`() {
         val sink = LogSink()
-        val m = managerOf(varInk)
-        m.log = sink
+        val manager = managerOf(varInk)
+        manager.log = sink
         var hp = 0
         var name = 0
-        m.observe("hp") { _, _ -> hp++ }
-        m.observe("name") { _, _ -> name++ }
-        m.replaceStory(compileLib("VAR hp = 1\nHi"))
-        m.setVariable("hp", 5)
+        manager.observe("hp") { _, _ -> hp++ }
+        manager.observe("name") { _, _ -> name++ }
+        manager.replaceStory(compileLib("VAR hp = 1\nHi"))
+        manager.setVariable("hp", 5)
         assertEquals(1, hp)
         assertEquals(0, name)
         assertContains(sink.messages.joinToString(), "name")

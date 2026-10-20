@@ -1,21 +1,14 @@
 pluginManagement {
-  // The gdx-teavm Gradle plugin (web module) is published to Maven Central together with its marker artifact.
   repositories {
     mavenCentral()
     gradlePluginPortal()
   }
 }
 plugins {
-  // Applies the foojay-resolver plugin to allow automatic download of JDKs.
   id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
-// A list of which subprojects to load as part of the same larger project.
-// You can remove Strings from the list and reload the Gradle project
-// if you want to temporarily disable a subproject.
 include 'core', 'harness', 'lwjgl3'
 
-// Optional modules are left out with -P<flag>. A module that needs more than the flag (the Android SDK) passes a
-// second condition.
 def optional = { String module, String skipFlag, Closure available = { true } ->
   if (!settings.startParameter.projectProperties.containsKey(skipFlag) && available()) {
     include module
@@ -24,12 +17,8 @@ def optional = { String module, String skipFlag, Closure available = { true } ->
   return false
 }
 
-// The web (TeaVM) module. Pass -PskipWeb to leave it out.
 optional('teavm', 'skipWeb')
 
-// The android test module needs the Android SDK and the Android Gradle plugin. It is only included when the SDK is
-// found (sdk.dir in local.properties, or ANDROID_HOME / ANDROID_SDK_ROOT), so a machine without it (JitPack, CI) can
-// still build core. Pass -PskipAndroid to leave it out even when the SDK is there.
 def androidSdkFound = {
   def local = new File(settingsDir, 'local.properties')
   if (local.exists()) {

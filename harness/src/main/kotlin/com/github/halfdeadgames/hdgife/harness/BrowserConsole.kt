@@ -6,13 +6,6 @@ import com.badlogic.gdx.utils.reflect.ReflectionException
 import com.strongjoshua.console.GUIConsole
 import com.strongjoshua.console.LogLevel
 
-/**
- * The console for the browser build. sjInGameConsole runs a command with `Method.invoke(exec, null)` when it has no
- * arguments. A JVM accepts that, but TeaVM's `Method.invoke` throws a NullPointerException on a null argument array,
- * so every command without arguments (`vars`, `help`, `restart`) would crash the page. This subclass runs the same
- * lookup (libGDX `ClassReflection`, name ignoring case, matching argument count) and always passes an array.
- * The desktop and Android builds keep the library's own [GUIConsole].
- */
 class BrowserConsole(skin: Skin, keyId: Int) : GUIConsole(skin, false, keyId) {
 
     override fun execCommand(command: String) {
@@ -33,7 +26,7 @@ class BrowserConsole(skin: Skin, keyId: Int) : GUIConsole(skin, false, keyId) {
             try {
                 for (i in types.indices) args[i] = convert(types[i], values[i])
             } catch (e: NumberFormatException) {
-                continue // not this overload, try the next one
+                continue
             }
             try {
                 method.setAccessible(true)
@@ -46,7 +39,6 @@ class BrowserConsole(skin: Skin, keyId: Int) : GUIConsole(skin, false, keyId) {
         log("Bad parameters. Check your code.", LogLevel.ERROR)
     }
 
-    /** The parameter types the library supports: String and the primitives (and their boxes). */
     private fun convert(type: Class<*>, text: String): Any? = when (type) {
         String::class.java -> text
         Boolean::class.javaPrimitiveType, Boolean::class.javaObjectType -> text.toBoolean()

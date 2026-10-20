@@ -183,8 +183,8 @@ class StyleTest {
 
     @Test
     fun `a hex color written with an ink escape arrives intact`() {
-        val m = managerOf("<color=\\#ff8800>warm</color> and <color=\\#fff>white</color>")
-        val line = m.next().lines.single()
+        val manager = managerOf("<color=\\#ff8800>warm</color> and <color=\\#fff>white</color>")
+        val line = manager.next().lines.single()
         assertEquals("warm and white", line.text)
         assertTrue(line.tags.raw.isEmpty())
         assertEquals(0xff8800ff.toInt(), line.spans[0].styles.single().hexColor())
@@ -219,8 +219,8 @@ class StyleTest {
 
     @Test
     fun `line text equals the joined spans for a real story`() {
-        val m = managerOf("Wait <b>for</b> it , friend !\n<em>Yes</em>   indeed .")
-        for (line in m.next().lines) assertJoined(line)
+        val manager = managerOf("Wait <b>for</b> it , friend !\n<em>Yes</em>   indeed .")
+        for (line in manager.next().lines) assertJoined(line)
     }
 
     @Test
@@ -232,8 +232,8 @@ class StyleTest {
 
     @Test
     fun `an open style carries onto the next line`() {
-        val m = managerOf("<em>First\nSecond</em> third")
-        val lines = m.next().lines
+        val manager = managerOf("<em>First\nSecond</em> third")
+        val lines = manager.next().lines
         assertEquals(listOf(TextSpan("First", listOf(em))), lines[0].spans)
         assertEquals(listOf(TextSpan("Second", listOf(em)), TextSpan(" third")), lines[1].spans)
         lines.forEach(::assertJoined)
@@ -241,18 +241,18 @@ class StyleTest {
 
     @Test
     fun `an open style is reported at the end of a step and carries over a choice`() {
-        val m = managerOf("<b>Open\n* [Next] more</b> done\n-> END")
-        val first = m.next()
+        val manager = managerOf("<b>Open\n* [Next] more</b> done\n-> END")
+        val first = manager.next()
         assertEquals(listOf(b), first.openStyles)
-        val second = m.choose(0)
+        val second = manager.choose(0)
         assertEquals(listOf(TextSpan("more", listOf(b)), TextSpan(" done")), second.lines.single().spans)
     }
 
     @Test
     fun `an open style carries across next calls`() {
-        val m = managerOf("<b>Open\n* [Stay] Still bold\n  * * [Go] Done</b> now -> END")
-        m.next()
-        val second = m.choose(0)
+        val manager = managerOf("<b>Open\n* [Stay] Still bold\n  * * [Go] Done</b> now -> END")
+        manager.next()
+        val second = manager.choose(0)
         assertEquals(listOf(b), second.lines.single().spans.single().styles)
         assertEquals(listOf(b), second.openStyles)
     }
@@ -260,9 +260,9 @@ class StyleTest {
     @Test
     fun `styles still open are closed when the story ends`() {
         val sink = LogSink()
-        val m = managerOf("<b>Never closed\n-> END")
-        m.log = sink
-        val step = m.next()
+        val manager = managerOf("<b>Never closed\n-> END")
+        manager.log = sink
+        val step = manager.next()
         assertTrue(step.isEnded)
         assertTrue(step.openStyles.isEmpty())
         assertContains(sink.messages.joinToString(), "never closed")
@@ -271,28 +271,28 @@ class StyleTest {
     @Test
     fun `styles still open are closed on reset and not stacked on replay`() {
         val sink = LogSink()
-        val m = managerOf("<b>Open\n* [Go] Next -> END")
-        m.log = sink
-        m.next()
-        m.reset()
+        val manager = managerOf("<b>Open\n* [Go] Next -> END")
+        manager.log = sink
+        manager.next()
+        manager.reset()
         assertContains(sink.messages.joinToString(), "reset")
-        assertEquals(listOf(b), m.next().lines.single().spans.single().styles)
+        assertEquals(listOf(b), manager.next().lines.single().spans.single().styles)
     }
 
     @Test
     fun `loadState closes carried styles`() {
-        val m = managerOf("Plain\n* [Go] <b>Open\n* [More] x -> END")
-        val saved = m.saveState()
-        m.next()
-        m.choose(0)
-        m.loadState(saved)
-        assertTrue(m.next().openStyles.isEmpty())
+        val manager = managerOf("Plain\n* [Go] <b>Open\n* [More] x -> END")
+        val saved = manager.saveState()
+        manager.next()
+        manager.choose(0)
+        manager.loadState(saved)
+        assertTrue(manager.next().openStyles.isEmpty())
     }
 
     @Test
     fun `choice text styles are read on their own`() {
-        val m = managerOf("<b>Open\n* [<em>Pick</em> me] Done -> END")
-        val choice = m.next().choices.single()
+        val manager = managerOf("<b>Open\n* [<em>Pick</em> me] Done -> END")
+        val choice = manager.next().choices.single()
         assertEquals(listOf(TextSpan("Pick", listOf(em)), TextSpan(" me")), choice.spans)
         assertEquals("Pick me", choice.text)
     }
@@ -300,9 +300,9 @@ class StyleTest {
     @Test
     fun `a style left open in choice text is dropped and logged`() {
         val sink = LogSink()
-        val m = managerOf("* [<b>Pick] Done -> END")
-        m.log = sink
-        val step = m.next()
+        val manager = managerOf("* [<b>Pick] Done -> END")
+        manager.log = sink
+        val step = manager.next()
         assertEquals("Pick", step.choices.single().text)
         assertTrue(step.openStyles.isEmpty())
         assertContains(sink.messages.joinToString(), "never closed in choice")

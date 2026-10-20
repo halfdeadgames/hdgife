@@ -14,7 +14,7 @@ public abstract interface annotation class com/github/halfdeadgames/hdgife/Exper
 
 public final class com/github/halfdeadgames/hdgife/Hdgife {
 	public static final field INSTANCE Lcom/github/halfdeadgames/hdgife/Hdgife;
-	public static final field VERSION Ljava/lang/String;
+	public static final field version Ljava/lang/String;
 }
 
 public abstract class com/github/halfdeadgames/hdgife/HdgifeException : java/lang/RuntimeException {
@@ -24,8 +24,8 @@ public abstract class com/github/halfdeadgames/hdgife/HdgifeException : java/lan
 
 public final class com/github/halfdeadgames/hdgife/HdgifeInk {
 	public static final field INSTANCE Lcom/github/halfdeadgames/hdgife/HdgifeInk;
-	public static final field VERSION I
-	public final fun getLIBRARY_FUNCTIONS ()Ljava/util/List;
+	public static final field version I
+	public final fun getLibraryFunctions ()Ljava/util/List;
 }
 
 public abstract interface class com/github/halfdeadgames/hdgife/HdgifeLog {
@@ -78,12 +78,12 @@ public abstract interface class com/github/halfdeadgames/hdgife/state/NarrativeS
 
 public final class com/github/halfdeadgames/hdgife/story/Comparison : java/lang/Enum {
 	public static final field Companion Lcom/github/halfdeadgames/hdgife/story/Comparison$Companion;
-	public static final field EQUAL Lcom/github/halfdeadgames/hdgife/story/Comparison;
-	public static final field GREATER Lcom/github/halfdeadgames/hdgife/story/Comparison;
-	public static final field GREATER_EQUAL Lcom/github/halfdeadgames/hdgife/story/Comparison;
-	public static final field LESS Lcom/github/halfdeadgames/hdgife/story/Comparison;
-	public static final field LESS_EQUAL Lcom/github/halfdeadgames/hdgife/story/Comparison;
-	public static final field NOT_EQUAL Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static final field Equal Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static final field Greater Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static final field GreaterEqual Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static final field Less Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static final field LessEqual Lcom/github/halfdeadgames/hdgife/story/Comparison;
+	public static final field NotEqual Lcom/github/halfdeadgames/hdgife/story/Comparison;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public final fun getSymbol ()Ljava/lang/String;
 	public final fun isEquality ()Z
@@ -151,12 +151,12 @@ public final class com/github/halfdeadgames/hdgife/story/IncompatibleLibraryExce
 }
 
 public final class com/github/halfdeadgames/hdgife/story/IssueKind : java/lang/Enum {
-	public static final field EXTERNAL_USES_FALLBACK Lcom/github/halfdeadgames/hdgife/story/IssueKind;
-	public static final field LIBRARY_WITHOUT_INCLUDE Lcom/github/halfdeadgames/hdgife/story/IssueKind;
-	public static final field OLD_LIBRARY Lcom/github/halfdeadgames/hdgife/story/IssueKind;
-	public static final field UNBOUND_EXTERNAL Lcom/github/halfdeadgames/hdgife/story/IssueKind;
-	public static final field UNDECLARED_OBSERVED_VARIABLE Lcom/github/halfdeadgames/hdgife/story/IssueKind;
-	public static final field UNREADABLE_REQUIREMENT Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static final field ExternalUsesFallback Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static final field LibraryWithoutInclude Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static final field OldLibrary Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static final field UnboundExternal Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static final field UndeclaredObservedVariable Lcom/github/halfdeadgames/hdgife/story/IssueKind;
+	public static final field UnreadableRequirement Lcom/github/halfdeadgames/hdgife/story/IssueKind;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/IssueKind;
 	public static fun values ()[Lcom/github/halfdeadgames/hdgife/story/IssueKind;
@@ -241,8 +241,8 @@ public final class com/github/halfdeadgames/hdgife/story/RequirementResult$Missi
 
 public final class com/github/halfdeadgames/hdgife/story/RequirementResult$Not : com/github/halfdeadgames/hdgife/story/RequirementResult {
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getOperand ()Lcom/github/halfdeadgames/hdgife/story/RequirementResult;
 	public fun getRaw ()Ljava/lang/String;
-	public final fun getResult ()Lcom/github/halfdeadgames/hdgife/story/RequirementResult;
 	public fun hashCode ()I
 	public fun isMet ()Z
 	public fun toString ()Ljava/lang/String;
@@ -270,11 +270,11 @@ public final class com/github/halfdeadgames/hdgife/story/RequirementResult$Unrea
 }
 
 public final class com/github/halfdeadgames/hdgife/story/Rounding : java/lang/Enum {
-	public static final field CEIL Lcom/github/halfdeadgames/hdgife/story/Rounding;
+	public static final field Ceil Lcom/github/halfdeadgames/hdgife/story/Rounding;
 	public static final field Companion Lcom/github/halfdeadgames/hdgife/story/Rounding$Companion;
-	public static final field FLOOR Lcom/github/halfdeadgames/hdgife/story/Rounding;
-	public static final field ROUND Lcom/github/halfdeadgames/hdgife/story/Rounding;
-	public static final field TRUNCATE Lcom/github/halfdeadgames/hdgife/story/Rounding;
+	public static final field Floor Lcom/github/halfdeadgames/hdgife/story/Rounding;
+	public static final field Round Lcom/github/halfdeadgames/hdgife/story/Rounding;
+	public static final field Truncate Lcom/github/halfdeadgames/hdgife/story/Rounding;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static final fun parse (Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/Rounding;
 	public static fun valueOf (Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/Rounding;
@@ -289,9 +289,9 @@ public final class com/github/halfdeadgames/hdgife/story/SaveStateException : co
 }
 
 public final class com/github/halfdeadgames/hdgife/story/Severity : java/lang/Enum {
-	public static final field ERROR Lcom/github/halfdeadgames/hdgife/story/Severity;
-	public static final field INFO Lcom/github/halfdeadgames/hdgife/story/Severity;
-	public static final field WARNING Lcom/github/halfdeadgames/hdgife/story/Severity;
+	public static final field Error Lcom/github/halfdeadgames/hdgife/story/Severity;
+	public static final field Info Lcom/github/halfdeadgames/hdgife/story/Severity;
+	public static final field Warning Lcom/github/halfdeadgames/hdgife/story/Severity;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/Severity;
 	public static fun values ()[Lcom/github/halfdeadgames/hdgife/story/Severity;
@@ -446,7 +446,7 @@ public final class com/github/halfdeadgames/hdgife/story/StylingKt {
 
 public final class com/github/halfdeadgames/hdgife/story/Tags {
 	public static final field Companion Lcom/github/halfdeadgames/hdgife/story/Tags$Companion;
-	public static final field EMPTY Lcom/github/halfdeadgames/hdgife/story/Tags;
+	public static final field empty Lcom/github/halfdeadgames/hdgife/story/Tags;
 	public final fun all (Ljava/lang/String;)Ljava/util/List;
 	public final fun bool (Ljava/lang/String;)Ljava/lang/Boolean;
 	public final fun bool (Ljava/lang/String;Z)Z

@@ -6,53 +6,46 @@ import com.bladecoder.ink.runtime.IntValue
 import com.bladecoder.ink.runtime.Story
 import com.github.halfdeadgames.hdgife.HdgifeInk
 
-private const val SPEAKER = "hdgife_speaker"
-private const val VERSION_FUNCTION = "hdgife_lib_version"
-private const val UTIL_MARKER = "hdgife_util_loaded"
+private const val speakerVariable = "hdgife_speaker"
+private const val versionFunction = "hdgife_lib_version"
+private const val utilMarker = "hdgife_util_loaded"
 
-/** True when [story] includes hdgife.ink (any version): it declares the speaker variable. */
-internal fun includesCoreLibrary(story: Story): Boolean = story.variablesState.get(SPEAKER) != null
+internal fun includesCoreLibrary(story: Story): Boolean = story.variablesState.get(speakerVariable) != null
 
-/** True when [story] includes hdgife_util.ink. */
-internal fun includesUtilLibrary(story: Story): Boolean = story.hasFunction(UTIL_MARKER)
+internal fun includesUtilLibrary(story: Story): Boolean = story.hasFunction(utilMarker)
 
-/**
- * The version of the hdgife.ink in [story], read from the compiled story without running it (the library's
- * `CONST hdgife_version` is inlined into the `hdgife_lib_version` function). 0 when the story has no version: an
- * old library, or none. Only meaningful when [includesCoreLibrary].
- */
+// The compiled story keeps no constants, so the version is read from the function hdgife.ink inlines it into:
+// the IntValue just before that function's return command, past an optional closing EvalEnd.
 internal fun coreLibraryVersion(story: Story): Int {
-    val knot = story.mainContentContainer.namedContent[VERSION_FUNCTION] as? Container ?: return 0
-    return firstInt(knot) ?: 0
+    val knot = story.mainContentContainer.namedContent[versionFunction] as? Container ?: return 0
+    return versionBeforeReturn(knot) ?: 0
 }
 
-/** The IntValue right before the `~ret` control command (past the closing `/ev`), searched through nested containers. */
-private fun firstInt(container: Container): Int? {
+private fun versionBeforeReturn(container: Container): Int? {
     val items = container.content
     for (i in items.indices) {
         val item = items[i]
         if (item is ControlCommand && item.commandType == ControlCommand.CommandType.PopFunction) {
-            var j = i - 1
-            val end = items.getOrNull(j)
-            if (end is ControlCommand && end.commandType == ControlCommand.CommandType.EvalEnd) j--
-            val prev = items.getOrNull(j)
-            if (prev is IntValue) return prev.value
+            var previousIndex = i - 1
+            val beforeReturn = items.getOrNull(previousIndex)
+            if (beforeReturn is ControlCommand && beforeReturn.commandType == ControlCommand.CommandType.EvalEnd) previousIndex--
+            val versionValue = items.getOrNull(previousIndex)
+            if (versionValue is IntValue) return versionValue.value
         }
-        if (item is Container) firstInt(item)?.let { return it }
+        if (item is Container) versionBeforeReturn(item)?.let { return it }
     }
     return null
 }
 
-/** The problem with the hdgife.ink in [story], or null when there is none or the story does not include the library. */
 internal fun libraryProblem(story: Story): IncompatibleLibraryException? {
     if (!includesCoreLibrary(story)) return null
-    val found = coreLibraryVersion(story)
-    if (found == HdgifeInk.VERSION) return null
-    val why = if (found == 0) "is out of date (it has no version)" else "is version $found"
-    val advice = if (found < HdgifeInk.VERSION) "so emit events would be lost" else "which is newer than this engine understands"
+    val foundVersion = coreLibraryVersion(story)
+    if (foundVersion == HdgifeInk.version) return null
+    val reason = if (foundVersion == 0) "is out of date (it has no version)" else "is version $foundVersion"
+    val advice = if (foundVersion < HdgifeInk.version) "so emit events would be lost" else "which is newer than this engine understands"
     return IncompatibleLibraryException(
-        "The story's hdgife.ink $why, but this engine needs version ${HdgifeInk.VERSION}, $advice. " +
+        "The story's hdgife.ink $reason, but this engine needs version ${HdgifeInk.version}, $advice. " +
             "Recompile the story with the hdgife.ink bundled with this version.",
-        found,
+        foundVersion,
     )
 }

@@ -1,33 +1,11 @@
 package com.bladecoder.ink.runtime
 
-/**
- * A [Story] with a working lookahead-safe external function binding. Blade Ink 1.3.2 has a bug there.
- *
- * The bug, in `Story.callExternalFunction`: the guard that is meant to refuse an *unsafe* function while ink
- * is building a string (choice text, or `"{...}"`) is written inverted:
- *
- *     if (funcDef != null && funcDef.lookaheadSafe && state.inStringEvaluation())  // 1.3.2, wrong
- *     if (funcDef != null && !funcDef.lookaheadSafe && state.inStringEvaluation())  // upstream ink
- *
- * So in 1.3.2 a function bound as lookahead safe fails with an error as soon as it is called inside a string,
- * and an unsafe one is let through exactly where it can't be (it returns without pushing a result when ink is
- * in the middle of a glue lookahead). Binding a function as unsafe to dodge the error makes every call end
- * glue lookahead, so `<>` after a line that calls it may not join.
- *
- * Fix: this subclass sits in Blade Ink's own package, so it can override the package-private method. Functions
- * bound as lookahead safe (through [bindLookaheadSafe] or `bindExternalFunction(..., true)`) are run here,
- * directly, with no guard at all: they are safe by contract, so they can run in lookahead and in strings.
- * A function bound as not safe gets the upstream rule: calling it while ink builds a string (choice text or
- * `"{...}"`) is a story error, as in upstream ink. A story built any other way is a plain [Story] and keeps the old behavior, so use
- * [from] to get one (the compiler service already does).
- */
+// Blade Ink 1.3.2 inverts the guard in Story.callExternalFunction: a lookahead safe function fails inside choice text
+// and "{...}" strings, and an unsafe one is let through. This subclass lives in Blade Ink's package so it can override
+// the package-private method: safe functions run unguarded, unsafe ones get the upstream rule.
 public class HdgifeStory internal constructor(json: String) : Story(json) {
     private val safeFunctions = mutableMapOf<String, ExternalFunction<*>>()
 
-    /**
-     * Binds [function] for the ink EXTERNAL [name], safe to call during lookahead and inside strings.
-     * Only do this for functions that read and have no side effects. Throws if [name] is already bound.
-     */
     internal fun bindLookaheadSafe(name: String, function: ExternalFunction<*>) = bindExternalFunction(name, function, true)
 
     override fun bindExternalFunction(funcName: String, func: ExternalFunction<*>, lookaheadSafe: Boolean) {
@@ -35,7 +13,6 @@ public class HdgifeStory internal constructor(json: String) : Story(json) {
         if (lookaheadSafe) safeFunctions[funcName] = func
     }
 
-    /** The text ink has in its output stream right now, newline included. For a lookahead safe function that is asking where it was called. */
     internal fun outputText(): String = state.currentText
 
     override fun unbindExternalFunction(funcName: String) {
@@ -46,7 +23,6 @@ public class HdgifeStory internal constructor(json: String) : Story(json) {
     override fun callExternalFunction(funcName: String, numberOfArguments: Int) {
         val function = safeFunctions[funcName]
         if (function == null) {
-            // Upstream rule, which 1.3.2 got inverted: a function that is not lookahead safe can't run while ink builds a string.
             if (getExternalFunction(funcName) != null && state.inStringEvaluation()) {
                 error(
                     "External function $funcName could not be called because 1) it wasn't marked as lookaheadSafe when it was bound " +
@@ -63,16 +39,12 @@ public class HdgifeStory internal constructor(json: String) : Story(json) {
         for (i in numberOfArguments - 1 downTo 0) {
             arguments[i] = (state.popEvaluationStack() as Value<*>).valueObject
         }
-        val result = function.call(*arguments)
-        state.pushEvaluationStack(if (result == null) Void() else AbstractValue.create(result)
-            ?: throw StoryException("Could not create an ink value from ${result.javaClass.name} returned by $funcName"))
+        val returned = function.call(*arguments)
+        state.pushEvaluationStack(if (returned == null) Void() else AbstractValue.create(returned)
+            ?: throw StoryException("Could not create an ink value from ${returned.javaClass.name} returned by $funcName"))
     }
 
     public companion object {
-        /**
-         * [story] as an [HdgifeStory]. A plain story is rebuilt from its compiled JSON, which gives a fresh
-         * state (same as `resetState()`). An [HdgifeStory] is returned as it is.
-         */
         @JvmStatic
         public fun from(story: Story): HdgifeStory = story as? HdgifeStory ?: HdgifeStory(story.toJson())
     }

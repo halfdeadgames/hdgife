@@ -20,40 +20,28 @@ import kotlin.random.Random
 
 private val log = logger<DialogController>()
 
-/** Ink variables the harness watches from the start. Their latest value is in the info line under the panels. */
-private val WATCHED = listOf("suspicion", "door_open", "player_coin")
+private val watchedVariables = listOf("suspicion", "door_open", "player_coin")
 
-/** Where a phone run keeps the story between launches. Written by [DialogController.autosave], called from the screen's `pause`. */
-private const val AUTOSAVE = "autosave.json"
+private const val autosaveFile = "autosave.json"
 
-/** What `save` keeps: the engine's state string and the step that was on screen, so `load` can show it again. */
 private class Snapshot(val state: String, val step: DialogStep, val number: Int)
 
-/** What the controller needs from the screen: somewhere to write, draw a step and change the layout. */
 interface DialogView {
     fun say(message: String)
 
-    /** Draws [step]. The panels take the lines and the step tags from [linesFrom]. [note] goes to the raw panel. */
     fun showStep(step: DialogStep, number: Int, note: String?, linesFrom: DialogStep)
 
-    /** Draws a partial [step] from a failed continue, with [note] in the raw panel and a one line [status]. */
     fun showFailure(step: DialogStep, number: Int, note: String, status: String)
 
     fun setStatus(text: String)
 
-    /** Rewrites the info line (layout, choice mode and the watched variables from [DialogController.watched]). */
     fun refreshInfo()
 
     fun setChoiceMode(mode: ChoiceMode)
 
-    /** Null cycles to the next layout. */
     fun setViewMode(mode: ViewMode?)
 }
 
-/**
- * The console backend and the harness's game side: it drives the [StoryManager], keeps the harness's game state
- * (inventory, dice, stats), the in-memory save and the phone autosave, and tells the [view] what to draw.
- */
 class DialogController(
     private val manager: StoryManager,
     private val provider: MapStateProvider,
@@ -61,7 +49,6 @@ class DialogController(
     private val view: DialogView,
     private val mobile: Boolean,
 ) : DialogControl {
-    /** The latest step as the engine gave it, or null before the first one. */
     var lastStep: DialogStep? = null
         private set
     private var stepNumber = 0
@@ -70,22 +57,18 @@ class DialogController(
 
     val watched: Map<String, String> get() = watchedValues
     private val watchedValues = LinkedHashMap<String, String>()
-    private var rng = Random(1)
+    private var random = Random(1)
     private var fixedRoll: Int? = null
 
-    /** The harness's own game state, driven by ink: `emit("give_item", x)` adds to it, ink reads it back. */
     private val inventory = mutableMapOf<String, Int>()
 
-    /** Connects the manager to the harness. Called once, when the screen is built. */
     fun start() {
-        // the engine's warnings go to the console too, next to wherever the game already sent them
         val engineLog = manager.log
         manager.log = HdgifeLog { message ->
             engineLog?.log(message)
             view.say("engine: $message")
         }
         manager.formatOverride = NumberFormatOverride { entityId, statName -> harnessFormatOverride(entityId, statName) }
-        // The engine reports events and never acts on them. This is the harness acting on them.
         manager.onEvent = StoryEventListener { event ->
             view.say("event #${event.id} ${event.name}(${event.args.joinToString { show(it) }}) before line ${event.lineIndex}")
             val first = event.args.firstOrNull()?.toString()
@@ -100,26 +83,22 @@ class DialogController(
                 }
             }
         }
-        // And the other direction: ink asks the game. roll has a side effect (the dice), so it is not lookahead safe.
         manager.bindFunction("inventory_count", lookaheadSafe = true) { args -> inventory[args.string(0)] ?: 0 }
         manager.bindFunction("player_name", lookaheadSafe = true) { "Wren" }
-        manager.bindFunction("roll") { args -> fixedRoll ?: rng.nextInt(1, args.int(0) + 1) }
+        manager.bindFunction("roll") { args -> fixedRoll ?: random.nextInt(1, args.int(0) + 1) }
         syncPlayer()
-        for (name in WATCHED) watch(name)
+        for (name in watchedVariables) watch(name)
     }
 
-    /** Stops watching and releases the manager's observers. */
     fun dispose() {
         for (observation in observations.values) manager.unobserve(observation)
         observations.clear()
     }
 
-    /** Shows the first step: the autosave of a phone run if there is one, else the start of the story. */
     fun begin() {
         if (lastStep == null && !restoreAutosave()) advance()
     }
 
-    /** The harness's one way to report a failure: to the log with its stack trace, and to the console. */
     private fun fail(what: String, e: Exception) {
         log.error(e) { what }
         view.say("$what: ${e.message}")
@@ -129,7 +108,6 @@ class DialogController(
         showStep(readNext() ?: return)
     }
 
-    /** [StoryManager.next], with a failure shown on screen (a StoryStepException with its partial step) and null returned. */
     private fun readNext(): DialogStep? = try {
         manager.next()
     } catch (e: StoryStepException) {
@@ -137,24 +115,17 @@ class DialogController(
         null
     }
 
-    /** The engine keeps the lines it built before a failure. Show that partial step with the error in the raw panel. */
     private fun showFailure(e: StoryStepException) {
         log.error(e) { "Story error" }
         var root: Throwable = e
         while (root.cause != null && root.cause !== root) root = root.cause!!
         val why = root.message ?: root.toString()
         lastStep = e.step
-        // one short line: a long label would widen the whole layout. The raw panel has the full text.
         val status = "Story error: " + why.take(110).replace('\n', ' ') + if (why.length > 110) "..." else ""
         view.showFailure(e.step, ++stepNumber, "STORY ERROR: ${e.message} / cause: $why", status)
         view.say("Story error: ${e.message}")
     }
 
-    /**
-     * Shows [step]. [linesFrom] is where the panels take the lines and the step tags from. It is [step] itself, except
-     * after a load: a save holds no lines, so the harness keeps the lines of the step that was saved and takes
-     * everything else (choices, open styles, ended, events) from the engine.
-     */
     private fun showStep(step: DialogStep, note: String? = null, number: Int = ++stepNumber, linesFrom: DialogStep = step) {
         lastStep = step
         view.showStep(step, number, note, linesFrom)
@@ -166,23 +137,19 @@ class DialogController(
         advance()
     }
 
-    /** Saves the story for the next launch. Phone only. Called when the app goes to the background. */
     fun autosave() {
         if (!mobile || lastStep == null) return
         try {
-            // write aside and move over, so a process killed in the middle never leaves a half-written save
-            val temp = Gdx.files.local("$AUTOSAVE.tmp")
+            val temp = Gdx.files.local("$autosaveFile.tmp")
             temp.writeString(manager.saveState(), false, "UTF-8")
-            temp.moveTo(Gdx.files.local(AUTOSAVE))
+            temp.moveTo(Gdx.files.local(autosaveFile))
         } catch (e: Exception) {
-            // the app is going to the background: whatever went wrong must not take the process down
             fail("Autosave failed", e)
         }
     }
 
-    /** Brings back the story saved by [autosave], if there is one. The lines are not part of a save, so only the choices show. */
     private fun restoreAutosave(): Boolean {
-        val file = Gdx.files.local(AUTOSAVE)
+        val file = Gdx.files.local(autosaveFile)
         if (!mobile || !file.exists()) return false
         try {
             manager.loadState(file.readString("UTF-8"))
@@ -201,7 +168,6 @@ class DialogController(
         return true
     }
 
-    /** Keeps the latest value of an ink variable for the info line, and logs each change to the console. */
     private fun watch(name: String) {
         observe(name)
         watchedValues[name] = show(manager.getVariable(name))
@@ -209,7 +175,7 @@ class DialogController(
     }
 
     private fun syncPlayer() {
-        manager.syncStats("player", PLAYER_SYNCED_STATS)
+        manager.syncStats("player", playerSyncedStats)
     }
 
     override fun log(message: String) = view.say(message)
@@ -279,7 +245,7 @@ class DialogController(
     }
 
     override fun seed(value: Int) {
-        rng = Random(value)
+        random = Random(value)
         try {
             manager.seedRandom(value)
             view.say("Seeded $value (ink and the game's dice)")
@@ -340,8 +306,6 @@ class DialogController(
             fail("Load failed", e)
             return
         }
-        // The engine brings back the story, the speaker and the open styles. The lines are not part of a save, so the
-        // game shows the ones it kept, with the choices and open styles read again from the engine.
         val again = readNext() ?: return
         showStep(again, "loaded save: lines kept by the harness, choices and openStyles read again from the engine", saved.number, linesFrom = saved.step)
         view.say("Loaded (speaker is now ${manager.speaker ?: "none"})")
@@ -350,7 +314,7 @@ class DialogController(
     override fun validate() {
         val report = manager.validateStory()
         view.say("Validation: ${report.errors.size} errors, ${report.warnings.size} warnings, ${report.infos.size} infos")
-        for (issue in report.issues) view.say("  ${issue.severity.name.lowercase()} ${issue.kind.name.lowercase()}: ${issue.message}")
+        for (issue in report.issues) view.say("  ${issue.severity.name.lowercase()} ${issue.kind.name}: ${issue.message}")
     }
 
     override fun divert(path: String) {
@@ -371,7 +335,6 @@ class DialogController(
                 restartView()
                 view.say("Reloaded")
             } catch (e: Exception) {
-                // the outermost boundary: this runs from the render loop, and the compile ran on another thread
                 fail("Reload failed", e)
             }
         }
@@ -380,7 +343,7 @@ class DialogController(
     override fun restart() {
         manager.reset()
         inventory.clear()
-        applyStat(manager, provider, "player", "coin", START_COIN)
+        applyStat(manager, provider, "player", "coin", startCoin)
         syncPlayer()
         restartView()
     }

@@ -4,7 +4,6 @@ import com.bladecoder.ink.runtime.Container
 import com.bladecoder.ink.runtime.SimpleJson
 import com.bladecoder.ink.runtime.Story
 
-/** What [SaveEnvelope.read] found in a save written by `StoryManager.saveState`. */
 internal class SavedState(
     val inkJson: String,
     val styles: List<Style>,
@@ -13,11 +12,9 @@ internal class SavedState(
     val fingerprint: String?,
 )
 
-/** The versioned save format around ink's own state JSON, and the structure fingerprint saves can carry. */
 internal object SaveEnvelope {
-    const val VERSION = 2
+    const val newestVersion = 2
 
-    /** Writes the envelope. Version 2 when [storyId] or [fingerprint] is given, else version 1. */
     fun write(inkJson: String, styles: List<Style>, speaker: String?, storyId: String?, fingerprint: String?): String {
         val writer = SimpleJson.Writer()
         writer.writeObjectStart()
@@ -47,15 +44,11 @@ internal object SaveEnvelope {
         return writer.toString()
     }
 
-    /**
-     * Reads [json]. Null when it is a plain ink state (it has no `v` and `ink` keys). Throws [SaveStateException]
-     * for a missing or unsupported version, a missing ink state or a broken style entry.
-     */
     fun read(json: String): SavedState? {
         val envelope = parse(json) ?: return null
         val version = (envelope["v"] as? Number)?.toInt() ?: throw SaveStateException("Save has no version")
-        if (version !in 1..VERSION) {
-            throw SaveStateException("Save version $version is not supported (this engine reads up to $VERSION)")
+        if (version !in 1..newestVersion) {
+            throw SaveStateException("Save version $version is not supported (this engine reads up to $newestVersion)")
         }
         val inkJson = envelope["ink"] as? String ?: throw SaveStateException("Save has no ink state")
         val styles = readStyles(envelope["styles"])
@@ -72,7 +65,7 @@ internal object SaveEnvelope {
         val parsed = try {
             SimpleJson.textToDictionary(json)
         } catch (e: Exception) {
-            return null // not ours; ink reports the problem when it loads it
+            return null
         }
         return if (parsed.containsKey("v") && parsed.containsKey("ink")) parsed else null
     }
@@ -90,7 +83,6 @@ internal object SaveEnvelope {
         }
     }
 
-    /** A hash of the sorted names of the story's containers (knots, stitches, labels) and variables. */
     fun fingerprint(story: Story): String {
         val names = ArrayList<String>()
         fun walk(container: Container, prefix: String) {
@@ -103,9 +95,9 @@ internal object SaveEnvelope {
         walk(story.mainContentContainer, "")
         for (variable in story.variablesState) names += "$ $variable"
         names.sort()
-        var hash = -0x340d631b7bdddcdbL // FNV-1a 64 offset basis
+        var hash = -0x340d631b7bdddcdbL
         for (name in names) {
-            for (c in name) hash = (hash xor c.code.toLong()) * 0x100000001b3L
+            for (char in name) hash = (hash xor char.code.toLong()) * 0x100000001b3L
             hash = (hash xor 10L) * 0x100000001b3L
         }
         return hash.toULong().toString(16).padStart(16, '0')

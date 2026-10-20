@@ -11,21 +11,13 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.github.halfdeadgames.hdgife.harness.*
 import ktx.async.skipFrame
 
-/*
- * The scenarios of the UI test. Every one asserts on BOTH panels of the harness: the RAW panel (the exact engine
- * output, read as text) and the RENDERED panel (what a player would see: rows of text, colour markup, buttons).
- * They set the world up with console commands (npc, stat, divert, fixroll...) and play it with real clicks.
- * The story is ink/main.ink (The Lantern Pass) and, for the older cases, ink/debug.ink.
- */
-
 internal fun Ui.expectRaw(vararg parts: String) {
     for (part in parts) expect(part in raw) { "Raw panel is missing <$part>.\n--- raw panel ---\n$raw" }
 }
 
-/** Fails unless every row is in the rendered panel exactly. */
 internal fun Ui.expectRows(vararg rows: String) {
-    val have = log
-    for (row in rows) expect(row in have) { "Rendered panel is missing the row <$row>.\n--- rows ---\n${have.joinToString("\n")}" }
+    val renderedRows = log
+    for (row in rows) expect(row in renderedRows) { "Rendered panel is missing the row <$row>.\n--- rows ---\n${renderedRows.joinToString("\n")}" }
 }
 
 internal fun Ui.markupRow(part: String): String =
@@ -36,7 +28,6 @@ internal fun Ui.expectInfo(part: String) {
     expect(part in info) { "Info line is missing <$part>: $info" }
 }
 
-/** Presses a key through the input processor chain, the way the window would. */
 private fun pressKey(keycode: Int) {
     Gdx.input.inputProcessor.keyDown(keycode)
     Gdx.input.inputProcessor.keyUp(keycode)
@@ -46,7 +37,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
     ui.settle()
 
     ui.scenario(report, "arrival: tags, speakers, styles, markers, an event and the hub", reset = false) {
-        // the first step the harness shows, before anything was reset
         expectEquals("The storm hits The Lantern Pass like a thrown door.", log[0], "first row")
         expectRows(
             "# sfx: thunder  # mood: ominous",
@@ -58,11 +48,9 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
             "Your pack holds 12 coin. Grit 7, wits 6, 10 hp.",
             "The common room smells of wet wool and lamp oil.",
         )
-        // names through the Colors table, hex and the escaped hex through hexColor, nested styles
         expect("[#ffffff]The [][#ffd27f]Lantern[][#ffffff] Pass[]" in markupRow("The storm hits")) { "Nested styles wrong: ${markupRow("The storm hits")}" }
         val lamp = markupRow("The lamp burns")
         expect("[#ff8800ff]amber[]" in lamp && "[#9ecbffff]pale blue[]" in lamp && "[ORANGE]raw[]" in lamp) { "Colours wrong: $lamp" }
-        // the event sits between the line before it and the Ilse line that follows it
         expect(log.indexOf("! event door_opened()") < log.indexOf("ilse: \"Shut that door, you're letting the weather in!\"")) { "Event order: $log" }
         expectEquals(
             listOf("Speak to Sergeant Varga", "Sit by Ilse's fire", "Follow the lamplighter's muttering", "Read the toll ledger",
@@ -70,7 +58,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
             buttons.map(::buttonText), "hub choices (the side door is hidden by ink: door_open is false)",
         )
         expect(buttons.none { it.isDisabled }) { "Nothing is greyed on arrival" }
-        // the same step, raw
         expectRaw(
             "STEP 1", "ended     : false", "LINES (6)",
             "tags.raw  : [\"sfx: thunder\", \"mood: ominous\"]", "tags.map  : {sfx=thunder, mood=ominous}",
@@ -80,8 +67,7 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
             "pause=0.6 @66",
             "STEP TAGS", "door_opened()  lineIndex=3  id=1",
             "OPEN STYLES (0)", "CHOICES (6)",
-            // the requirements of the "Pay the toll" choice: an Int against an Int, a String against an enum name
-            "target=3 (Int) actual=12 (Int)", "target=HOSTILE (String) actual=WARY (String)", "result=Met isMet=true",
+            "target=3 (Int) actual=12 (Int)", "target=Hostile (String) actual=Wary (String)", "result=Met isMet=true",
         )
         expectInfo("suspicion=0")
         expectInfo("door_open=false")
@@ -90,13 +76,12 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
     }
 
     ui.scenario(report, "varga: combined metrics, sanity chance, glue and the stat types") {
-        // calm: strain 0, mood high, sanity full so chance() never fires
         for (c in listOf("npc varga sanity 100", "npc varga tiredness 0", "npc varga mood 100", "divert varga_talk")) command(c)
         expectEquals("varga: \"Papers.\" He stands crisp and alert. He nearly smiles.", log[0], "calm opening")
         expectRows(
-            "varga: Strain 0.0, composure 100, unease 50, trust 25.5.",       // avg3 / scale100+clamp / blend, fmt modes, trust override
-            "varga: He keeps his eyes on you, patience at 100 percent.",      // glue joined across a stat call
-            "varga: He serves the crown. Stance: WARY. His hands are steady. He owns no lucky charm.",
+            "varga: Strain 0.0, composure 100, unease 50, trust 25.5.",
+            "varga: He keeps his eyes on you, patience at 100 percent.",
+            "varga: He serves the crown. Stance: Wary. His hands are steady. He owns no lucky charm.",
         )
         expectRaw(
             "text      : \"He keeps his eyes on you, patience at 100 percent.\"", "speaker   : varga",
@@ -104,7 +89,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         )
         shot("02-varga-calm")
 
-        // wrung out: every metric at its worst, sanity 0 so chance(100) always fires
         for (c in listOf("npc varga sanity 0", "npc varga tiredness 100", "npc varga mood 0", "divert varga_talk")) command(c)
         val opening = log[0]
         expect(opening.startsWith("varga: \"Papers.\" He sways on his feet, wrung out. He scowls. \"Don't make me regret this.\" ")) { "Wrung out opening: $opening" }
@@ -112,7 +96,7 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expect(flavor in listOf("He counts the rafters under his breath.", "A muscle in his jaw jumps.", "He laughs once, for no reason.")) { "Madness flavor: <$flavor>" }
         expectRows(
             "varga: Strain 100.0, composure 0, unease 83, trust 25.5.",
-            "varga: He keeps his eyes on you,",     // mood 0: the glue does not join, two rows
+            "varga: He keeps his eyes on you,",
             "varga: patience at 0 percent.",
         )
         expectRaw("STEP 3", "text      : \"He keeps his eyes on you,\"", "text      : \"patience at 0 percent.\"")
@@ -128,7 +112,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expect(buttonText(button("Arm-wrestle")).endsWith("(needs player.grit >= 8 (have 7))")) { "Arm note: ${names[2]}" }
         expect(buttonText(button("Rub a lucky charm")).endsWith("(needs player.luck >= 1 (stat missing))")) { "Luck note: ${names[3]}" }
         for (shut in listOf("Bluff", "Arm-wrestle", "Rub a lucky charm")) expect(button(shut).isDisabled) { "$shut should be greyed" }
-        // raw: string, numeric with a float actual, explicit entity, bool, missing stat
         expectRaw(
             "target=drifter (String) actual=drifter (String)",
             "target=7 (Int) actual=6 (Int)", "result=Unmet isMet=false",
@@ -139,12 +122,12 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         )
         shot("04-varga-choices-grey")
         val before = buttons.size
-        click(button("Bluff")) // a greyed button does nothing
+        click(button("Bluff"))
         expectEquals(before, buttons.size, "choices after clicking a greyed button")
 
         command("choicemode hide")
         expectEquals(listOf("Show your papers", "Ask about the ice road", "Back to the room"), buttons.map(::buttonText), "hidden mode")
-        expectRaw("available : false") // the engine still reports the hidden ones
+        expectRaw("available : false")
         shot("05-varga-choices-hidden")
 
         command("choicemode show")
@@ -160,7 +143,7 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         click("Bluff")
         expectRows("varga: You roll 3, and your wits make it 12.", "# dice: d20", "varga: \"I know the Colonel. You are not him.\"", "! event suspicion_up(varga, 2)")
         expect(log.indexOf("varga: \"I know the Colonel. You are not him.\"") < log.indexOf("! event suspicion_up(varga, 2)")) { "Event order: $log" }
-        expectInfo("suspicion=2") // the harness observes the ink variable
+        expectInfo("suspicion=2")
         expectRaw("tags.map  : {dice=d20}", "suspicion_up(varga (String), 2 (Int))  lineIndex=2", "EVENTS (1)")
         expect(buttons.any { buttonText(it) == "Apologize" }) { "Apologize appears while suspicion > 0 (an ink condition): ${buttons.map(::buttonText)}" }
         shot("06-varga-bluff-fails")
@@ -177,7 +160,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expectInfo("suspicion=0")
         expect(buttons.none { buttonText(it) == "Apologize" }) { "Apologize should go once suspicion is 0" }
 
-        // arm-wrestling: three arguments, a Boolean among them
         for (c in listOf("stat player grit 9", "fixroll 12", "divert varga_talk")) command(c)
         click("Arm-wrestle")
         expectRows("varga: You roll 12 on top of your grit, total 21.", "varga: His wrist goes down with a bang. |slam|\"Again tomorrow,\" he mutters.", "! event duel(varga, 21, true)")
@@ -191,7 +173,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expectRows("# mood: warm", "ilse: \"Rule one: never ask what is in the crates.\" She says it lightly, and she means it.",
             "narrator: She nods at Varga, who is at 40 percent of a good mood.", "# speaker: narrator")
         expect("[#ffffff]Rule one: [][#ffd27f]never[][#ffffff] ask what is in the crates.[]" in markupRow("Rule one")) { "Nested bold and em: ${markupRow("Rule one")}" }
-        // a style left open over a line break
         expect("[#ffd27f]She lowers her voice.[]" in markupRow("She lowers her voice")) { "em, first line" }
         expect("[#ffd27f]Her eyes keep going to the cellar door, the way a dog watches a pot.[]" in markupRow("Her eyes keep going")) { "em must carry onto the second line" }
         expectEquals(5, buttons.size, "ilse choices")
@@ -205,7 +186,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         )
         shot("07-ilse")
 
-        // buying takes coin: the harness acts on the event, and asks the engine for the choices again
         command("stat player coin 5")
         click("Buy a flask")
         expectRows("! event spend(coin, 3)", "! event give_item(rum)")
@@ -214,13 +194,11 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         val buy = button("Buy a flask")
         expect(buy.isDisabled) { "With 2 coin left the choices must be read again and Buy greyed" }
         expect("(needs player.coin >= 3 (have 2))" in buttonText(buy)) { "Needs note: ${buttonText(buy)}" }
-        // the engine delivered the spend event before it read the choices, so no second next() was needed
         expectRaw("spend(coin (String), 3 (Int))  lineIndex=", "id=2", "give_item(rum (String))", "id=3", "target=3 (Int) actual=2 (Int)")
         expect("note      :" !in raw) { "The harness no longer reads the choices again: $raw" }
         expect(screen.consoleLines.any { it.startsWith("event #2 spend(coin, 3)") } && screen.consoleLines.any { it.startsWith("event #3 give_item(rum)") }) { "Event ids in the console: ${screen.consoleLines.takeLast(8)}" }
         shot("08-ilse-bought")
 
-        // the side door: a Boolean argument, an observed variable, then a choice that ink shows because of it
         click("Ask for the side door")
         expectRows("! event flag(side_door, true)")
         expectInfo("door_open=true")
@@ -231,7 +209,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expect("(needs player.coin >= 3 (have 2)" in buttonText(button("Pay the toll"))) { "Toll note" }
         click("Slip out")
 
-        // the ending
         expectRows("You ease the side door open and the storm swallows you. |pause=1.0|Behind you the lamps gutter, one by one.", "! event left_pass(side_door)")
         expectEquals(emptyList(), buttons.map(::buttonText), "choices after the end")
         expectEquals("Story ended.", screen.statusLabel.text.toString(), "status")
@@ -258,7 +235,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expect("twice[#8a8a8a]~wave[]" in markupRow("Count them") && "again[#8a8a8a]~bounce[]" in markupRow("Count them")) { "wave and bounce notes: ${markupRow("Count them")}" }
         expect("|slam|" in plain(markupRow("Count them"))) { "slam marker" }
         expectRows("# mood: manic", "# Note to self: tobin counts in threes", "(style still open: color=#9ecbff, shake amp=1)")
-        // a basic motion on the shaking line, started when it was shown
         val shaking = screen.renderedLabels.first { "The lamps know" in plain(it.text.toString()) }
         expect(shaking.hasActions()) { "The shake line should be moving" }
         expectEquals(
@@ -308,7 +284,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         )
         expectRaw("text      : \"A debt of -2.5, no decimals: floor -3, ceil -2, round -3, trunc -2.\"", "STEP 2", "text      : \"The common room smells of wet wool and lamp oil.\"")
         shot("13-ledger")
-        // the game's default format applies to the stats without an override (charm 4.5)
         command("numfmt 1 trunc")
         command("divert ledger")
         expectRows("Game formats: Ilse 60.3, Varga 25.5, Tobin 10.0, your charm 4.5, your faction drifter, injured true.")
@@ -336,10 +311,9 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
     }
 
     ui.scenario(report, "layouts: split, raw only, rendered only, F2, and the raw panel scrolls") {
-        expectEquals(ViewMode.SPLIT, screen.viewMode, "default view")
+        expectEquals(ViewMode.Split, screen.viewMode, "default view")
         expect(screen.rawVisible && screen.renderedVisible) { "Both panels in split view" }
         expect(screen.rawMaxScrollY > 0f) { "The raw panel of the arrival step is longer than the window and must scroll" }
-        // wheel over the raw panel
         screen.stage.mouseMoved(100, 300)
         settle()
         val before = screen.rawScrollY
@@ -358,15 +332,13 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         command("view split")
         expect(screen.rawVisible && screen.renderedVisible) { "Split again" }
 
-        // F2 cycles split, raw, rendered
         pressKey(Input.Keys.F2)
-        expectEquals(ViewMode.RAW, screen.viewMode, "after F2")
+        expectEquals(ViewMode.Raw, screen.viewMode, "after F2")
         pressKey(Input.Keys.F2)
-        expectEquals(ViewMode.RENDERED, screen.viewMode, "after F2 twice")
+        expectEquals(ViewMode.Rendered, screen.viewMode, "after F2 twice")
         pressKey(Input.Keys.F2)
-        expectEquals(ViewMode.SPLIT, screen.viewMode, "after F2 three times")
+        expectEquals(ViewMode.Split, screen.viewMode, "after F2 three times")
         expectInfo("view: split")
-        // the story can be played with only the raw panel on screen
         command("view raw")
         command("choose 0")
         expectRaw("STEP 2", "Papers.")
@@ -473,7 +445,6 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expectRaw("styles: color=ff5555 (hex ff5555ff)", "styles: color=ff5555 (hex ff5555ff) + b")
         shot("20-rumor-listen")
         command("load")
-        // the events already happened, so a load does not show them again
         expectEquals(savedRows.filterNot { it.startsWith("! event") }, log, "rows after load")
         expectRaw("note      : loaded save", "EVENTS (0)", "OPEN STYLES (1)", "open      : color=ff5555 (hex ff5555ff)")
         click("Listen")
@@ -537,10 +508,9 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
     ui.scenario(report, "validate: the console report on the showcase story") {
         val before = screen.consoleLines.size
         command("validate")
-        val out = screen.consoleLines.drop(before)
-        expect(out.firstOrNull()?.startsWith("Validation: 0 errors") == true) { "validate: $out" }
-        // every EXTERNAL of the harness is bound, so nothing is reported as missing
-        expect(out.none { it.contains("unbound_external") }) { "validate: $out" }
+        val output = screen.consoleLines.drop(before)
+        expect(output.firstOrNull()?.startsWith("Validation: 0 errors") == true) { "validate: $output" }
+        expect(output.none { it.contains("UnboundExternal") }) { "validate: $output" }
     }
 
     ui.scenario(report, "console: vars, var and reload") {
@@ -580,15 +550,13 @@ internal suspend fun scenarios(ui: Ui, report: Report) {
         expectEquals(first.dropLast(1), second.dropLast(1), "guard scene rows with the same seed")
         expectEquals(first.last().substringAfter("LINES"), second.last().substringAfter("LINES"), "raw panel with the same seed")
     }
-    // The console library was built for an older libGDX and its Copy action used to throw NoSuchMethodError
-    // (Label.getText() changed type). The harness ships a recompiled ConsoleContext; this clicks its Copy label.
     ui.scenario(report, "console: the Copy action works") {
         val contextClass = Class.forName("com.strongjoshua.console.ConsoleContext")
-        val make = contextClass.getDeclaredConstructor(Class::class.java, Class::class.java, Skin::class.java, String::class.java)
-        make.isAccessible = true
+        val contextConstructor = contextClass.getDeclaredConstructor(Class::class.java, Class::class.java, Skin::class.java, String::class.java)
+        contextConstructor.isAccessible = true
         val skin = Skin(Gdx.files.classpath("default_skin/uiskin.json"))
         try {
-            val context = make.newInstance(Table::class.java, Label::class.java, skin, "default-round")
+            val context = contextConstructor.newInstance(Table::class.java, Label::class.java, skin, "default-round")
             val source = Label("  text to copy  ", skin)
             contextClass.getDeclaredMethod("setLabel", Label::class.java).apply { isAccessible = true }.invoke(context, source)
             val copy = contextClass.getDeclaredField("copy").apply { isAccessible = true }.get(context) as Label

@@ -6,7 +6,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** DialogLine.speaker is the speaker when the line's text was produced, not after ink ran ahead. */
 class SpeakerTimingTest {
     private fun plainManager(text: String): StoryManager =
         StoryManager.forPlainStory(Story(compileLib(text).toJson()))
@@ -16,56 +15,56 @@ class SpeakerTimingTest {
 
     @Test
     fun `a speak after the line and before a choice does not change that line`() {
-        val m = managerOf(beforeChoice)
-        val step = m.next()
+        val manager = managerOf(beforeChoice)
+        val step = manager.next()
         assertEquals(listOf("guard"), step.lines.map { it.speaker })
-        assertNull(m.speaker)
+        assertNull(manager.speaker)
     }
 
     @Test
     fun `a speak after the line and before the end does not change that line`() {
-        val m = managerOf(beforeEnd)
-        val step = m.next()
+        val manager = managerOf(beforeEnd)
+        val step = manager.next()
         assertEquals(listOf("guard"), step.lines.map { it.speaker })
-        assertNull(m.speaker)
+        assertNull(manager.speaker)
     }
 
     @Test
     fun `a speak between two lines changes only the second`() {
-        val m = managerOf("~ speak(\"a\")\nOne\n~ speak(\"b\")\nTwo\n~ speak(\"c\")\n+ [Go] -> END")
-        assertEquals(listOf("a" to "One", "b" to "Two"), m.next().lines.map { it.speaker to it.text })
-        assertEquals("c", m.speaker)
+        val manager = managerOf("~ speak(\"a\")\nOne\n~ speak(\"b\")\nTwo\n~ speak(\"c\")\n+ [Go] -> END")
+        assertEquals(listOf("a" to "One", "b" to "Two"), manager.next().lines.map { it.speaker to it.text })
+        assertEquals("c", manager.speaker)
     }
 
     @Test
     fun `a speak between glued lines counts for the joined line, the last one wins`() {
-        val m = managerOf("~ speak(\"a\")\nOne\n~ speak(\"b\")\n<> Two\nThree\n~ speak(\"c\")\n+ [Go] -> END")
-        val lines = m.next().lines
+        val manager = managerOf("~ speak(\"a\")\nOne\n~ speak(\"b\")\n<> Two\nThree\n~ speak(\"c\")\n+ [Go] -> END")
+        val lines = manager.next().lines
         assertEquals(listOf("One Two", "Three"), lines.map { it.text })
         assertEquals(listOf("b", "b"), lines.map { it.speaker })
-        assertEquals("c", m.speaker)
+        assertEquals("c", manager.speaker)
     }
 
     @Test
     fun `a trailing speak after a line is for the next lines`() {
-        val m = managerOf("~ speak(\"a\")\nOne <>\nTwo\n~ speak(\"b\")\n+ [Go]\n  ~ speak(\"c\")\n  Three\n  -> END")
-        val first = m.next()
+        val manager = managerOf("~ speak(\"a\")\nOne <>\nTwo\n~ speak(\"b\")\n+ [Go]\n  ~ speak(\"c\")\n  Three\n  -> END")
+        val first = manager.next()
         assertEquals(listOf("a" to "One Two"), first.lines.map { it.speaker to it.text })
-        assertEquals("b", m.speaker)
-        assertEquals(listOf("c" to "Three"), m.choose(0).lines.map { it.speaker to it.text })
+        assertEquals("b", manager.speaker)
+        assertEquals(listOf("c" to "Three"), manager.choose(0).lines.map { it.speaker to it.text })
     }
 
     @Test
     fun `a tag speaker still wins`() {
-        val m = managerOf("~ speak(\"a\")\nHalt. # speaker: crowd\n~ speak(\"\")\n+ [Go] -> END")
-        assertEquals(listOf("crowd"), m.next().lines.map { it.speaker })
+        val manager = managerOf("~ speak(\"a\")\nHalt. # speaker: crowd\n~ speak(\"\")\n+ [Go] -> END")
+        assertEquals(listOf("crowd"), manager.next().lines.map { it.speaker })
     }
 
     @Test
     fun `the persistent speaker after a trailing speak is saved and loaded`() {
-        val m = managerOf(beforeChoice)
-        m.next()
-        val save = m.saveState()
+        val manager = managerOf(beforeChoice)
+        manager.next()
+        val save = manager.saveState()
         val other = managerOf(beforeChoice)
         other.loadState(save)
         assertNull(other.speaker)
@@ -75,10 +74,10 @@ class SpeakerTimingTest {
     @Test
     fun `lines after a load report the speaker that was saved`() {
         val text = "~ speak(\"a\")\nOne\n+ [Go] Two -> END"
-        val m = managerOf(text)
-        m.next()
+        val manager = managerOf(text)
+        manager.next()
         val other = managerOf(text)
-        other.loadState(m.saveState())
+        other.loadState(manager.saveState())
         assertEquals(listOf("a"), other.choose(0).lines.map { it.speaker })
     }
 

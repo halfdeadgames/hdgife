@@ -12,7 +12,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 
 class StatsTest {
-    private enum class Mood { CALM, ANGRY }
+    private enum class Mood { Calm, Angry }
 
     private data class Money(val amount: Int)
 
@@ -75,7 +75,7 @@ class StatsTest {
 
     @Test
     fun `an Enum stat is its name`() {
-        assertEquals("ANGRY", stat(Mood.ANGRY))
+        assertEquals("Angry", stat(Mood.Angry))
     }
 
     @Test
@@ -86,42 +86,42 @@ class StatsTest {
     @Test
     fun `an unmapped value goes through the valueConverter`() {
         val stats = MapStats().also { it["p", "s"] = Money(5) }
-        val m = managerOf("{stat_of(\"p\", \"s\") + 1}", stats)
-        m.valueConverter = ValueConverter { (it as? Money)?.amount }
-        assertEquals("6", m.next().texts().single())
+        val manager = managerOf("{stat_of(\"p\", \"s\") + 1}", stats)
+        manager.valueConverter = ValueConverter { (it as? Money)?.amount }
+        assertEquals("6", manager.next().texts().single())
     }
 
     @Test
     fun `a valueConverter returning null falls back to toString`() {
         val stats = MapStats().also { it["p", "s"] = Money(5) }
-        val m = managerOf("{stat_of(\"p\", \"s\")}", stats)
-        m.valueConverter = ValueConverter { null }
-        assertEquals("Money(amount=5)", m.next().texts().single())
+        val manager = managerOf("{stat_of(\"p\", \"s\")}", stats)
+        manager.valueConverter = ValueConverter { null }
+        assertEquals("Money(amount=5)", manager.next().texts().single())
     }
 
     @Test
     fun `a valueConverter result is mapped once more without the hook`() {
-        val m = managerOf("Hi")
-        m.valueConverter = ValueConverter { 7L }
-        assertEquals(7, m.toInk(Money(1)))
-        m.valueConverter = ValueConverter { Money(2) }
-        assertEquals("Money(amount=2)", m.toInk(Money(1)))
+        val manager = managerOf("Hi")
+        manager.valueConverter = ValueConverter { 7L }
+        assertEquals(7, manager.toInk(Money(1)))
+        manager.valueConverter = ValueConverter { Money(2) }
+        assertEquals("Money(amount=2)", manager.toInk(Money(1)))
     }
 
     @Test
     fun `valueConverter is used for setVariable`() {
-        val m = managerOf("VAR gold = 0\n{gold}")
-        m.valueConverter = ValueConverter { (it as Money).amount }
-        m.setVariable("gold", Money(9))
-        assertEquals(9, m.getVariable("gold"))
+        val manager = managerOf("VAR gold = 0\n{gold}")
+        manager.valueConverter = ValueConverter { (it as Money).amount }
+        manager.setVariable("gold", Money(9))
+        assertEquals(9, manager.getVariable("gold"))
     }
 
     @Test
     fun `valueConverter is used for bound function results`() {
-        val m = managerOf("{purse() + 1}\n-> END\nEXTERNAL purse()\n=== function purse() ===\n~ return 0")
-        m.valueConverter = ValueConverter { (it as Money).amount }
-        m.bindFunction("purse") { Money(4) }
-        assertEquals("5", m.next().texts().single())
+        val manager = managerOf("{purse() + 1}\n-> END\nEXTERNAL purse()\n=== function purse() ===\n~ return 0")
+        manager.valueConverter = ValueConverter { (it as Money).amount }
+        manager.bindFunction("purse") { Money(4) }
+        assertEquals("5", manager.next().texts().single())
     }
 
     @Test
@@ -132,20 +132,20 @@ class StatsTest {
     @Test
     fun `stat and has_stat read the current speaker`() {
         val stats = MapStats().also { it["guard", "mood"] = 60 }
-        val m = managerOf("{stat(\"mood\")} {has_stat(\"mood\"): yes|no}", stats)
-        m.speaker = "guard"
-        assertEquals("60 yes", m.next().texts().single())
+        val manager = managerOf("{stat(\"mood\")} {has_stat(\"mood\"): yes|no}", stats)
+        manager.speaker = "guard"
+        assertEquals("60 yes", manager.next().texts().single())
     }
 
     @Test
     fun `has_stat_of reads any entity and is false for a missing stat or entity`() {
         val stats = MapStats().also { it["guard", "mood"] = 60; it["ilse", "luck"] = 0 }
-        val m = managerOf(
+        val manager = managerOf(
             "{has_stat_of(\"guard\", \"mood\")} {has_stat_of(\"guard\", \"luck\")} {has_stat_of(\"ilse\", \"luck\")} {has_stat_of(\"nobody\", \"mood\")}",
             stats,
         )
-        m.speaker = "ilse"
-        assertEquals("true false true false", m.next().texts().single())
+        manager.speaker = "ilse"
+        assertEquals("true false true false", manager.next().texts().single())
     }
 
     @Test
@@ -157,8 +157,8 @@ class StatsTest {
     @Test
     fun `has_stat_of is lookahead safe so glue still joins and it works in choice text`() {
         val stats = MapStats().also { it["p", "s"] = 1 }
-        val m = managerOf("Has {has_stat_of(\"p\", \"s\")} <>\n now\n* [Own {has_stat_of(\"p\", \"s\")}] -> END", stats)
-        val step = m.next()
+        val manager = managerOf("Has {has_stat_of(\"p\", \"s\")} <>\n now\n* [Own {has_stat_of(\"p\", \"s\")}] -> END", stats)
+        val step = manager.next()
         assertEquals(listOf("Has true now"), step.texts())
         assertEquals("Own true", step.choices.single().text)
     }
@@ -166,10 +166,10 @@ class StatsTest {
     @Test
     fun `stats are read live each time`() {
         val stats = MapStats().also { it["p", "hp"] = 1 }
-        val m = managerOf("{stat_of(\"p\", \"hp\")}\n* [Go] {stat_of(\"p\", \"hp\")} -> END", stats)
-        assertEquals("1", m.next().texts().single())
+        val manager = managerOf("{stat_of(\"p\", \"hp\")}\n* [Go] {stat_of(\"p\", \"hp\")} -> END", stats)
+        assertEquals("1", manager.next().texts().single())
         stats["p", "hp"] = 2
-        assertEquals("2", m.choose(0).texts().single())
+        assertEquals("2", manager.choose(0).texts().single())
     }
 
     @Test
@@ -180,27 +180,27 @@ class StatsTest {
     @Test
     fun `syncStatsToInk copies only declared variables and returns the skipped names`() {
         val stats = MapStats().also { it["player", "hp"] = 12; it["player", "mp"] = 3 }
-        val m = managerOf("VAR player_hp = 0\n{player_hp}", stats)
-        assertEquals(listOf("player_mp", "player_xp"), m.syncStats("player", listOf("hp", "mp", "xp")))
-        assertEquals(12, m.getVariable("player_hp"))
+        val manager = managerOf("VAR player_hp = 0\n{player_hp}", stats)
+        assertEquals(listOf("player_mp", "player_xp"), manager.syncStats("player", listOf("hp", "mp", "xp")))
+        assertEquals(12, manager.getVariable("player_hp"))
     }
 
     @Test
     fun `NumberFormat applies every rounding mode to positive values`() {
-        fun f(r: Rounding) = NumberFormat(1, r).format(7.65f)
-        assertEquals("7.6", f(Rounding.FLOOR))
-        assertEquals("7.7", f(Rounding.CEIL))
-        assertEquals("7.7", f(Rounding.ROUND))
-        assertEquals("7.6", f(Rounding.TRUNCATE))
+        fun formatted(rounding: Rounding) = NumberFormat(1, rounding).format(7.65f)
+        assertEquals("7.6", formatted(Rounding.Floor))
+        assertEquals("7.7", formatted(Rounding.Ceil))
+        assertEquals("7.7", formatted(Rounding.Round))
+        assertEquals("7.6", formatted(Rounding.Truncate))
     }
 
     @Test
     fun `NumberFormat applies every rounding mode to negative ties`() {
-        fun f(r: Rounding) = NumberFormat(0, r).format(-2.5f)
-        assertEquals("-3", f(Rounding.FLOOR))
-        assertEquals("-2", f(Rounding.CEIL))
-        assertEquals("-3", f(Rounding.ROUND))
-        assertEquals("-2", f(Rounding.TRUNCATE))
+        fun formatted(rounding: Rounding) = NumberFormat(0, rounding).format(-2.5f)
+        assertEquals("-3", formatted(Rounding.Floor))
+        assertEquals("-2", formatted(Rounding.Ceil))
+        assertEquals("-3", formatted(Rounding.Round))
+        assertEquals("-2", formatted(Rounding.Truncate))
     }
 
     @Test
@@ -245,42 +245,42 @@ class StatsTest {
 
     @Test
     fun `Rounding parse accepts the ink names in any case`() {
-        assertEquals(Rounding.FLOOR, Rounding.parse("FLOOR"))
-        assertEquals(Rounding.CEIL, Rounding.parse("ceiling"))
-        assertEquals(Rounding.ROUND, Rounding.parse(" round "))
-        assertEquals(Rounding.TRUNCATE, Rounding.parse("trunc"))
-        assertEquals(Rounding.TRUNCATE, Rounding.parse("truncate"))
+        assertEquals(Rounding.Floor, Rounding.parse("FLOOR"))
+        assertEquals(Rounding.Ceil, Rounding.parse("ceiling"))
+        assertEquals(Rounding.Round, Rounding.parse(" round "))
+        assertEquals(Rounding.Truncate, Rounding.parse("trunc"))
+        assertEquals(Rounding.Truncate, Rounding.parse("truncate"))
         assertEquals(null, Rounding.parse("nearest"))
     }
 
     private fun statText(value: Any, format: NumberFormat, locale: Locale? = null): String {
         if (locale != null) Locale.setDefault(locale)
         val stats = MapStats().also { it["p", "s"] = value }
-        val m = managerOf("{stat_text_of(\"p\", \"s\")}", stats)
-        m.numberFormat = format
-        return m.next().texts().single()
+        val manager = managerOf("{stat_text_of(\"p\", \"s\")}", stats)
+        manager.numberFormat = format
+        return manager.next().texts().single()
     }
 
     @Test
     fun `stat_text uses the number format for every rounding mode`() {
-        assertEquals("7", statText(7.65f, NumberFormat(0, Rounding.FLOOR)))
-        assertEquals("8", statText(7.65f, NumberFormat(0, Rounding.CEIL)))
-        assertEquals("8", statText(7.65f, NumberFormat(0, Rounding.ROUND)))
-        assertEquals("7", statText(7.65f, NumberFormat(0, Rounding.TRUNCATE)))
-        assertEquals("-3", statText(-2.5f, NumberFormat(0, Rounding.ROUND)))
+        assertEquals("7", statText(7.65f, NumberFormat(0, Rounding.Floor)))
+        assertEquals("8", statText(7.65f, NumberFormat(0, Rounding.Ceil)))
+        assertEquals("8", statText(7.65f, NumberFormat(0, Rounding.Round)))
+        assertEquals("7", statText(7.65f, NumberFormat(0, Rounding.Truncate)))
+        assertEquals("-3", statText(-2.5f, NumberFormat(0, Rounding.Round)))
     }
 
     @Test
     fun `stat_text keeps a dot decimal point under a German locale`() {
-        assertEquals("7.7", statText(7.65f, NumberFormat(1, Rounding.ROUND), Locale.GERMANY))
+        assertEquals("7.7", statText(7.65f, NumberFormat(1, Rounding.Round), Locale.GERMANY))
         assertEquals("1234.50", statText(1234.5, NumberFormat(2), Locale.GERMANY))
     }
 
     @Test
     fun `stat_text of a missing stat prints zero`() {
-        val m = managerOf("{stat_text_of(\"p\", \"nope\")}", MapStats())
-        m.numberFormat = NumberFormat(1)
-        assertEquals("0.0", m.next().texts().single())
+        val manager = managerOf("{stat_text_of(\"p\", \"nope\")}", MapStats())
+        manager.numberFormat = NumberFormat(1)
+        assertEquals("0.0", manager.next().texts().single())
     }
 
     @Test
@@ -291,22 +291,22 @@ class StatsTest {
     @Test
     fun `stat_text reads the current speaker`() {
         val stats = MapStats().also { it["guard", "mood"] = 60.26f }
-        val m = managerOf("{stat_text(\"mood\")}", stats)
-        m.speaker = "guard"
-        m.numberFormat = NumberFormat(1)
-        assertEquals("60.3", m.next().texts().single())
+        val manager = managerOf("{stat_text(\"mood\")}", stats)
+        manager.speaker = "guard"
+        manager.numberFormat = NumberFormat(1)
+        assertEquals("60.3", manager.next().texts().single())
     }
 
     @Test
     fun `formatOverride wins for the stats it names`() {
         val stats = MapStats().also { it["p", "a"] = 1.234f; it["p", "b"] = 1.234f }
-        val m = managerOf("{stat_text_of(\"p\", \"a\")} {stat_text_of(\"p\", \"b\")}", stats)
-        m.formatOverride = NumberFormatOverride { _, stat -> if (stat == "a") NumberFormat(2) else null }
-        assertEquals("1.23 1", m.next().texts().single())
+        val manager = managerOf("{stat_text_of(\"p\", \"a\")} {stat_text_of(\"p\", \"b\")}", stats)
+        manager.formatOverride = NumberFormatOverride { _, stat -> if (stat == "a") NumberFormat(2) else null }
+        assertEquals("1.23 1", manager.next().texts().single())
     }
 
-    private fun fmt(x: String, decimals: Int, mode: String): String =
-        managerOf("{fmt($x, $decimals, \"$mode\")}").next().texts().single()
+    private fun fmt(value: String, decimals: Int, mode: String): String =
+        managerOf("{fmt($value, $decimals, \"$mode\")}").next().texts().single()
 
     @Test
     fun `fmt supports every mode`() {
@@ -327,9 +327,9 @@ class StatsTest {
     @Test
     fun `fmt with an unknown mode rounds and logs`() {
         val sink = LogSink()
-        val m = managerOf("{fmt(2.5, 0, \"sideways\")}")
-        m.log = sink
-        assertEquals("3", m.next().texts().single())
+        val manager = managerOf("{fmt(2.5, 0, \"sideways\")}")
+        manager.log = sink
+        assertEquals("3", manager.next().texts().single())
         assertContains(sink.messages.joinToString(), "sideways")
     }
 
@@ -378,7 +378,7 @@ class StatsTest {
 
     @Test
     fun `StoryManager applies the patch itself`() {
-        val m = StoryManager.forPlainStory(com.bladecoder.ink.runtime.Story(compileInk("{FLOOR(2.5)}").toJson()))
-        assertEquals("2.0", m.next().texts().single())
+        val manager = StoryManager.forPlainStory(com.bladecoder.ink.runtime.Story(compileInk("{FLOOR(2.5)}").toJson()))
+        assertEquals("2.0", manager.next().texts().single())
     }
 }

@@ -22,7 +22,6 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Public API contracts: the error model, final result classes, variables, replaceStory, and the library split and version. */
 class ApiReviewTest {
     private fun resource(path: String) =
         ApiReviewTest::class.java.classLoader.getResourceAsStream(path)!!.use { String(it.readBytes(), Charsets.UTF_8) }
@@ -34,18 +33,18 @@ class ApiReviewTest {
     fun `the reserved names are generated from both files`() {
         val core = functionsIn(resource("hdgife/hdgife.ink"))
         val util = functionsIn(resource("hdgife/hdgife_util.ink"))
-        assertEquals(core + util, HdgifeInk.LIBRARY_FUNCTIONS.toSet())
-        assertEquals(HdgifeInk.LIBRARY_FUNCTIONS.size, HdgifeInk.LIBRARY_FUNCTIONS.toSet().size, "no name twice")
+        assertEquals(core + util, HdgifeInk.libraryFunctions.toSet())
+        assertEquals(HdgifeInk.libraryFunctions.size, HdgifeInk.libraryFunctions.toSet().size, "no name twice")
         assertTrue(core.intersect(util).isEmpty())
         for (name in listOf("chance", "clamp", "avg2", "avg3", "blend", "invert", "scale100", "emit", "emit1", "emit2", "emit3", "speak", "stat", "fmt")) {
-            assertTrue(name in HdgifeInk.LIBRARY_FUNCTIONS, name)
+            assertTrue(name in HdgifeInk.libraryFunctions, name)
         }
     }
 
     @Test
     fun `the version constant matches the one in hdgife ink`() {
         val declared = Regex("(?m)^CONST\\s+hdgife_version\\s*=\\s*(\\d+)").find(resource("hdgife/hdgife.ink"))!!.groupValues[1].toInt()
-        assertEquals(declared, HdgifeInk.VERSION)
+        assertEquals(declared, HdgifeInk.version)
     }
 
     @Test
@@ -57,8 +56,8 @@ class ApiReviewTest {
     @Test
     fun `the util file works next to the core file in either order and nothing is declared twice`() {
         for (head in listOf("INCLUDE hdgife.ink\nINCLUDE hdgife_util.ink", "INCLUDE hdgife_util.ink\nINCLUDE hdgife.ink")) {
-            val m = StoryManager(compileInk("$head\n{clamp(15, 0, 10)} {fmt(avg2(1, 2), 1, \"round\")}"))
-            assertEquals(listOf("10 1.5"), m.next().texts())
+            val manager = StoryManager(compileInk("$head\n{clamp(15, 0, 10)} {fmt(avg2(1, 2), 1, \"round\")}"))
+            assertEquals(listOf("10 1.5"), manager.next().texts())
         }
     }
 
@@ -81,8 +80,8 @@ class ApiReviewTest {
     @Test
     fun `the old emit names are gone`() {
         assertFailsWith<InkCompileException> { compileLib("~ emit0(\"x\")\nHi") }
-        val m = managerOf("~ emit(\"a\")\n~ emit1(\"b\", 1)\n~ emit2(\"c\", 1, 2)\n~ emit3(\"d\", 1, 2, 3)\nHi")
-        val step = m.next()
+        val manager = managerOf("~ emit(\"a\")\n~ emit1(\"b\", 1)\n~ emit2(\"c\", 1, 2)\n~ emit3(\"d\", 1, 2, 3)\nHi")
+        val step = manager.next()
         assertEquals(listOf("a", "b", "c", "d"), step.events.map { it.name })
         assertEquals(listOf(0, 1, 2, 3), step.events.map { it.args.size })
     }
@@ -106,32 +105,32 @@ class ApiReviewTest {
 
     @Test
     fun `programmer errors stay IllegalArgument and IllegalState`() {
-        val m = managerOf("Hi\n* [Go] -> END")
-        m.next()
-        assertFailsWith<IllegalArgumentException> { m.choose(9) }
-        assertFailsWith<IllegalArgumentException> { m.setVariable("nope", 1) }
-        assertFailsWith<IllegalArgumentException> { m.observe("nope") { _, _ -> } }
+        val manager = managerOf("Hi\n* [Go] -> END")
+        manager.next()
+        assertFailsWith<IllegalArgumentException> { manager.choose(9) }
+        assertFailsWith<IllegalArgumentException> { manager.setVariable("nope", 1) }
+        assertFailsWith<IllegalArgumentException> { manager.observe("nope") { _, _ -> } }
     }
 
     @Test
     fun `beginScene wraps ink's path error and leaves the speaker`() {
-        val m = managerOf("=== scene ===\nHello\n-> END")
-        m.speaker = "keep"
-        val ex = assertFailsWith<StoryPathException> { m.beginScene("nope.missing", "other") }
+        val manager = managerOf("=== scene ===\nHello\n-> END")
+        manager.speaker = "keep"
+        val ex = assertFailsWith<StoryPathException> { manager.beginScene("nope.missing", "other") }
         assertEquals("nope.missing", ex.path)
         assertIs<com.bladecoder.ink.runtime.StoryException>(ex.cause)
-        assertEquals("keep", m.speaker)
-        m.beginScene("scene", "guard")
-        assertEquals("guard", m.speaker)
-        assertEquals(listOf("Hello"), m.next().texts())
+        assertEquals("keep", manager.speaker)
+        manager.beginScene("scene", "guard")
+        assertEquals("guard", manager.speaker)
+        assertEquals(listOf("Hello"), manager.next().texts())
     }
 
     @Test
     fun `a save from a newer version and a broken envelope are SaveStateExceptions`() {
-        val m = managerOf("Hi")
-        val ex = assertFailsWith<SaveStateException> { m.loadState("{\"v\":99,\"ink\":\"{}\"}") }
+        val manager = managerOf("Hi")
+        val ex = assertFailsWith<SaveStateException> { manager.loadState("{\"v\":99,\"ink\":\"{}\"}") }
         assertContains(ex.message.orEmpty(), "99")
-        assertFailsWith<SaveStateException> { m.loadState("{\"v\":1}\n") }.also { assertIs<HdgifeException>(it) }
+        assertFailsWith<SaveStateException> { manager.loadState("{\"v\":1}\n") }.also { assertIs<HdgifeException>(it) }
     }
 
     @Test
@@ -139,7 +138,7 @@ class ApiReviewTest {
         val old = compileInk("VAR hdgife_speaker = \"\"\nHi")
         val ex = assertFailsWith<IncompatibleLibraryException> { StoryManager(old) }
         assertEquals(0, ex.found)
-        assertEquals(HdgifeInk.VERSION, ex.expected)
+        assertEquals(HdgifeInk.version, ex.expected)
         val missing = assertFailsWith<IncompatibleLibraryException> { managerOf("Hi", lib = false).seedRandom(1) }
         assertContains(missing.message.orEmpty(), "INCLUDE hdgife.ink")
     }
@@ -147,9 +146,9 @@ class ApiReviewTest {
     @Test
     fun `the log hears about a refused library`() {
         val sink = LogSink()
-        val m = managerOf("Hi")
-        m.log = sink
-        assertFailsWith<IncompatibleLibraryException> { m.replaceStory(compileInk("VAR hdgife_speaker = \"\"\nHi")) }
+        val manager = managerOf("Hi")
+        manager.log = sink
+        assertFailsWith<IncompatibleLibraryException> { manager.replaceStory(compileInk("VAR hdgife_speaker = \"\"\nHi")) }
         assertContains(sink.messages.joinToString(), "out of date")
     }
 
@@ -157,47 +156,47 @@ class ApiReviewTest {
 
     @Test
     fun `getVariable reads untyped and typed`() {
-        val m = managerOf(varInk)
-        assertEquals(10, m.getVariable("hp"))
-        assertNull(m.getVariable("nope"))
-        assertEquals(10, m.getVariable("hp", Int::class))
-        assertEquals(10.0, m.getVariable("hp", Double::class))
-        assertEquals(10L, m.getVariable("hp", Long::class))
-        assertEquals(1.5, m.getVariable("rate", Double::class))
-        assertNull(m.getVariable("nope", Int::class))
-        assertFailsWith<IllegalArgumentException> { m.getVariable("name", Int::class) }
+        val manager = managerOf(varInk)
+        assertEquals(10, manager.getVariable("hp"))
+        assertNull(manager.getVariable("nope"))
+        assertEquals(10, manager.getVariable("hp", Int::class))
+        assertEquals(10.0, manager.getVariable("hp", Double::class))
+        assertEquals(10L, manager.getVariable("hp", Long::class))
+        assertEquals(1.5, manager.getVariable("rate", Double::class))
+        assertNull(manager.getVariable("nope", Int::class))
+        assertFailsWith<IllegalArgumentException> { manager.getVariable("name", Int::class) }
     }
 
     @Test
     fun `variableAs is the inline form`() {
-        val m = managerOf(varInk)
-        assertEquals(10f, m.variableAs<Float>("hp"))
-        assertEquals("Ann", m.variableAs<String>("name"))
-        assertNull(m.variableAs<Int>("nope"))
-        assertFailsWith<IllegalArgumentException> { m.variableAs<String>("hp") }
+        val manager = managerOf(varInk)
+        assertEquals(10f, manager.variableAs<Float>("hp"))
+        assertEquals("Ann", manager.variableAs<String>("name"))
+        assertNull(manager.variableAs<Int>("nope"))
+        assertFailsWith<IllegalArgumentException> { manager.variableAs<String>("hp") }
     }
 
     @Test
     fun `replaceStory keeps observers, functions and the speaker`() {
-        val m = managerOf("EXTERNAL add(a)\nVAR hp = 1\n~ hp = 4\n{add(1)}\n=== function add(a) ===\n~ return a")
-        m.bindFunction("add") { it.int(0) + 100 }
+        val manager = managerOf("EXTERNAL add(a)\nVAR hp = 1\n~ hp = 4\n{add(1)}\n=== function add(a) ===\n~ return a")
+        manager.bindFunction("add") { it.int(0) + 100 }
         var seen = 0
-        m.observe("hp") { _, new -> seen = new as Int }
-        m.speaker = "p"
+        manager.observe("hp") { _, new -> seen = new as Int }
+        manager.speaker = "p"
         val next = compileLib("EXTERNAL add(a)\nVAR hp = 1\n~ hp = 7\n{add(2)}\n=== function add(a) ===\n~ return a")
-        m.replaceStory(next)
-        assertSame(next, m.story)
-        assertEquals("p", m.speaker)
-        assertEquals(listOf("102"), m.next().texts())
+        manager.replaceStory(next)
+        assertSame(next, manager.story)
+        assertEquals("p", manager.speaker)
+        assertEquals(listOf("102"), manager.next().texts())
         assertEquals(7, seen)
     }
 
     @Test
     fun `a refused replacement leaves the story`() {
-        val m = managerOf("Hi")
-        val before = m.story
-        assertFailsWith<IncompatibleLibraryException> { m.replaceStory(compileInk("VAR hdgife_speaker = \"\"\nHi")) }
-        assertSame(before, m.story)
+        val manager = managerOf("Hi")
+        val before = manager.story
+        assertFailsWith<IncompatibleLibraryException> { manager.replaceStory(compileInk("VAR hdgife_speaker = \"\"\nHi")) }
+        assertSame(before, manager.story)
     }
 
     private fun assertSame(expected: Any?, actual: Any?) = kotlin.test.assertSame(expected, actual)
@@ -216,17 +215,17 @@ class ApiReviewTest {
 
     @Test
     fun `result classes have value equality and a readable toString`() {
-        val a = managerOf("Hello <b>there</b>\n~ emit1(\"e\", 1)\n* [Go] -> END").next()
-        val b = managerOf("Hello <b>there</b>\n~ emit1(\"e\", 1)\n* [Go] -> END").next()
-        assertEquals(a, b)
-        assertEquals(a.hashCode(), b.hashCode())
-        assertEquals(a.lines.single(), b.lines.single())
-        assertEquals(a.choices.single(), b.choices.single())
-        assertEquals(a.events.single(), b.events.single())
-        assertContains(a.toString(), "Hello there")
-        assertContains(a.events.single().toString(), "name=e")
-        val c = managerOf("Other\n-> END").next()
-        assertNotEquals(a, c)
+        val step = managerOf("Hello <b>there</b>\n~ emit1(\"e\", 1)\n* [Go] -> END").next()
+        val sameStep = managerOf("Hello <b>there</b>\n~ emit1(\"e\", 1)\n* [Go] -> END").next()
+        assertEquals(step, sameStep)
+        assertEquals(step.hashCode(), sameStep.hashCode())
+        assertEquals(step.lines.single(), sameStep.lines.single())
+        assertEquals(step.choices.single(), sameStep.choices.single())
+        assertEquals(step.events.single(), sameStep.events.single())
+        assertContains(step.toString(), "Hello there")
+        assertContains(step.events.single().toString(), "name=e")
+        val otherStep = managerOf("Other\n-> END").next()
+        assertNotEquals(step, otherStep)
     }
 
     @Test
@@ -272,9 +271,9 @@ class ApiReviewTest {
 
     @Test
     fun `a StoryStepException is an HdgifeException with the partial step`() {
-        val m = managerOf("Line one\n~ boom()\nLine two\n-> END\nEXTERNAL boom()\n=== function boom() ===\n~ return 0")
-        m.bindFunction("boom") { error("bang") }
-        val ex = assertFailsWith<StoryStepException> { m.next() }
+        val manager = managerOf("Line one\n~ boom()\nLine two\n-> END\nEXTERNAL boom()\n=== function boom() ===\n~ return 0")
+        manager.bindFunction("boom") { error("bang") }
+        val ex = assertFailsWith<StoryStepException> { manager.next() }
         assertIs<HdgifeException>(ex)
         assertEquals(listOf("Line one"), ex.step.texts())
     }

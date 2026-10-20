@@ -10,11 +10,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/**
- * Canaries for the Blade Ink internals hdgife depends on: the package-private method HdgifeStory overrides, and what
- * InkNativePatch registers. The build pins Blade Ink to one version; if you bump it and one of these fails, check the
- * patches against the new source before changing the test.
- */
 class UpstreamShapeTest {
     private val pkg = "com.bladecoder.ink.runtime"
 
@@ -37,9 +32,9 @@ class UpstreamShapeTest {
     @Test
     fun `Story callExternalFunction is still package private with the signature HdgifeStory overrides`() {
         val upstream = Story::class.java.declared("callExternalFunction", String::class.java, Int::class.javaPrimitiveType!!)
-        val m = upstream.modifiers
-        assertFalse(Modifier.isPublic(m) || Modifier.isProtected(m) || Modifier.isPrivate(m), "no longer package private")
-        assertFalse(Modifier.isFinal(m) || Modifier.isStatic(m), "no longer overridable")
+        val modifiers = upstream.modifiers
+        assertFalse(Modifier.isPublic(modifiers) || Modifier.isProtected(modifiers) || Modifier.isPrivate(modifiers), "no longer package private")
+        assertFalse(Modifier.isFinal(modifiers) || Modifier.isStatic(modifiers), "no longer overridable")
         assertEquals(Void.TYPE, upstream.returnType)
         val ours = HdgifeStory::class.java.declared("callExternalFunction", String::class.java, Int::class.javaPrimitiveType!!)
         assertEquals(Void.TYPE, ours.returnType)
@@ -77,8 +72,8 @@ class UpstreamShapeTest {
         val generate = native.declared("generateNativeFunctionsIfNecessary")
         assertTrue(Modifier.isStatic(generate.modifiers))
         for (field in listOf("Floor", "Ceiling", "Int")) {
-            val f = native.getDeclaredField(field)
-            assertTrue(Modifier.isStatic(f.modifiers) && f.type == String::class.java, "$field changed")
+            val nativeField = native.getDeclaredField(field)
+            assertTrue(Modifier.isStatic(nativeField.modifiers) && nativeField.type == String::class.java, "$field changed")
         }
         assertTrue(unaryOp.isInterface)
         assertEquals(Any::class.java, unaryOp.declared("invoke", Any::class.java).returnType)

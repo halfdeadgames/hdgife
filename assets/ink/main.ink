@@ -68,7 +68,7 @@ The common room smells of wet wool and lamp oil. {suspicion >= 3: Every eye in t
 * [Read the toll ledger] -> ledger
 * [Ask about the rumor] -> rumor
 + {door_open} [Slip out through the side door] -> escape
-+ [Pay the toll and leave # requires: player.coin >= 3, varga.stance != HOSTILE] -> pay_and_leave
++ [Pay the toll and leave # requires: player.coin >= 3, varga.stance != Hostile] -> pay_and_leave
 
 // Varga: combined metrics, sanity-scaled flavor, glue across a stat call, dice through a bound function, requirements.
 === varga_talk ===

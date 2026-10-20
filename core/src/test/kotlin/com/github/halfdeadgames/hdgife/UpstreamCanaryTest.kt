@@ -6,24 +6,18 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Canaries for the Blade Ink 1.3.2 bugs that hdgife patches (InkNativePatch and HdgifeStory). They run the
- * UNPATCHED upstream classes, loaded in a separate class loader, and expect the bugs. If one of these fails,
- * upstream fixed it in the Blade Ink version now in use: revisit the patches and then update or delete the canary.
- */
 class UpstreamCanaryTest {
     private fun probe(method: String, json: String): String {
         val probeName = UpstreamProbe::class.java.name
-        val urls = listOf(
-            com.bladecoder.ink.runtime.Story::class.java, // blade-ink jar
-            UpstreamProbe::class.java, // test classes
+        val classpathLocations = listOf(
+            com.bladecoder.ink.runtime.Story::class.java,
+            UpstreamProbe::class.java,
         ).map { it.protectionDomain.codeSource.location }.toTypedArray()
-        return Isolated(urls, UpstreamCanaryTest::class.java.classLoader, probeName).use { loader ->
+        return Isolated(classpathLocations, UpstreamCanaryTest::class.java.classLoader, probeName).use { loader ->
             loader.loadClass(probeName).getMethod(method, String::class.java).invoke(null, json) as String
         }
     }
 
-    /** Child-first for Blade Ink and the probe, so they don't see hdgife's patches. */
     private class Isolated(urls: Array<URL>, parent: ClassLoader, private val probeName: String) : URLClassLoader(urls, parent) {
         override fun loadClass(name: String, resolve: Boolean): Class<*> {
             if (!name.startsWith("com.bladecoder.ink.") && !name.startsWith(probeName)) return super.loadClass(name, resolve)
@@ -37,10 +31,10 @@ class UpstreamCanaryTest {
 
     @Test
     fun `canary - upstream FLOOR on a float still throws`() {
-        val result = probe("floorOnFloat", compileInk("{FLOOR(2.5)}").toJson())
+        val probed = probe("floorOnFloat", compileInk("{FLOOR(2.5)}").toJson())
         assertTrue(
-            result.startsWith("error:ClassCastException"),
-            "Blade Ink now gives '$result' for FLOOR(2.5). The FLOOR/CEILING/INT cast bug looks fixed upstream: revisit InkNativePatch.",
+            probed.startsWith("error:ClassCastException"),
+            "Blade Ink now gives '$probed' for FLOOR(2.5). The FLOOR/CEILING/INT cast bug looks fixed upstream: revisit InkNativePatch.",
         )
     }
 
@@ -48,10 +42,10 @@ class UpstreamCanaryTest {
 
     @Test
     fun `canary - upstream rejects a lookahead safe function in a string`() {
-        val result = probe("safeFunctionInString", compileInk(stringInk).toJson())
+        val probed = probe("safeFunctionInString", compileInk(stringInk).toJson())
         assertTrue(
-            result.startsWith("error:StoryException") && "string generation" in result,
-            "Blade Ink now gives '$result' for a safe function in a string. The inverted lookahead guard looks fixed upstream: revisit HdgifeStory.",
+            probed.startsWith("error:StoryException") && "string generation" in probed,
+            "Blade Ink now gives '$probed' for a safe function in a string. The inverted lookahead guard looks fixed upstream: revisit HdgifeStory.",
         )
     }
 

@@ -45,10 +45,10 @@ class CompilerTest {
     @Test
     fun `extra sources are appended in the order given`() {
         val root = InkSource("main.ink", "Root")
-        val a = InkSource("a.ink", "A")
-        val b = InkSource("b.ink", "B")
-        assertEquals(listOf("Root", "A", "B"), linesOf(compiler.compile(listOf(root, a, b))))
-        assertEquals(listOf("Root", "B", "A"), linesOf(compiler.compile(listOf(root, b, a))))
+        val sourceA = InkSource("a.ink", "A")
+        val sourceB = InkSource("b.ink", "B")
+        assertEquals(listOf("Root", "A", "B"), linesOf(compiler.compile(listOf(root, sourceA, sourceB))))
+        assertEquals(listOf("Root", "B", "A"), linesOf(compiler.compile(listOf(root, sourceB, sourceA))))
     }
 
     @Test
@@ -190,10 +190,10 @@ class CompilerTest {
     fun `loadCompiled gives a story that plays the same as the original`() {
         val original = compileLib("VAR n = 4\nHello {n}\n* [Pick] Done -> END")
         val loaded = compiler.loadCompiled(original.toJson())
-        val a = StoryManager(original).next()
-        val b = StoryManager(loaded).next()
-        assertEquals(a.texts(), b.texts())
-        assertEquals(a.choices.map { it.text }, b.choices.map { it.text })
+        val originalStep = StoryManager(original).next()
+        val loadedStep = StoryManager(loaded).next()
+        assertEquals(originalStep.texts(), loadedStep.texts())
+        assertEquals(originalStep.choices.map { it.text }, loadedStep.choices.map { it.text })
     }
 
     @Test

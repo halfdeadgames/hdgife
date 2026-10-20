@@ -10,10 +10,10 @@ class LibraryPinTest {
             .use { it.readBytes().toString(Charsets.UTF_8) }
         val pattern = Regex("""^(?:={2,}\s*function|EXTERNAL)\s+(\w+)\s*\(([^)]*)\)""")
         return text.lines().mapNotNull { line ->
-            val m = pattern.find(line) ?: return@mapNotNull null
-            val params = m.groupValues[2].trim()
+            val declaration = pattern.find(line) ?: return@mapNotNull null
+            val params = declaration.groupValues[2].trim()
             val arity = if (params.isEmpty()) 0 else params.split(',').size
-            "${m.groupValues[1]}/$arity"
+            "${declaration.groupValues[1]}/$arity"
         }
     }
 
@@ -23,7 +23,6 @@ class LibraryPinTest {
         return digest.joinToString("") { "%02x".format(it) }
     }
 
-    /** The hash of the sorted function names and arities for each library version. Add a line when you bump the version. */
     private val pinned = mapOf(
         1 to "06de8d3f1e6320e55080dce5aab9f51aa5efa5c266542b245b2f8c2aa9bd5bc9",
         2 to "49e95613d50e6e282fd7a8e26305ac74dc6c91a61066630ff88c9690276e6142",
@@ -32,7 +31,7 @@ class LibraryPinTest {
     @Test
     fun `library functions are pinned to hdgife_version`() {
         assertEquals(
-            pinned[HdgifeInk.VERSION],
+            pinned[HdgifeInk.version],
             currentHash(),
             "library changed: bump hdgife_version (in hdgife.ink) and pin the new hash for it in LibraryPinTest",
         )

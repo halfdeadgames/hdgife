@@ -11,66 +11,39 @@ import com.github.halfdeadgames.hdgife.HdgifeLog
 import com.badlogic.gdx.Gdx
 import java.io.FileNotFoundException
 
-/**
- * Compiles ink into an [HdgifeStory]. It compiles what you give it, in the order you give it.
- * Choosing the sources, their order and the thread is the game's job. To run a different set of sources,
- * compile again and build a new `StoryManager` from the new story.
- *
- * Every call is plain blocking. Run it on whatever thread or coroutine context you like, but don't use the
- * [Story] from two threads at once.
- *
- * How sources are combined: the first source is the root. Each later source ("extra") is appended to the
- * root as an `INCLUDE`, in list order. Ink cannot override a knot defined earlier, a duplicate is an error.
- *
- * `INCLUDE x.ink` inside a source is resolved relative to that source's own name, with `..` allowed.
- * It finds a listed source of that name first, then asks [InkSource.sibling]. A source is only ever
- * loaded once per compile, so listing a file that another source also includes is fine.
- * `INCLUDE hdgife.ink` gives the bundled core library from the classpath, and `INCLUDE hdgife_util.ink` the optional
- * math helpers. They work together or alone, and are never added automatically.
- *
- * Errors are [InkCompileException]s. Ink's messages name the source and line.
- *
- * Sources from libGDX `FileHandle`s are compiled with the extension functions in GdxSources.kt (`compile(file)`,
- * `compileFolder(folder)`, `InkSource.of(file)`), which keep gdx types out of this class.
- */
 public class InkCompilerService {
-    /** Gets ink warnings and notes. Null means they are dropped. */
     public var log: HdgifeLog? = null
 
     init {
-        // FLOOR, CEILING and INT crash on floats in Blade Ink 1.3.2, see InkNativePatch
         InkNativePatch.apply()
     }
 
-    /** Compiles [sources]. The first is the root and the others are included after it, in order. */
     public fun compile(sources: List<InkSource>): HdgifeStory {
         require(sources.isNotEmpty()) { "No ink sources given" }
         val byName = LinkedHashMap<String, InkSource>()
         for (source in sources) {
-            require(source.name !in BUILTIN_PATHS) { "'${source.name}' is reserved for the bundled library" }
+            require(source.name !in bundledLibraryPaths) { "'${source.name}' is reserved for the bundled library" }
             require(byName.put(source.name, source) == null) { "Duplicate ink source name '${source.name}'" }
         }
-        val handler = SourceResolver(byName)
+        val resolver = SourceResolver(byName)
         val root = sources[0]
         val story = try {
             val text = buildString {
-                append(handler.prepare(root, handler.read(root))).append('\n')
+                append(resolver.prepare(root, resolver.read(root))).append('\n')
                 for (extra in sources.drop(1)) append("INCLUDE ").append(extra.name).append('\n')
             }
-            run(root.name, text, handler)
+            run(root.name, text, resolver)
         } catch (e: InkCompileException) {
-            throw InkCompileException(e.errors + handler.failures, e.source ?: handler.failedSource, e.cause)
+            throw InkCompileException(e.errors + resolver.failures, e.source ?: resolver.failedSource, e.cause)
         } catch (e: SourceReadException) {
             throw InkCompileException(listOf(e.message.orEmpty()), e.sourceName, e.cause)
         }
         return finish(story)
     }
 
-    /** Compiles [main] as the root, then [extras] in the order given. */
     @JvmOverloads
     public fun compile(main: InkSource, extras: List<InkSource> = emptyList()): HdgifeStory = compile(listOf(main) + extras)
 
-    /** Loads a story from compiled JSON, as made by `story.toJson()`. No compiler work is done. */
     public fun loadCompiled(json: String): HdgifeStory {
         val story = try {
             HdgifeStory(json)
@@ -80,15 +53,13 @@ public class InkCompilerService {
         return finish(story)
     }
 
-    /** Rebuilds [story] as an [HdgifeStory] (fresh state) with ink fallbacks for EXTERNAL functions allowed. */
-    // Kept although StoryManager sets it too: a story used without a manager needs the ink fallbacks to run.
     private fun finish(story: Story): HdgifeStory = HdgifeStory.from(story).also { it.setAllowExternalFunctionFallbacks(true) }
 
-    private fun run(rootName: String, text: String, handler: IFileHandler): Story {
+    private fun run(rootName: String, text: String, resolver: IFileHandler): Story {
         val errors = ArrayList<String>()
         val options = Compiler.Options().apply {
             sourceFilename = rootName
-            fileHandler = handler
+            fileHandler = resolver
             errorHandler = ErrorHandler { message, type ->
                 if (type == ErrorType.Error) errors += message else log?.log(message)
             }
@@ -104,33 +75,26 @@ public class InkCompilerService {
     private class SourceReadException(val sourceName: String, cause: Throwable) :
         RuntimeException("Cannot read ink source '$sourceName': ${cause.message}", cause)
 
-    /**
-     * Ink hands the file handler only the include text, not who included it. So each source's
-     * `INCLUDE` lines are rewritten to full names before ink sees them, and resolved here.
-     */
     private class SourceResolver(private val listed: MutableMap<String, InkSource>) : IFileHandler {
         private val loaded = HashSet<String>()
 
-        /** Why includes failed to load. Ink only says "Failed to load", this keeps the reason. */
         val failures = ArrayList<String>()
 
-        /** Name of the first source that could not be read, if any. */
         var failedSource: String? = null
             private set
 
         fun prepare(source: InkSource, text: String): String {
             loaded += source.name
-            val dir = source.name.substringBeforeLast('/', "")
-            val blocks = blockComments(text)
-            return INCLUDE_LINE.replace(text) { match ->
-                // an INCLUDE inside a /* */ block is text, and a trailing // or /* comment is not part of the name
-                if (blocks.any { match.range.first in it }) return@replace match.value
+            val directory = source.name.substringBeforeLast('/', "")
+            val blockCommentRanges = blockComments(text)
+            return includeLine.replace(text) { match ->
+                if (blockCommentRanges.any { match.range.first in it }) return@replace match.value
                 val target = match.groupValues[2].substringBefore("//").substringBefore("/*").trim()
                 if (target.isEmpty()) return@replace match.value
-                if (target in BUILTIN_PATHS) return@replace match.value
-                val full = normalizePath("$dir/$target")
-                if (full !in listed) source.sibling?.invoke(target)?.let { listed[full] = it }
-                match.groupValues[1] + full
+                if (target in bundledLibraryPaths) return@replace match.value
+                val fullPath = normalizePath("$directory/$target")
+                if (fullPath !in listed) source.sibling?.invoke(target)?.let { listed[fullPath] = it }
+                match.groupValues[1] + fullPath
             }
         }
 
@@ -146,10 +110,10 @@ public class InkCompilerService {
         override fun resolveInkFilename(includeName: String): String = normalizePath(includeName)
 
         override fun loadInkFileContents(fullFilename: String): String {
-            val builtinPath = BUILTIN_PATHS[fullFilename]
-            if (builtinPath != null) {
+            val bundledPath = bundledLibraryPaths[fullFilename]
+            if (bundledPath != null) {
                 if (!loaded.add(fullFilename)) return ""
-                return readBundled(builtinPath) ?: throw FileNotFoundException("Bundled $builtinPath is missing")
+                return readBundled(bundledPath) ?: throw FileNotFoundException("Bundled $bundledPath is missing")
             }
             val source = listed[fullFilename] ?: run {
                 failures += "Unlisted ink source: $fullFilename"
@@ -161,20 +125,14 @@ public class InkCompilerService {
     }
 
     private companion object {
-        /**
-         * The text of a bundled resource, or null when it is not there. The class loader serves it on the JVM and on
-         * Android. A platform with no class loader resources (the browser, through TeaVM) can ship the folder as a
-         * libGDX classpath asset instead, so that is the fallback.
-         */
         fun readBundled(path: String): String? {
-            val stream = InkCompilerService::class.java.classLoader?.getResourceAsStream(path)
-            if (stream != null) return stream.use { String(it.readBytes(), Charsets.UTF_8) }
-            val files = Gdx.files ?: return null
-            val handle = files.classpath(path)
+            val classpathStream = InkCompilerService::class.java.classLoader?.getResourceAsStream(path)
+            if (classpathStream != null) return classpathStream.use { String(it.readBytes(), Charsets.UTF_8) }
+            val gdxFiles = Gdx.files ?: return null
+            val handle = gdxFiles.classpath(path)
             return if (handle.exists()) handle.readString("UTF-8") else null
         }
 
-        // Character ranges of the block comments in the text. Line comments are skipped so a block opener in one is ignored.
         fun blockComments(text: String): List<IntRange> {
             val ranges = ArrayList<IntRange>()
             var i = 0
@@ -184,8 +142,8 @@ public class InkCompilerService {
                     if (end < 0) break
                     i = end + 1
                 } else if (text.startsWith("/*", i)) {
-                    val close = text.indexOf("*/", i + 2)
-                    val end = if (close < 0) text.length else close + 2
+                    val closeIndex = text.indexOf("*/", i + 2)
+                    val end = if (closeIndex < 0) text.length else closeIndex + 2
                     ranges += i until end
                     i = end
                 } else {
@@ -195,11 +153,10 @@ public class InkCompilerService {
             return ranges
         }
 
-        /** The bundled libraries: the name ink sources `INCLUDE` them by, and where they sit on the classpath. */
-        val BUILTIN_PATHS = mapOf(
+        val bundledLibraryPaths = mapOf(
             "hdgife.ink" to "hdgife/hdgife.ink",
             "hdgife_util.ink" to "hdgife/hdgife_util.ink",
         )
-        val INCLUDE_LINE = Regex("(?m)^([ \\t]*INCLUDE[ \\t]+)([^\\r\\n]+)")
+        val includeLine = Regex("(?m)^([ \\t]*INCLUDE[ \\t]+)([^\\r\\n]+)")
     }
 }

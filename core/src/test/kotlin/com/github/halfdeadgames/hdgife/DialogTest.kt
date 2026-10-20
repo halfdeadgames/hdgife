@@ -13,50 +13,50 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DialogTest {
-    private enum class Mood { CALM, ANGRY }
+    private enum class Mood { Calm, Angry }
 
     @Test
     fun `glue joins across a stat call`() {
         val stats = MapStats().also { it["p", "hp"] = 7 }
-        val m = managerOf("You have\n~ temp hp = stat_of(\"p\", \"hp\")\n<> {hp} hp.", stats)
-        assertEquals(listOf("You have 7 hp."), m.next().texts())
+        val manager = managerOf("You have\n~ temp hp = stat_of(\"p\", \"hp\")\n<> {hp} hp.", stats)
+        assertEquals(listOf("You have 7 hp."), manager.next().texts())
     }
 
     @Test
     fun `glue joins when the stat is printed directly after the break`() {
         val stats = MapStats().also { it["p", "hp"] = 7 }
-        val m = managerOf("Health:\n<> {stat_of(\"p\", \"hp\")}!", stats)
-        assertEquals(listOf("Health: 7!"), m.next().texts())
+        val manager = managerOf("Health:\n<> {stat_of(\"p\", \"hp\")}!", stats)
+        assertEquals(listOf("Health: 7!"), manager.next().texts())
     }
 
     @Test
     fun `glue joins across stat_text and fmt calls`() {
         val stats = MapStats().also { it["p", "hp"] = 7.25f }
-        val m = managerOf("Now\n<> {stat_text_of(\"p\", \"hp\")} / {fmt(1.5, 0, \"floor\")}", stats)
-        m.numberFormat = com.github.halfdeadgames.hdgife.story.NumberFormat(1)
-        assertEquals(listOf("Now 7.3 / 1"), m.next().texts())
+        val manager = managerOf("Now\n<> {stat_text_of(\"p\", \"hp\")} / {fmt(1.5, 0, \"floor\")}", stats)
+        manager.numberFormat = com.github.halfdeadgames.hdgife.story.NumberFormat(1)
+        assertEquals(listOf("Now 7.3 / 1"), manager.next().texts())
     }
 
     @Test
     fun `stats work in choice text`() {
         val stats = MapStats().also { it["p", "gold"] = 50 }
-        val m = managerOf("* [Pay {stat_of(\"p\", \"gold\")} gold] Paid -> END", stats)
-        assertEquals("Pay 50 gold", m.next().choices.single().text)
+        val manager = managerOf("* [Pay {stat_of(\"p\", \"gold\")} gold] Paid -> END", stats)
+        assertEquals("Pay 50 gold", manager.next().choices.single().text)
     }
 
     @Test
     fun `stat_text and fmt work in choice text`() {
         val stats = MapStats().also { it["p", "gold"] = 50.55f }
-        val m = managerOf("* [Pay {stat_text_of(\"p\", \"gold\")} or {fmt(2.5, 0, \"floor\")}] Paid -> END", stats)
-        m.numberFormat = com.github.halfdeadgames.hdgife.story.NumberFormat(1)
-        assertEquals("Pay 50.6 or 2", m.next().choices.single().text)
+        val manager = managerOf("* [Pay {stat_text_of(\"p\", \"gold\")} or {fmt(2.5, 0, \"floor\")}] Paid -> END", stats)
+        manager.numberFormat = com.github.halfdeadgames.hdgife.story.NumberFormat(1)
+        assertEquals("Pay 50.6 or 2", manager.next().choices.single().text)
     }
 
     @Test
     fun `stats work in choice text after glue`() {
         val stats = MapStats().also { it["p", "gold"] = 5 }
-        val m = managerOf("Wait\n<> now\n* [Pay {stat_of(\"p\", \"gold\")}] -> END", stats)
-        val step = m.next()
+        val manager = managerOf("Wait\n<> now\n* [Pay {stat_of(\"p\", \"gold\")}] -> END", stats)
+        val step = manager.next()
         assertEquals(listOf("Wait now"), step.texts())
         assertEquals("Pay 5", step.choices.single().text)
     }
@@ -69,68 +69,68 @@ class DialogTest {
     @Test
     fun `lookaheadSafe is a mode decided by the entry point`() {
         val plain = com.bladecoder.ink.runtime.Story(compileLib("Hi").toJson())
-        val m = StoryManager.forPlainStory(plain)
-        assertFalse(m.isLookaheadSafe)
-        m.replaceStory(compileLib("Hi"))
-        assertTrue(m.isLookaheadSafe)
-        m.replacePlainStory(plain)
-        assertFalse(m.isLookaheadSafe)
+        val manager = StoryManager.forPlainStory(plain)
+        assertFalse(manager.isLookaheadSafe)
+        manager.replaceStory(compileLib("Hi"))
+        assertTrue(manager.isLookaheadSafe)
+        manager.replacePlainStory(plain)
+        assertFalse(manager.isLookaheadSafe)
     }
 
     @Test
     fun `a speaker tag names one line only`() {
-        val m = managerOf("Halt. # speaker: guard\nMove along.")
-        val lines = m.next().lines
+        val manager = managerOf("Halt. # speaker: guard\nMove along.")
+        val lines = manager.next().lines
         assertEquals("guard", lines[0].speaker)
         assertNull(lines[1].speaker)
     }
 
     @Test
     fun `speak sets the persistent speaker for following lines`() {
-        val m = managerOf("~ speak(\"guard\")\nHalt.\nMove along.\n~ speak(\"\")\nSilence.")
-        val lines = m.next().lines
+        val manager = managerOf("~ speak(\"guard\")\nHalt.\nMove along.\n~ speak(\"\")\nSilence.")
+        val lines = manager.next().lines
         assertEquals(listOf("guard", "guard", null), lines.map { it.speaker })
-        assertNull(m.speaker)
+        assertNull(manager.speaker)
     }
 
     @Test
     fun `a tag speaker wins over the persistent speaker for its line`() {
-        val m = managerOf("~ speak(\"guard\")\nHalt. # speaker: merchant\nMove along.")
-        assertEquals(listOf("merchant", "guard"), m.next().lines.map { it.speaker })
+        val manager = managerOf("~ speak(\"guard\")\nHalt. # speaker: merchant\nMove along.")
+        assertEquals(listOf("merchant", "guard"), manager.next().lines.map { it.speaker })
     }
 
     @Test
     fun `speak changes whose stats stat reads`() {
         val stats = MapStats().also { it["guard", "mood"] = 10; it["merchant", "mood"] = 90 }
-        val m = managerOf(
+        val manager = managerOf(
             "~ speak(\"guard\")\n{stat(\"mood\")}\n~ speak(\"merchant\")\n{stat(\"mood\")}",
             stats,
         )
-        assertEquals(listOf("10", "90"), m.next().texts())
+        assertEquals(listOf("10", "90"), manager.next().texts())
     }
 
     @Test
     fun `the speaker tag key can be changed`() {
-        val m = managerOf("Halt. # who: guard")
-        m.speakerTagKey = "who"
-        assertEquals("guard", m.next().lines.single().speaker)
+        val manager = managerOf("Halt. # who: guard")
+        manager.speakerTagKey = "who"
+        assertEquals("guard", manager.next().lines.single().speaker)
     }
 
     @Test
     fun `beginScene sets the speaker and jumps to the knot`() {
-        val m = managerOf("-> END\n=== scene ===\nHello\n-> END")
-        m.beginScene("scene", "guard")
-        val step = m.next()
+        val manager = managerOf("-> END\n=== scene ===\nHello\n-> END")
+        manager.beginScene("scene", "guard")
+        val step = manager.next()
         assertEquals("guard", step.lines.single().speaker)
-        assertEquals("guard", m.speaker)
+        assertEquals("guard", manager.speaker)
     }
 
     @Test
     fun `the speaker survives save and load`() {
-        val m = managerOf("~ speak(\"guard\")\nHalt.\n* [Go] -> END")
-        m.next()
-        val saved = m.saveState()
-        val other = StoryManager(compiler.loadCompiled(m.story.toJson()))
+        val manager = managerOf("~ speak(\"guard\")\nHalt.\n* [Go] -> END")
+        manager.next()
+        val saved = manager.saveState()
+        val other = StoryManager(compiler.loadCompiled(manager.story.toJson()))
         assertNull(other.speaker)
         other.loadState(saved)
         assertEquals("guard", other.speaker)
@@ -138,13 +138,13 @@ class DialogTest {
 
     @Test
     fun `the speaker set by the game survives save and load`() {
-        val m = managerOf("Hi\n* [Go] Bye -> END")
-        m.speaker = "merchant"
-        m.next()
-        val saved = m.saveState()
-        m.speaker = null
-        m.loadState(saved)
-        assertEquals("merchant", m.speaker)
+        val manager = managerOf("Hi\n* [Go] Bye -> END")
+        manager.speaker = "merchant"
+        manager.next()
+        val saved = manager.saveState()
+        manager.speaker = null
+        manager.loadState(saved)
+        assertEquals("merchant", manager.speaker)
     }
 
     @Test
@@ -192,57 +192,57 @@ class DialogTest {
     @Test
     fun `blank tags are dropped and an empty list gives EMPTY`() {
         assertTrue(Tags.parse(listOf("  ", "")).isEmpty)
-        assertEquals(Tags.EMPTY, Tags.parse(emptyList()))
+        assertEquals(Tags.empty, Tags.parse(emptyList()))
     }
 
     @Test
     fun `line tags include tags written on the line above`() {
-        val m = managerOf("# above: yes\nText # inline: also")
-        val tags = m.next().lines.single().tags
+        val manager = managerOf("# above: yes\nText # inline: also")
+        val tags = manager.next().lines.single().tags
         assertEquals("yes", tags["above"])
         assertEquals("also", tags["inline"])
     }
 
     @Test
     fun `step tags collect the tags of every line`() {
-        val m = managerOf("One # a: 1\nTwo # b: 2")
-        val tags = m.next().tags
+        val manager = managerOf("One # a: 1\nTwo # b: 2")
+        val tags = manager.next().tags
         assertEquals("1", tags["a"])
         assertEquals("2", tags["b"])
     }
 
     @Test
     fun `choice tags come from inside the choice text`() {
-        val m = managerOf("* [Go # style: loud] -> END")
-        assertEquals("loud", m.next().choices.single().tags["style"])
+        val manager = managerOf("* [Go # style: loud] -> END")
+        assertEquals("loud", manager.next().choices.single().tags["style"])
     }
 
     private fun requirement(clause: String, stats: MapStats, speaker: String? = "p") =
         managerOf("* [Go # requires: $clause] -> END", stats).also { it.speaker = speaker }.next().choices.single()
 
-    private fun statsOf(vararg pairs: Pair<String, Any?>) = MapStats().also { s ->
-        for ((k, v) in pairs) {
-            val (entity, stat) = k.split('.')
-            s[entity, stat] = v
+    private fun statsOf(vararg pairs: Pair<String, Any?>) = MapStats().also { provider ->
+        for ((key, value) in pairs) {
+            val (entity, stat) = key.split('.')
+            provider[entity, stat] = value
         }
     }
 
     @Test
     fun `a numeric requirement is met`() {
-        val c = requirement("strength >= 12", statsOf("p.strength" to 12))
-        assertTrue(c.isAvailable)
-        val r = assertIs<RequirementResult.Met>(c.requirements.single())
-        assertEquals(Comparison.GREATER_EQUAL, r.op)
-        assertEquals(12, r.target)
-        assertEquals(12, r.actual)
-        assertEquals("p", r.entity)
+        val choice = requirement("strength >= 12", statsOf("p.strength" to 12))
+        assertTrue(choice.isAvailable)
+        val requirementResult = assertIs<RequirementResult.Met>(choice.requirements.single())
+        assertEquals(Comparison.GreaterEqual, requirementResult.op)
+        assertEquals(12, requirementResult.target)
+        assertEquals(12, requirementResult.actual)
+        assertEquals("p", requirementResult.entity)
     }
 
     @Test
     fun `a numeric requirement is unmet`() {
-        val c = requirement("strength >= 12", statsOf("p.strength" to 11))
-        assertFalse(c.isAvailable)
-        assertIs<RequirementResult.Unmet>(c.requirements.single())
+        val choice = requirement("strength >= 12", statsOf("p.strength" to 11))
+        assertFalse(choice.isAvailable)
+        assertIs<RequirementResult.Unmet>(choice.requirements.single())
     }
 
     @Test
@@ -279,7 +279,7 @@ class DialogTest {
 
     @Test
     fun `an enum stat compares as its name`() {
-        assertTrue(requirement("mood == ANGRY", statsOf("p.mood" to Mood.ANGRY)).isAvailable)
+        assertTrue(requirement("mood == Angry", statsOf("p.mood" to Mood.Angry)).isAvailable)
     }
 
     @Test
@@ -293,42 +293,42 @@ class DialogTest {
     @Test
     fun `an explicit entity overrides the speaker`() {
         val stats = statsOf("guard.mood" to 50, "p.mood" to 5)
-        val c = requirement("guard.mood > 30", stats)
-        assertTrue(c.isAvailable)
-        assertEquals("guard", assertIs<RequirementResult.Met>(c.requirements.single()).entity)
+        val choice = requirement("guard.mood > 30", stats)
+        assertTrue(choice.isAvailable)
+        assertEquals("guard", assertIs<RequirementResult.Met>(choice.requirements.single()).entity)
     }
 
     @Test
     fun `a requirement without entity or speaker is unmet`() {
-        val c = requirement("mood > 30", statsOf("p.mood" to 50), speaker = null)
-        assertFalse(c.isAvailable)
-        assertNull(assertIs<RequirementResult.MissingStat>(c.requirements.single()).entity)
+        val choice = requirement("mood > 30", statsOf("p.mood" to 50), speaker = null)
+        assertFalse(choice.isAvailable)
+        assertNull(assertIs<RequirementResult.MissingStat>(choice.requirements.single()).entity)
     }
 
     @Test
     fun `a missing stat is unmet and reported as missing`() {
-        val c = requirement("strength >= 1", MapStats())
-        assertFalse(c.isAvailable)
-        val r = assertIs<RequirementResult.MissingStat>(c.requirements.single())
-        assertEquals("strength", r.stat)
-        assertEquals(1, r.target)
+        val choice = requirement("strength >= 1", MapStats())
+        assertFalse(choice.isAvailable)
+        val requirementResult = assertIs<RequirementResult.MissingStat>(choice.requirements.single())
+        assertEquals("strength", requirementResult.stat)
+        assertEquals(1, requirementResult.target)
     }
 
     @Test
     fun `comparing a number stat to text is a mismatch`() {
         val sink = LogSink()
-        val m = managerOf("* [Go # requires: strength >= high] -> END", statsOf("p.strength" to 5))
-        m.speaker = "p"
-        m.log = sink
-        val r = assertIs<RequirementResult.Mismatch>(m.next().choices.single().requirements.single())
-        assertFalse(r.isMet)
+        val manager = managerOf("* [Go # requires: strength >= high] -> END", statsOf("p.strength" to 5))
+        manager.speaker = "p"
+        manager.log = sink
+        val requirementResult = assertIs<RequirementResult.Mismatch>(manager.next().choices.single().requirements.single())
+        assertFalse(requirementResult.isMet)
         assertContains(sink.messages.joinToString(), "strength >= high")
     }
 
     @Test
     fun `an ordering operator on a string is a mismatch`() {
-        val r = assertIs<RequirementResult.Mismatch>(requirement("faction > 3", statsOf("p.faction" to "rebels")).requirements.single())
-        assertFalse(r.isMet)
+        val requirementResult = assertIs<RequirementResult.Mismatch>(requirement("faction > 3", statsOf("p.faction" to "rebels")).requirements.single())
+        assertFalse(requirementResult.isMet)
     }
 
     @Test
@@ -344,13 +344,13 @@ class DialogTest {
     @Test
     fun `an unreadable requirement is reported as unreadable and unmet`() {
         val sink = LogSink()
-        val m = managerOf("* [Go # requires: strength] -> END", statsOf("p.strength" to 5))
-        m.speaker = "p"
-        m.log = sink
-        val choice = m.next().choices.single()
-        val r = assertIs<RequirementResult.Unreadable>(choice.requirements.single())
-        assertFalse(r.isMet)
-        assertEquals("strength", r.raw)
+        val manager = managerOf("* [Go # requires: strength] -> END", statsOf("p.strength" to 5))
+        manager.speaker = "p"
+        manager.log = sink
+        val choice = manager.next().choices.single()
+        val requirementResult = assertIs<RequirementResult.Unreadable>(choice.requirements.single())
+        assertFalse(requirementResult.isMet)
+        assertEquals("strength", requirementResult.raw)
         assertFalse(choice.isAvailable)
         assertContains(sink.messages.joinToString(), "cannot read 'strength'")
     }
@@ -363,40 +363,40 @@ class DialogTest {
     @Test
     fun `several clauses must all be met`() {
         val stats = statsOf("p.a" to 1, "p.b" to 1)
-        val c = requirement("a >= 1, b >= 2", stats)
-        assertEquals(2, c.requirements.size)
-        assertFalse(c.isAvailable)
+        val choice = requirement("a >= 1, b >= 2", stats)
+        assertEquals(2, choice.requirements.size)
+        assertFalse(choice.isAvailable)
         assertTrue(requirement("a >= 1, b >= 1", stats).isAvailable)
     }
 
     @Test
     fun `a choice with no requirement is available`() {
-        val c = managerOf("* [Go] -> END").next().choices.single()
-        assertTrue(c.requirements.isEmpty())
-        assertTrue(c.isAvailable)
+        val choice = managerOf("* [Go] -> END").next().choices.single()
+        assertTrue(choice.requirements.isEmpty())
+        assertTrue(choice.isAvailable)
     }
 
     @Test
     fun `unavailable choices are still reported and can be chosen`() {
-        val m = managerOf("* [Go # requires: strength >= 99] Went -> END", statsOf("p.strength" to 1))
-        m.speaker = "p"
-        val step = m.next()
+        val manager = managerOf("* [Go # requires: strength >= 99] Went -> END", statsOf("p.strength" to 1))
+        manager.speaker = "p"
+        val step = manager.next()
         assertFalse(step.choices.single().isAvailable)
-        assertEquals(listOf("Went"), m.choose(0).texts())
+        assertEquals(listOf("Went"), manager.choose(0).texts())
     }
 
     @Test
     fun `the requirements tag key can be changed`() {
-        val m = managerOf("* [Go # needs: strength >= 5] -> END", statsOf("p.strength" to 1))
-        m.speaker = "p"
-        m.requirementsTagKey = "needs"
-        assertFalse(m.next().choices.single().isAvailable)
+        val manager = managerOf("* [Go # needs: strength >= 5] -> END", statsOf("p.strength" to 1))
+        manager.speaker = "p"
+        manager.requirementsTagKey = "needs"
+        assertFalse(manager.next().choices.single().isAvailable)
     }
 
     @Test
     fun `choose rejects an index that does not exist`() {
-        val m = managerOf("* [Go] -> END")
-        m.next()
-        kotlin.test.assertFailsWith<IllegalArgumentException> { m.choose(3) }
+        val manager = managerOf("* [Go] -> END")
+        manager.next()
+        kotlin.test.assertFailsWith<IllegalArgumentException> { manager.choose(3) }
     }
 }

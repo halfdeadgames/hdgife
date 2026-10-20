@@ -7,9 +7,7 @@ import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter
 import com.github.halfdeadgames.hdgife.harness.FontSource
 
-/** Crisp text for phones: Roboto and Roboto Mono (SIL OFL, in android/assets/ui) rendered by FreeType at the size asked for. */
 class AndroidFonts : FontSource {
-    // Both generators are made on first use, which is after libGDX started (the natives load then).
     private var ui: FreeTypeFontGenerator? = null
     private var mono: FreeTypeFontGenerator? = null
 

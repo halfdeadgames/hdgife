@@ -16,7 +16,6 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** close(), a failed loadState, and story identity in saves. */
 class LifecycleTest {
     private val usesFunction = "EXTERNAL twice(x)\nVAR n = 0\n~ n = twice(4)\nResult {n} {stat(\"hp\")}\n-> END\n=== function twice(x) ===\n~ return 0"
 
@@ -43,9 +42,9 @@ class LifecycleTest {
     @Test
     fun `a closed manager unbinds its functions so the ink fallback runs`() {
         val story = compileLib(usesFunction)
-        val m = StoryManager(story)
-        m.bindFunction("twice") { 99 }
-        m.close()
+        val manager = StoryManager(story)
+        manager.bindFunction("twice") { 99 }
+        manager.close()
         assertNull(story.getExternalFunction("twice"))
         assertNull(story.getExternalFunction("stat"))
         assertEquals(listOf("Result 0 0.0"), StoryManager(story).next().texts())
@@ -53,30 +52,30 @@ class LifecycleTest {
 
     @Test
     fun `calls on a closed manager throw IllegalStateException, close is repeatable`() {
-        val m = managerOf("Hi\n* [Go] -> END")
-        m.close()
-        m.close()
-        assertFailsWith<IllegalStateException> { m.next() }
-        assertFailsWith<IllegalStateException> { m.choose(0) }
-        assertFailsWith<IllegalStateException> { m.saveState() }
-        assertFailsWith<IllegalStateException> { m.loadState("{}") }
-        assertFailsWith<IllegalStateException> { m.reset() }
-        assertFailsWith<IllegalStateException> { m.speaker }
-        assertFailsWith<IllegalStateException> { m.speaker = "x" }
-        assertFailsWith<IllegalStateException> { m.getVariable("hdgife_speaker") }
-        assertFailsWith<IllegalStateException> { m.bindFunction("f") { 0 } }
-        assertFailsWith<IllegalStateException> { m.beginScene("x") }
-        assertFailsWith<IllegalStateException> { m.replaceStory(compileLib("Hi")) }
+        val manager = managerOf("Hi\n* [Go] -> END")
+        manager.close()
+        manager.close()
+        assertFailsWith<IllegalStateException> { manager.next() }
+        assertFailsWith<IllegalStateException> { manager.choose(0) }
+        assertFailsWith<IllegalStateException> { manager.saveState() }
+        assertFailsWith<IllegalStateException> { manager.loadState("{}") }
+        assertFailsWith<IllegalStateException> { manager.reset() }
+        assertFailsWith<IllegalStateException> { manager.speaker }
+        assertFailsWith<IllegalStateException> { manager.speaker = "x" }
+        assertFailsWith<IllegalStateException> { manager.getVariable("hdgife_speaker") }
+        assertFailsWith<IllegalStateException> { manager.bindFunction("f") { 0 } }
+        assertFailsWith<IllegalStateException> { manager.beginScene("x") }
+        assertFailsWith<IllegalStateException> { manager.replaceStory(compileLib("Hi")) }
     }
 
     @Test
     fun `closing stops observations and drops pending events and open styles`() {
-        val m = managerOf("VAR n = 0\n<em>Hi\n~ n = 3\n* [Go] -> END")
-        val observation = m.observe("n") { _, _ -> }
-        m.close()
+        val manager = managerOf("VAR n = 0\n<em>Hi\n~ n = 3\n* [Go] -> END")
+        val observation = manager.observe("n") { _, _ -> }
+        manager.close()
         assertFalse(observation.isActive)
-        observation.close() // a no-op, not an error
-        m.unobserve("n")
+        observation.close()
+        manager.unobserve("n")
     }
 
     @Test
@@ -88,19 +87,19 @@ class LifecycleTest {
 
     @Test
     fun `a failed loadState still closes styles, drops pending events and leaves a consistent manager`() {
-        val m = managerOf("<em>Hi\n~ emit(\"a\")\n~ emit(\"b\")\n* [Go] -> END")
+        val manager = managerOf("<em>Hi\n~ emit(\"a\")\n~ emit(\"b\")\n* [Go] -> END")
         val log = LogSink()
-        m.log = log
+        manager.log = log
         val seen = ArrayList<String>()
-        m.onEvent = StoryEventListener { seen += it.name; if (it.name == "a") error("boom") }
-        assertFailsWith<StoryStepException> { m.next() }
+        manager.onEvent = StoryEventListener { seen += it.name; if (it.name == "a") error("boom") }
+        assertFailsWith<StoryStepException> { manager.next() }
         assertEquals(listOf("a"), seen)
 
-        val ex = assertFailsWith<SaveStateException> { m.loadState("{\"v\":1,\"ink\":\"this is not ink\",\"styles\":[]}") }
+        val ex = assertFailsWith<SaveStateException> { manager.loadState("{\"v\":1,\"ink\":\"this is not ink\",\"styles\":[]}") }
         assertContains(ex.message!!, "Ink could not load the state")
         assertTrue(log.messages.any { "<em> never closed, closed because loading the state failed" in it })
 
-        val step = m.next()
+        val step = manager.next()
         assertTrue(step.events.isEmpty(), "the pending tail was dropped")
         assertEquals(emptyList(), step.openStyles)
         assertEquals(listOf("a"), seen)
@@ -109,10 +108,10 @@ class LifecycleTest {
 
     @Test
     fun `a refused envelope changes nothing`() {
-        val m = managerOf("<em>Hi\n* [Go] there -> END")
-        m.next()
-        assertFailsWith<SaveStateException> { m.loadState("{\"v\":99,\"ink\":\"{}\"}") }
-        assertEquals(listOf(Style("em")), m.choose(0).lines.single().spans.first().styles)
+        val manager = managerOf("<em>Hi\n* [Go] there -> END")
+        manager.next()
+        assertFailsWith<SaveStateException> { manager.loadState("{\"v\":99,\"ink\":\"{}\"}") }
+        assertEquals(listOf(Style("em")), manager.choose(0).lines.single().spans.first().styles)
     }
 
     private val text = "Hi\n* [Go] Gone -> END"
@@ -121,18 +120,18 @@ class LifecycleTest {
 
     @Test
     fun `a save carries the story id and a different one is refused`() {
-        val a = withId("chapter1")
-        a.next()
-        val save = a.saveState()
+        val chapterOneManager = withId("chapter1")
+        chapterOneManager.next()
+        val save = chapterOneManager.saveState()
         assertContains(save, "\"storyId\":\"chapter1\"")
         assertContains(save, "\"v\":2")
 
-        val b = withId("chapter2")
-        b.next()
-        val ex = assertFailsWith<SaveStateException> { b.loadState(save) }
+        val chapterTwoManager = withId("chapter2")
+        chapterTwoManager.next()
+        val ex = assertFailsWith<SaveStateException> { chapterTwoManager.loadState(save) }
         assertContains(ex.message!!, "chapter1")
         assertContains(ex.message!!, "chapter2")
-        assertEquals(listOf("Gone"), b.choose(0).texts(), "the manager was not touched")
+        assertEquals(listOf("Gone"), chapterTwoManager.choose(0).texts(), "the manager was not touched")
 
         val same = withId("chapter1")
         same.loadState(save)
@@ -160,25 +159,25 @@ class LifecycleTest {
         assertEquals(listOf("Gone"), other.choose(0).texts())
     }
 
-    private fun fingerprintOf(m: StoryManager): String =
-        Regex("\"fingerprint\":\"([0-9a-f]{16})\"").find(m.saveState())!!.groupValues[1]
+    private fun fingerprintOf(manager: StoryManager): String =
+        Regex("\"fingerprint\":\"([0-9a-f]{16})\"").find(manager.saveState())!!.groupValues[1]
 
     @Test
     fun `the fingerprint is off by default and written when asked`() {
-        val m = managerOf(text)
-        assertFalse("fingerprint" in m.saveState())
-        m.saveFingerprint = true
-        assertContains(m.saveState(), "\"v\":2")
-        assertEquals(fingerprintOf(m), fingerprintOf(m))
+        val manager = managerOf(text)
+        assertFalse("fingerprint" in manager.saveState())
+        manager.saveFingerprint = true
+        assertContains(manager.saveState(), "\"v\":2")
+        assertEquals(fingerprintOf(manager), fingerprintOf(manager))
     }
 
     @Test
     fun `the same story gives the same fingerprint, also when rebuilt from its json`() {
-        val a = managerOf(text).also { it.saveFingerprint = true }
-        val b = managerOf(text).also { it.saveFingerprint = true }
+        val firstManager = managerOf(text).also { it.saveFingerprint = true }
+        val secondManager = managerOf(text).also { it.saveFingerprint = true }
         val rebuilt = StoryManager(HdgifeStory.from(Story(compileLib(text).toJson()))).also { it.saveFingerprint = true }
-        assertEquals(fingerprintOf(a), fingerprintOf(b))
-        assertEquals(fingerprintOf(a), fingerprintOf(rebuilt))
+        assertEquals(fingerprintOf(firstManager), fingerprintOf(secondManager))
+        assertEquals(fingerprintOf(firstManager), fingerprintOf(rebuilt))
     }
 
     @Test
@@ -190,7 +189,6 @@ class LifecycleTest {
         assertNotEquals(fingerprintOf(old), fingerprintOf(changed))
         val ex = assertFailsWith<SaveStateException> { changed.loadState(save) }
         assertContains(ex.message!!, "changed")
-        // an edited line is not a structure change
         val edited = managerOf("Hello\n* [Go] Gone -> END").also { it.saveFingerprint = true }
         edited.loadState(save)
     }
@@ -201,17 +199,17 @@ class LifecycleTest {
         old.next()
         val save = old.saveState()
         val changed = managerOf("$text\n=== extra ===\nMore")
-        changed.loadState(save) // flag off: not checked
+        changed.loadState(save)
         val strict = managerOf("$text\n=== extra ===\nMore").also { it.saveFingerprint = true }
         val v1 = managerOf(text).also { it.next() }.saveState()
-        strict.loadState(v1) // a save with no fingerprint cannot be checked
+        strict.loadState(v1)
     }
 
     @Test
     fun `a replaced story gets a new fingerprint`() {
-        val m = managerOf(text).also { it.saveFingerprint = true }
-        val first = fingerprintOf(m)
-        m.replaceStory(compileLib("$text\n=== extra ===\nMore"))
-        assertNotEquals(first, fingerprintOf(m))
+        val manager = managerOf(text).also { it.saveFingerprint = true }
+        val first = fingerprintOf(manager)
+        manager.replaceStory(compileLib("$text\n=== extra ===\nMore"))
+        assertNotEquals(first, fingerprintOf(manager))
     }
 }

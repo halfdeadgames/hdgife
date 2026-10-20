@@ -1,11 +1,5 @@
-// The harness: the dialog test UI that lwjgl3 (desktop) and android both run. It is never published.
-// Everything here has to be platform agnostic, because the same code runs on the desktop and on Android.
 eclipse.project.name = appName + '-harness'
 
-// sjInGameConsole 1.0.1 was built against libGDX 1.12 and its ConsoleContext calls Label.getText() expecting a
-// StringBuilder, which is a CharArray in 1.14 (NoSuchMethodError when Copy runs). src/main/java has a copy compiled
-// against 1.14. Two copies of a class would break dexing on Android and depend on classpath order elsewhere, so the
-// library jar is repackaged without the original. Its only dependency is libGDX, which core already brings.
 configurations {
   consoleRaw { transitive = false }
 }
@@ -21,19 +15,12 @@ def consoleLibrary = tasks.register('consoleLibrary', Jar) {
 
 dependencies {
   api project(':core')
-  // ktx-app stays api: TestGame extends KtxGame, and lwjgl3 and android hand it to libGDX as an ApplicationListener, so
-  // their compilers must see that supertype. They import nothing from ktx themselves. The other modules are internal.
-  // The harness uses no coroutines (so that it runs under TeaVM); the UI test brings its own ktx-async.
   api "io.github.quillraven.libktx:ktx-app:$ktxVersion"
   implementation "io.github.quillraven.libktx:ktx-log:$ktxVersion"
   implementation "io.github.quillraven.libktx:ktx-scene2d:$ktxVersion"
-  // the console library, minus its ConsoleContext (see consoleLibrary below)
   api files(consoleLibrary)
 }
 
-// Precompiled story. `:harness:compileInk` compiles assets/ink/main.ink on the JVM (the same compiler and the same
-// bundled libraries as at runtime) and writes the story JSON to build/precompiled/ink/main.ink.json. The android
-// module ships that file when built with -PprecompiledInk, and the harness then loads it instead of compiling.
 def precompiledDir = layout.buildDirectory.dir('precompiled')
 tasks.register('compileInk', JavaExec) {
   group = 'build'
@@ -41,8 +28,8 @@ tasks.register('compileInk', JavaExec) {
   classpath = sourceSets.main.runtimeClasspath
   mainClass = 'com.github.halfdeadgames.hdgife.harness.CompileInk'
   def inkDir = rootProject.file('assets/ink')
-  def out = precompiledDir.map { it.file('ink/main.ink.json') }
+  def precompiledJson = precompiledDir.map { it.file('ink/main.ink.json') }
   inputs.dir(inkDir)
-  outputs.file(out)
-  args inkDir.absolutePath, out.get().asFile.absolutePath
+  outputs.file(precompiledJson)
+  args inkDir.absolutePath, precompiledJson.get().asFile.absolutePath
 }

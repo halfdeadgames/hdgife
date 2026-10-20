@@ -5,7 +5,6 @@ import com.github.halfdeadgames.hdgife.story.Rounding
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.strongjoshua.console.CommandExecutor
 
-/** Mutable stat map for testing. Values can be any type; the engine maps them to ink. Keys are "entity.stat". */
 class MapStateProvider : NarrativeStateProvider {
     private val stats = mutableMapOf<String, Any>()
 
@@ -18,7 +17,6 @@ class MapStateProvider : NarrativeStateProvider {
     override fun getStat(entityId: String, statName: String): Any? = stats["$entityId.$statName"]
 }
 
-/** Reads console text as the most specific value: whole number, decimal, `true`/`false`, else a string. */
 fun parseValue(text: String): Any =
     text.toIntOrNull() ?: text.toFloatOrNull() ?: when (text.lowercase()) {
         "true" -> true
@@ -26,14 +24,12 @@ fun parseValue(text: String): Any =
         else -> text
     }
 
-/** Sets the stat, syncs it to ink and returns the ink variable name. */
 fun applyStat(manager: StoryManager, provider: MapStateProvider, entityId: String, statName: String, value: Any): String {
     provider.setStat(entityId, statName, value)
     manager.syncStats(entityId, listOf(statName))
     return manager.variableNamer.nameFor(entityId, statName)
 }
 
-/** What the console commands need from the screen. */
 interface DialogControl {
     fun log(message: String)
     fun listVariables(): List<String>
@@ -51,9 +47,7 @@ interface DialogControl {
     fun reload()
     fun restart()
     fun setChoiceMode(mode: ChoiceMode)
-    /** Null cycles to the next layout. */
     fun setViewMode(mode: ViewMode?)
-    /** Makes the bound `roll(sides)` return [value] every time, or random again when null. */
     fun fixRoll(value: Int?)
     fun resetStats()
     fun save()
@@ -61,7 +55,6 @@ interface DialogControl {
     fun validate()
 }
 
-/** Console commands. `help` comes from the base class. Args arrive as strings and are parsed here. */
 class DialogCommands(private val control: DialogControl) : CommandExecutor() {
 
     fun vars() {
@@ -69,7 +62,6 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
         if (names.isEmpty()) control.log("No variables") else for (name in names) control.log("$name = ${control.getVariable(name)}")
     }
 
-    /** Reads one ink variable through the engine's variable API and shows its type. */
     fun `var`(name: String) {
         val value = control.getVariable(name)
         control.log(if (value == null) "$name is not a declared variable" else "$name = $value (${value.javaClass.simpleName})")
@@ -79,7 +71,6 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
 
     fun unobserve(name: String) = control.unobserve(name)
 
-    /** Sets the variable using its current type in the story. */
     fun set(name: String, value: String) {
         val current = control.getVariable(name)
         if (current == null) {
@@ -99,7 +90,6 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
         assign(name, value, type)
     }
 
-    /** Sets the variable with an explicit type: int, float, bool or string. */
     fun set(name: String, value: String, type: String) {
         if (control.getVariable(name) == null) {
             control.log("$name is not a declared variable")
@@ -135,22 +125,19 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
         }
     }
 
-    /** Sets a stat on the provider and syncs it to ink. The value can be a number, `true`/`false` or text. */
     fun stat(entityId: String, statName: String, value: String) = control.setStat(entityId, statName, parseValue(value))
 
-    /** Sets a stat on the provider only. Ink reads it live, no sync needed. The value can be a number, `true`/`false` or text. */
     fun npc(entityId: String, statName: String, value: String) = control.setNpcStat(entityId, statName, parseValue(value))
 
     fun talk(path: String) = control.talk(path, null)
 
     fun talk(path: String, speaker: String) = control.talk(path, speaker)
 
-    fun seed(n: String) {
-        val value = n.toIntOrNull()
+    fun seed(seedText: String) {
+        val value = seedText.toIntOrNull()
         if (value == null) control.log("Seed must be a whole number") else control.seed(value)
     }
 
-    /** Changes the default number format used by `stat_text`. Mode is floor, ceil, round or trunc. */
     fun numfmt(decimals: String, mode: String) {
         val places = decimals.toIntOrNull()
         val rounding = Rounding.parse(mode)
@@ -161,39 +148,34 @@ class DialogCommands(private val control: DialogControl) : CommandExecutor() {
         }
     }
 
-    fun choose(n: String) {
-        val index = n.toIntOrNull()
+    fun choose(indexText: String) {
+        val index = indexText.toIntOrNull()
         if (index == null) control.log("Choice must be a number") else control.choose(index)
     }
 
     fun divert(path: String) = control.divert(path)
 
-    /** How choices with unmet requirements are shown: hide, grey or show. */
     fun choicemode(mode: String) {
         val parsed = ChoiceMode.entries.firstOrNull { it.name.equals(mode, ignoreCase = true) }
         if (parsed == null) control.log("Mode must be hide, grey or show") else control.setChoiceMode(parsed)
     }
 
-    /** Cycles the layout: split, raw, rendered. The F2 key does the same. */
     fun view() = control.setViewMode(null)
 
-    /** Sets the layout: split (raw and rendered side by side), raw or rendered. */
     fun view(mode: String) {
         val parsed = ViewMode.entries.firstOrNull { it.name.equals(mode, ignoreCase = true) }
         if (parsed == null) control.log("Mode must be split, raw or rendered") else control.setViewMode(parsed)
     }
 
-    /** Makes the game's `roll(sides)` always give this number, or `off` for random again. */
     fun fixroll(value: String) {
-        val n = value.toIntOrNull()
+        val fixed = value.toIntOrNull()
         when {
             value.equals("off", ignoreCase = true) -> control.fixRoll(null)
-            n == null -> control.log("fixroll takes a number or off")
-            else -> control.fixRoll(n)
+            fixed == null -> control.log("fixroll takes a number or off")
+            else -> control.fixRoll(fixed)
         }
     }
 
-    /** Puts every stat back to the harness defaults (the story's cast and the player). */
     fun resetstats() = control.resetStats()
 
     fun save() = control.save()

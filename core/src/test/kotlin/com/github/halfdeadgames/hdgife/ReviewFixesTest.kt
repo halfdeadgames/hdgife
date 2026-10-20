@@ -21,10 +21,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/**
- * Behaviours of StoryManager and the library: taking over a story, failures in next(), quoted names in requirements,
- * seeding, INCLUDE handling, speak without fallbacks and unsafe functions inside strings.
- */
 class ReviewFixesTest {
     private fun stats(entity: String, stat: String, value: Any?) = MapStats().also { it[entity, stat] = value }
 
@@ -47,13 +43,13 @@ class ReviewFixesTest {
 
     @Test
     fun `assigning the story it already has rebinds without doubling anything`() {
-        val m = managerOf("EXTERNAL give(x)\nVAR hp = 1\n~ give(1)\n~ hp = 5\nDone\n=== function give(x) ===\n~ return 0")
+        val manager = managerOf("EXTERNAL give(x)\nVAR hp = 1\n~ give(1)\n~ hp = 5\nDone\n=== function give(x) ===\n~ return 0")
         var calls = 0
-        m.bindFunction("give") { calls++ }
+        manager.bindFunction("give") { calls++ }
         val seen = ArrayList<Any?>()
-        m.observe("hp") { _, new -> seen += new }
-        m.replaceStory(m.story as HdgifeStory)
-        m.next()
+        manager.observe("hp") { _, new -> seen += new }
+        manager.replaceStory(manager.story as HdgifeStory)
+        manager.next()
         assertEquals(1, calls)
         assertEquals(listOf<Any?>(5), seen)
     }
@@ -63,39 +59,39 @@ class ReviewFixesTest {
         val managed = compileLib("{stat_of(\"p\", \"hp\")}")
         StoryManager(managed, stats("p", "hp", 1))
         val previous = compileLib("Old")
-        val m = StoryManager(previous, stats("p", "hp", 2))
-        m.replaceStory(managed)
-        assertEquals(listOf("2"), m.next().texts())
+        val manager = StoryManager(previous, stats("p", "hp", 2))
+        manager.replaceStory(managed)
+        assertEquals(listOf("2"), manager.next().texts())
         assertNull(previous.getExternalFunction("stat_of"), "the old story is unbound")
     }
 
     @Test
     fun `a refused story leaves the manager as it was`() {
-        val m = managerOf("<b>Hi\n* [Go] -> END", stats("p", "hp", 3))
-        m.bindFunction("later") { 0 }
-        m.speaker = "p"
-        m.next()
-        val before = m.story
-        val saved = m.saveState()
+        val manager = managerOf("<b>Hi\n* [Go] -> END", stats("p", "hp", 3))
+        manager.bindFunction("later") { 0 }
+        manager.speaker = "p"
+        manager.next()
+        val before = manager.story
+        val saved = manager.saveState()
         val old = compileInk("VAR hdgife_speaker = \"\"\nEXTERNAL emit1(name, a)\n~ emit1(\"x\", 1)\nHi\n-> END\n=== function emit1(name, a) ===\n~ return 0")
-        assertFailsWith<IncompatibleLibraryException> { m.replaceStory(old) }
-        assertSame(before, m.story)
+        assertFailsWith<IncompatibleLibraryException> { manager.replaceStory(old) }
+        assertSame(before, manager.story)
         assertNotNull(before.getExternalFunction("stat"))
         assertNotNull(before.getExternalFunction("later"))
         assertNull(old.getExternalFunction("stat"), "nothing was bound to the refused story")
-        assertEquals("p", m.speaker)
-        assertEquals(saved, m.saveState(), "open styles and state are unchanged")
+        assertEquals("p", manager.speaker)
+        assertEquals(saved, manager.saveState(), "open styles and state are unchanged")
     }
 
     private val boomInk = "EXTERNAL boom()\n~ emit(\"early\")\n<b>Line one\n~ boom()\nLine two\n-> END\n=== function boom() ===\n~ return 0"
 
     @Test
     fun `a throwing bound function gives a StoryStepException with the partial step`() {
-        val m = managerOf(boomInk)
-        m.bindFunction("boom") { error("bang") }
+        val manager = managerOf(boomInk)
+        manager.bindFunction("boom") { error("bang") }
         val heard = ArrayList<String>()
-        m.onEvent = StoryEventListener { heard += it.name }
-        val ex = assertFailsWith<StoryStepException> { m.next() }
+        manager.onEvent = StoryEventListener { heard += it.name }
+        val ex = assertFailsWith<StoryStepException> { manager.next() }
         assertEquals(listOf("Line one"), ex.step.texts())
         assertEquals(listOf("b"), ex.step.openStyles.map { it.name })
         assertEquals(listOf("early"), ex.step.events.map { it.name })
@@ -107,37 +103,37 @@ class ReviewFixesTest {
 
     @Test
     fun `after a failed step the manager can reset and run again without stale events`() {
-        val m = managerOf(boomInk)
-        m.bindFunction("boom") { error("bang") }
-        assertFailsWith<StoryStepException> { m.next() }
-        m.reset()
-        m.unbindFunction("boom")
-        val step = m.next()
+        val manager = managerOf(boomInk)
+        manager.bindFunction("boom") { error("bang") }
+        assertFailsWith<StoryStepException> { manager.next() }
+        manager.reset()
+        manager.unbindFunction("boom")
+        val step = manager.next()
         assertEquals(listOf("Line one", "Line two"), step.texts())
         assertEquals(listOf("early"), step.events.map { it.name })
     }
 
     @Test
     fun `an ink runtime error also gives a StoryStepException`() {
-        val m = managerOf("EXTERNAL foo()\nHi\n~ foo()\n=== function foo() ===\n~ return 0")
-        m.allowExternalFunctionFallbacks = false
-        val ex = assertFailsWith<StoryStepException> { m.next() }
+        val manager = managerOf("EXTERNAL foo()\nHi\n~ foo()\n=== function foo() ===\n~ return 0")
+        manager.allowExternalFunctionFallbacks = false
+        val ex = assertFailsWith<StoryStepException> { manager.next() }
         assertTrue(ex.step.lines.isEmpty())
     }
 
     @Test
     fun `a throwing state provider comes out of next as a StoryStepException`() {
-        val m = managerOf("{stat(\"hp\")}", NarrativeStateProviderThatThrows)
-        m.speaker = "p"
-        val ex = assertFailsWith<StoryStepException> { m.next() }
+        val manager = managerOf("{stat(\"hp\")}", NarrativeStateProviderThatThrows)
+        manager.speaker = "p"
+        val ex = assertFailsWith<StoryStepException> { manager.next() }
         assertTrue(causes(ex).any { it.message == "provider down" })
     }
 
     @Test
     fun `a throwing state provider comes out of syncStatsToInk as it is`() {
         val story = compileLib("VAR p_hp = 0\nHi")
-        val m = StoryManager(story, NarrativeStateProviderThatThrows)
-        val ex = assertFailsWith<IllegalStateException> { m.syncStats("p", listOf("hp")) }
+        val manager = StoryManager(story, NarrativeStateProviderThatThrows)
+        val ex = assertFailsWith<IllegalStateException> { manager.syncStats("p", listOf("hp")) }
         assertEquals("provider down", ex.message)
     }
 
@@ -146,24 +142,24 @@ class ReviewFixesTest {
 
     @Test
     fun `a quoted entity name may hold spaces`() {
-        val r = assertIs<RequirementResult.Met>(requirements("\"Old Man\".mood > 3", stats("Old Man", "mood", 5)).single())
-        assertEquals("Old Man", r.entity)
-        assertEquals("mood", r.stat)
-        assertTrue(r.isMet)
+        val requirementResult = assertIs<RequirementResult.Met>(requirements("\"Old Man\".mood > 3", stats("Old Man", "mood", 5)).single())
+        assertEquals("Old Man", requirementResult.entity)
+        assertEquals("mood", requirementResult.stat)
+        assertTrue(requirementResult.isMet)
     }
 
     @Test
     fun `a quoted entity name may hold a dot`() {
-        val r = assertIs<RequirementResult.Met>(requirements("'Mr. X'.mood == 1", stats("Mr. X", "mood", 1)).single())
-        assertEquals("Mr. X", r.entity)
-        assertTrue(r.isMet)
+        val requirementResult = assertIs<RequirementResult.Met>(requirements("'Mr. X'.mood == 1", stats("Mr. X", "mood", 1)).single())
+        assertEquals("Mr. X", requirementResult.entity)
+        assertTrue(requirementResult.isMet)
     }
 
     @Test
     fun `a quoted stat name may hold spaces`() {
-        val r = assertIs<RequirementResult.Met>(requirements("\"hit points\" >= 10", stats("p", "hit points", 12)).single())
-        assertEquals("hit points", r.stat)
-        assertTrue(r.isMet)
+        val requirementResult = assertIs<RequirementResult.Met>(requirements("\"hit points\" >= 10", stats("p", "hit points", 12)).single())
+        assertEquals("hit points", requirementResult.stat)
+        assertTrue(requirementResult.isMet)
     }
 
     @Test
@@ -204,15 +200,15 @@ class ReviewFixesTest {
 
     @Test
     fun `seedRandom sets lastSeed`() {
-        val m = managerOf("Hi")
-        m.seedRandom(5)
-        assertEquals(5, m.lastSeed)
+        val manager = managerOf("Hi")
+        manager.seedRandom(5)
+        assertEquals(5, manager.lastSeed)
     }
 
     @Test
     fun `seed without the library throws`() {
-        val m = managerOf("Hi", lib = false)
-        assertFailsWith<IncompatibleLibraryException> { m.seedRandom(1) }
+        val manager = managerOf("Hi", lib = false)
+        assertFailsWith<IncompatibleLibraryException> { manager.seedRandom(1) }
     }
 
     private val bSource = "VAR bv = 7"
@@ -253,71 +249,71 @@ class ReviewFixesTest {
 
     @Test
     fun `speak works with external fallbacks switched off`() {
-        val m = managerOf("~ speak(\"guard\")\n{stat(\"hp\")}\nHi", stats("guard", "hp", 7))
-        m.allowExternalFunctionFallbacks = false
-        val step = m.next()
+        val manager = managerOf("~ speak(\"guard\")\n{stat(\"hp\")}\nHi", stats("guard", "hp", 7))
+        manager.allowExternalFunctionFallbacks = false
+        val step = manager.next()
         assertEquals(listOf("7", "Hi"), step.texts())
         assertEquals(listOf("guard", "guard"), step.lines.map { it.speaker })
     }
 
     @Test
     fun `speak survives save and load with fallbacks off`() {
-        val m = managerOf("~ speak(\"guard\")\nHi\n* [Go] -> END")
-        m.allowExternalFunctionFallbacks = false
-        m.next()
-        val saved = m.saveState()
-        m.reset()
-        assertNull(m.speaker)
-        m.loadState(saved)
-        assertEquals("guard", m.speaker)
+        val manager = managerOf("~ speak(\"guard\")\nHi\n* [Go] -> END")
+        manager.allowExternalFunctionFallbacks = false
+        manager.next()
+        val saved = manager.saveState()
+        manager.reset()
+        assertNull(manager.speaker)
+        manager.loadState(saved)
+        assertEquals("guard", manager.speaker)
     }
 
     @Test
     fun `speak is lookahead safe so glue still joins`() {
-        val m = managerOf("Start <>\n~ speak(\"guard\")\nEnd")
-        m.allowExternalFunctionFallbacks = false
-        val step = m.next()
+        val manager = managerOf("Start <>\n~ speak(\"guard\")\nEnd")
+        manager.allowExternalFunctionFallbacks = false
+        val step = manager.next()
         assertEquals(listOf("Start End"), step.texts())
-        assertEquals("guard", m.speaker)
+        assertEquals("guard", manager.speaker)
     }
 
     @Test
     fun `speak with an empty name clears the speaker`() {
-        val m = managerOf("~ speak(\"guard\")\nA\n~ speak(\"\")\nB")
-        val step = m.next()
+        val manager = managerOf("~ speak(\"guard\")\nA\n~ speak(\"\")\nB")
+        val step = manager.next()
         assertEquals(listOf("guard", null), step.lines.map { it.speaker })
-        assertNull(m.speaker)
+        assertNull(manager.speaker)
     }
 
     private val stringInk = "EXTERNAL f()\n~ temp t = \"x{f()}\"\n{t}\n=== function f() ===\n~ return 1"
 
     @Test
     fun `an unsafe function in string evaluation is an error as in upstream ink`() {
-        val m = managerOf(stringInk)
-        m.bindFunction("f", lookaheadSafe = false) { 1 }
-        val ex = assertFailsWith<StoryStepException> { m.next() }
+        val manager = managerOf(stringInk)
+        manager.bindFunction("f", lookaheadSafe = false) { 1 }
+        val ex = assertFailsWith<StoryStepException> { manager.next() }
         assertTrue(causes(ex).any { it.message.orEmpty().contains("string generation") })
     }
 
     @Test
     fun `an unsafe function in choice text is an error`() {
-        val m = managerOf("EXTERNAL f()\n* [Take {f()}] -> END\n=== function f() ===\n~ return 1")
-        m.bindFunction("f", lookaheadSafe = false) { 1 }
-        assertFailsWith<StoryStepException> { m.next() }
+        val manager = managerOf("EXTERNAL f()\n* [Take {f()}] -> END\n=== function f() ===\n~ return 1")
+        manager.bindFunction("f", lookaheadSafe = false) { 1 }
+        assertFailsWith<StoryStepException> { manager.next() }
     }
 
     @Test
     fun `a safe function works in string evaluation`() {
-        val m = managerOf(stringInk)
-        m.bindFunction("f", lookaheadSafe = true) { 1 }
-        assertEquals(listOf("x1"), m.next().texts())
+        val manager = managerOf(stringInk)
+        manager.bindFunction("f", lookaheadSafe = true) { 1 }
+        assertEquals(listOf("x1"), manager.next().texts())
     }
 
     @Test
     fun `an unsafe function outside strings still works`() {
-        val m = managerOf("EXTERNAL f()\nA {f()}\n=== function f() ===\n~ return 1")
-        m.bindFunction("f", lookaheadSafe = false) { 1 }
-        assertEquals(listOf("A 1"), m.next().texts())
+        val manager = managerOf("EXTERNAL f()\nA {f()}\n=== function f() ===\n~ return 1")
+        manager.bindFunction("f", lookaheadSafe = false) { 1 }
+        assertEquals(listOf("A 1"), manager.next().texts())
     }
 
     @Test
@@ -339,34 +335,34 @@ class ReviewFixesTest {
     fun `Hdgife VERSION matches projectVersion`() {
         val expected = System.getProperty("hdgife.projectVersion")
         assertNotNull(expected, "the build passes projectVersion to the tests")
-        assertEquals(expected, Hdgife.VERSION)
+        assertEquals(expected, Hdgife.version)
     }
 
     @Test
     fun `a custom variableNamer decides where stats are written`() {
-        val m = managerOf("VAR v_hp = 0\nHi", stats("hero", "hp", 9))
-        m.variableNamer = VariableNamer { _, stat -> "v_$stat" }
-        val skipped = m.syncStats("hero", listOf("hp", "mp"))
-        assertEquals(9, m.getVariable("v_hp"))
+        val manager = managerOf("VAR v_hp = 0\nHi", stats("hero", "hp", 9))
+        manager.variableNamer = VariableNamer { _, stat -> "v_$stat" }
+        val skipped = manager.syncStats("hero", listOf("hp", "mp"))
+        assertEquals(9, manager.getVariable("v_hp"))
         assertEquals(listOf("v_mp"), skipped)
     }
 
     @Test
     fun `stateProvider can be reassigned and cleared`() {
-        val m = managerOf("{stat_of(\"p\", \"hp\")}\n* [Go] {stat_of(\"p\", \"hp\")} -> END", stats("p", "hp", 1))
-        assertEquals(listOf("1"), m.next().texts())
-        m.reset()
-        m.stateProvider = stats("p", "hp", 2)
-        assertEquals(listOf("2"), m.next().texts())
-        m.reset()
-        m.stateProvider = null
-        assertEquals(listOf("0.0"), m.next().texts())
+        val manager = managerOf("{stat_of(\"p\", \"hp\")}\n* [Go] {stat_of(\"p\", \"hp\")} -> END", stats("p", "hp", 1))
+        assertEquals(listOf("1"), manager.next().texts())
+        manager.reset()
+        manager.stateProvider = stats("p", "hp", 2)
+        assertEquals(listOf("2"), manager.next().texts())
+        manager.reset()
+        manager.stateProvider = null
+        assertEquals(listOf("0.0"), manager.next().texts())
     }
 
     @Test
     fun `fmt with a non numeric argument formats zero`() {
-        val m = managerOf("{fmt(\"abc\", 2, \"round\")}")
-        assertEquals(listOf("0.00"), m.next().texts())
+        val manager = managerOf("{fmt(\"abc\", 2, \"round\")}")
+        assertEquals(listOf("0.00"), manager.next().texts())
     }
 
     private object NarrativeStateProviderThatThrows : com.github.halfdeadgames.hdgife.state.NarrativeStateProvider {

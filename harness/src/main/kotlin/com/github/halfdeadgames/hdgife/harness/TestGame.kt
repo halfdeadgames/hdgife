@@ -15,35 +15,19 @@ import ktx.log.logger
 
 private val logger = logger<TestGame>()
 
-/**
- * Runs [work] off the render thread and hands the outcome to [onDone] on the render thread. The browser build
- * (TeaVM) has no real threads and no coroutine dispatchers, so there the work runs inline on the render thread.
- * Plain threads and `postRunnable` are used instead of coroutines so that this path stays web safe.
- */
 fun <T> runInBackground(work: () -> T, onDone: (Result<T>) -> Unit) {
     if (Gdx.app.type == Application.ApplicationType.WebGL) {
         onDone(runCatching(work))
         return
     }
     Thread {
-        val result = runCatching(work)
-        Gdx.app.postRunnable { onDone(result) }
+        val outcome = runCatching(work)
+        Gdx.app.postRunnable { onDone(outcome) }
     }.apply { isDaemon = true }.start()
 }
 
-/**
- * The harness's own load policy: ink/main.ink plus any .ink files under the local extra/ folder, sorted by
- * path. The game (here, the harness) decides which sources to feed and in what order; the engine just compiles
- * the list as given. Blocking, so call it off the render thread.
- *
- * One exception, for the Android (or web) build made with `-PprecompiledInk`: when a shipped ink/main.ink.json exists and there
- * are no extra files, that story is loaded without compiling. Any extra file makes the harness compile as usual.
- * The browser build has no local files, so it never has extra files: it compiles at runtime, or loads the
- * precompiled story when it was built with `-PprecompiledInk`.
- */
 fun compileHarnessStory(compiler: InkCompilerService): HdgifeStory {
     val web = Gdx.app.type == Application.ApplicationType.WebGL
-    // the browser has no local file system, so there are no extra files there
     val extra = if (web) null else Gdx.files.local("extra/")
     val extras = if (extra != null && extra.isDirectory) inkFiles(extra).sortedBy { it.path() } else emptyList()
     val precompiled = Gdx.files.internal("ink/main.ink.json")
@@ -59,20 +43,13 @@ fun compileHarnessStory(compiler: InkCompilerService): HdgifeStory {
 }
 
 private fun inkFiles(dir: FileHandle): List<FileHandle> =
-    dir.list().flatMap { if (it.isDirectory) inkFiles(it) else listOfNotNull(it.takeIf { f -> f.extension() == "ink" }) }
+    dir.list().flatMap { if (it.isDirectory) inkFiles(it) else listOfNotNull(it.takeIf { file -> file.extension() == "ink" }) }
 
-/**
- * The harness. [onReady] is the script mode hook: it is called on the render thread once the story is compiled
- * and the dialog screen is showing. The UI test uses it to drive the screen; a normal run leaves it null.
- * [onFailure] gets the error when the story fails to compile or the screen fails to start, so a test can fail fast.
- * [fonts] is the optional source of crisp fonts at the real pixel size (the Android launcher gives one).
- */
 class TestGame(
     private val onReady: ((DialogScreen) -> Unit)? = null,
     private val onFailure: ((Throwable) -> Unit)? = null,
     private val fonts: FontSource? = null,
 ) : KtxGame<KtxScreen>() {
-    /** Called after each frame is drawn, before the buffers swap. The only place a screenshot sees the frame. */
     var afterRender: (() -> Unit)? = null
 
     override fun render() {

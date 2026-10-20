@@ -18,9 +18,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/** The hdgife.ink helper functions, InkSource.of, HdgifeStory.from, Comparison and style edge cases. */
 class HelpersTest {
-    /** Runs one expression on a story with the library, without a manager (the ink fallbacks). */
     private fun ink(expression: String): String = compileLib("INCLUDE hdgife_util.ink\n{$expression}").Continue().trim()
 
     @Test
@@ -70,14 +68,14 @@ class HelpersTest {
     fun `floor_text and round_text are gone`() {
         for (name in listOf("floor_text", "round_text")) {
             assertFalse(compileLib("Hi").hasFunction(name), name)
-            assertFalse(name in HdgifeInk.LIBRARY_FUNCTIONS, name)
+            assertFalse(name in HdgifeInk.libraryFunctions, name)
         }
     }
 
     private fun draws(seed: Int, pct: Int, count: Int = 40): List<String> {
-        val m = managerOf("INCLUDE hdgife_util.ink\n" + (1..count).joinToString("\n") { "{chance($pct)}" })
-        m.seedRandom(seed)
-        return m.next().texts()
+        val manager = managerOf("INCLUDE hdgife_util.ink\n" + (1..count).joinToString("\n") { "{chance($pct)}" })
+        manager.seedRandom(seed)
+        return manager.next().texts()
     }
 
     @Test
@@ -88,13 +86,13 @@ class HelpersTest {
 
     @Test
     fun `chance is repeatable with a seed and mixes at 50`() {
-        val a = draws(42, 50)
-        assertEquals(a, draws(42, 50))
-        assertTrue("true" in a && "false" in a)
-        assertNotEquals(a, draws(43, 50))
+        val firstDraws = draws(42, 50)
+        assertEquals(firstDraws, draws(42, 50))
+        assertTrue("true" in firstDraws && "false" in firstDraws)
+        assertNotEquals(firstDraws, draws(43, 50))
     }
 
-    private fun <T> assertNotEquals(a: T, b: T) = kotlin.test.assertNotEquals(a, b)
+    private fun <T> assertNotEquals(first: T, second: T) = kotlin.test.assertNotEquals(first, second)
 
     @Test
     fun `InkSource of reads the file and names it by its normalized path`() {
@@ -119,12 +117,12 @@ class HelpersTest {
             dir.resolve("c.ink").writeText("VAR c = 2")
             val source = InkSource.of(FileHandle(main))
             val sibling = assertNotNull(source.sibling)
-            val b = assertNotNull(sibling("b.ink"))
-            assertEquals("VAR b = 1", b.read())
-            assertTrue(b.name.endsWith("sub/b.ink"))
-            val c = assertNotNull(sibling("../c.ink"))
-            assertEquals("VAR c = 2", c.read())
-            assertTrue(c.name.endsWith("/c.ink") && !c.name.contains(".."))
+            val bSource = assertNotNull(sibling("b.ink"))
+            assertEquals("VAR b = 1", bSource.read())
+            assertTrue(bSource.name.endsWith("sub/b.ink"))
+            val cSource = assertNotNull(sibling("../c.ink"))
+            assertEquals("VAR c = 2", cSource.read())
+            assertTrue(cSource.name.endsWith("/c.ink") && !cSource.name.contains(".."))
             assertNull(sibling("missing.ink"))
             assertNull(sibling("."), "a directory is not a source")
         } finally {
@@ -154,24 +152,24 @@ class HelpersTest {
 
     @Test
     fun `Comparison parses every symbol and nothing else`() {
-        assertEquals(Comparison.GREATER, Comparison.parse(">"))
-        assertEquals(Comparison.GREATER_EQUAL, Comparison.parse(">="))
-        assertEquals(Comparison.LESS, Comparison.parse("<"))
-        assertEquals(Comparison.LESS_EQUAL, Comparison.parse("<="))
-        assertEquals(Comparison.EQUAL, Comparison.parse("=="))
-        assertEquals(Comparison.NOT_EQUAL, Comparison.parse("!="))
+        assertEquals(Comparison.Greater, Comparison.parse(">"))
+        assertEquals(Comparison.GreaterEqual, Comparison.parse(">="))
+        assertEquals(Comparison.Less, Comparison.parse("<"))
+        assertEquals(Comparison.LessEqual, Comparison.parse("<="))
+        assertEquals(Comparison.Equal, Comparison.parse("=="))
+        assertEquals(Comparison.NotEqual, Comparison.parse("!="))
         for (bad in listOf("=", "=>", "", " ", "===", "<>", "gt")) assertNull(Comparison.parse(bad), bad)
     }
 
     @Test
     fun `Comparison tests numbers and flags equality`() {
-        assertTrue(Comparison.GREATER.test(2.0, 1.0) && !Comparison.GREATER.test(1.0, 1.0))
-        assertTrue(Comparison.GREATER_EQUAL.test(1.0, 1.0))
-        assertTrue(Comparison.LESS.test(0.0, 1.0) && !Comparison.LESS.test(1.0, 1.0))
-        assertTrue(Comparison.LESS_EQUAL.test(1.0, 1.0))
-        assertTrue(Comparison.EQUAL.test(1.0, 1.0) && Comparison.NOT_EQUAL.test(1.0, 2.0))
-        assertTrue(Comparison.EQUAL.isEquality && Comparison.NOT_EQUAL.isEquality)
-        assertFalse(Comparison.GREATER.isEquality)
+        assertTrue(Comparison.Greater.test(2.0, 1.0) && !Comparison.Greater.test(1.0, 1.0))
+        assertTrue(Comparison.GreaterEqual.test(1.0, 1.0))
+        assertTrue(Comparison.Less.test(0.0, 1.0) && !Comparison.Less.test(1.0, 1.0))
+        assertTrue(Comparison.LessEqual.test(1.0, 1.0))
+        assertTrue(Comparison.Equal.test(1.0, 1.0) && Comparison.NotEqual.test(1.0, 2.0))
+        assertTrue(Comparison.Equal.isEquality && Comparison.NotEqual.isEquality)
+        assertFalse(Comparison.Greater.isEquality)
     }
 
     @Test

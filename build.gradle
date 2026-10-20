@@ -6,7 +6,6 @@ buildscript {
   }
   dependencies {
     classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
-    // The android module is only included when the Android SDK is found, see settings.gradle.
     if (gradle.ext.includeAndroid) classpath "com.android.tools.build:gradle:$androidPluginVersion"
 
   }
@@ -16,7 +15,6 @@ allprojects {
   apply plugin: 'eclipse'
   apply plugin: 'idea'
 
-  // This allows you to "Build and run using IntelliJ IDEA", an option in IDEA's Settings.
   idea {
     module {
       outputDir = file('build/classes/java/main')
@@ -25,7 +23,6 @@ allprojects {
   }
 }
 
-// The android module gets its Kotlin support from the Android Gradle plugin (built-in Kotlin), not from these plugins.
 configure(subprojects.findAll { it.name != 'android' }) {
   apply plugin: 'java-library'
   apply plugin: 'kotlin'

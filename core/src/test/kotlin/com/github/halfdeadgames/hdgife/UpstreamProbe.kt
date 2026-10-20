@@ -2,10 +2,6 @@ package com.github.halfdeadgames.hdgife
 
 import com.bladecoder.ink.runtime.Story
 
-/**
- * Runs plain Blade Ink code. UpstreamCanaryTest loads this class in an isolated class loader, so the Blade Ink
- * classes it sees are the upstream ones, with no hdgife patch applied. Results are strings: `ok:<text>` or `error:<class>`.
- */
 object UpstreamProbe {
     @JvmStatic
     fun floorOnFloat(json: String): String = run(json) { }

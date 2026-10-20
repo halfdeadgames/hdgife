@@ -9,8 +9,7 @@ class AndroidLauncher : AndroidApplication() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         initialize(TestGame(fonts = AndroidFonts()), AndroidApplicationConfiguration().apply {
-            useImmersiveMode = true // recommended by the libGDX docs, not required
-            // the harness has no use for sensors, and not asking for them saves battery
+            useImmersiveMode = true
             useAccelerometer = false
             useCompass = false
         })

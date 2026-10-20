@@ -1,34 +1,16 @@
 eclipse.project.name = appName + '-core'
 
-// Only what the library really uses. Keep it this small.
 dependencies {
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
-  // Blade Ink is pinned to exactly this version: HdgifeStory overrides a package-private method and InkNativePatch uses
-  // package-private internals, which can change in any other release. `strictly` is written to the Gradle module
-  // metadata (so a consumer that asks for another version fails to resolve) and to the pom as an exact `[version]` range.
-  // UpstreamCanaryTest checks the internals by reflection, so a version bump shows up as a failing test.
   api("com.bladecoder.ink:blade-ink") { version { strictly bladeInkVersion } }
-  // Not in any public signature, so consumers get it at runtime only.
   implementation("com.bladecoder.ink:blade-ink-compiler") { version { strictly bladeInkVersion } }
   api "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
 
-  // Tests only. Not part of the published pom.
   testImplementation "org.jetbrains.kotlin:kotlin-test-junit5:$kotlinVersion"
-  // kotlin-test-junit5 pulls an older JUnit 5 than the Gradle launcher expects; the BOM aligns Jupiter and the platform launcher on one version.
   testImplementation platform("org.junit:junit-bom:5.14.4")
   testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
 
-// Binary compatibility: Kotlin's built-in ABI validation keeps the public API of core in core/api/core.api, which is
-// committed. `./gradlew :core:check` (and so `build`) runs checkKotlinAbi and fails when the code no longer matches the
-// dump. After an intended API change, rewrite the dump and commit it with the change:
-//   ./gradlew :core:updateKotlinAbi    writes core/api/core.api
-//   ./gradlew :core:checkKotlinAbi     compares the code with the dump (also part of :core:check)
-// jitpack.yml runs :core:test and :core:publishToMavenLocal only, which do not run checkKotlinAbi, so a stale dump
-// never fails a JitPack build.
-//
-// Every public declaration says so (`public`) and names its type, so nothing becomes API by accident.
-// The experimental marker is opted into for this module's own code and tests; consumers choose for themselves.
 kotlin {
   explicitApi()
   abiValidation {
@@ -45,7 +27,6 @@ test {
   systemProperty 'hdgife.bladeInkVersion', bladeInkVersion
 }
 
-// Hdgife.VERSION comes from projectVersion in gradle.properties, the single source of truth.
 def generatedVersionDir = layout.buildDirectory.dir('generated/hdgife/kotlin')
 def generateVersion = tasks.register('generateVersion') {
   def outDir = generatedVersionDir
@@ -57,20 +38,14 @@ def generateVersion = tasks.register('generateVersion') {
     java.nio.file.Files.createDirectories(dir)
     dir.resolve('Hdgife.kt').toFile().text = """package com.github.halfdeadgames.hdgife
 
-/** Library version. Generated from projectVersion in gradle.properties. */
 public object Hdgife {
-    public const val VERSION: String = "${versionText}"
+    public const val version: String = "${versionText}"
 }
 """
   }
 }
 sourceSets.main.kotlin.srcDir(generateVersion)
 
-// HdgifeInk (the library version and the reserved function names) is read from the two bundled ink files, so the
-// Kotlin side can never drift from them: the version is `CONST hdgife_version` in hdgife.ink, the reserved names are
-// every `=== function` (two or more `=`) and `EXTERNAL` of hdgife.ink and hdgife_util.ink.
-// If you add, remove or change a function there, bump `CONST hdgife_version` in hdgife.ink and update the pinned
-// hash in LibraryPinTest: that test fails with "library changed: bump hdgife_version" until you do.
 def generatedInkDir = layout.buildDirectory.dir('generated/hdgifeInk/kotlin')
 def generateInkLibrary = tasks.register('generateInkLibrary') {
   def coreFile = file('src/main/resources/hdgife/hdgife.ink')
@@ -102,25 +77,14 @@ def generateInkLibrary = tasks.register('generateInkLibrary') {
     java.nio.file.Files.createDirectories(dir)
     dir.resolve('HdgifeInk.kt').toFile().text = """package com.github.halfdeadgames.hdgife
 
-/** Facts about the bundled ink libraries. Generated from hdgife.ink and hdgife_util.ink, do not edit. */
 public object HdgifeInk {
-    /**
-     * The version of hdgife.ink this engine expects (`CONST hdgife_version`). A story that includes another version,
-     * or an old one with no version (counted as 0), is refused with an IncompatibleLibraryException.
-     */
-    public const val VERSION: Int = ${version}
+    public const val version: Int = ${version}
 
-    /** The functions of hdgife.ink. */
-    internal val CORE_FUNCTIONS: List<String> = listOf(${list(core)})
+    internal val coreFunctions: List<String> = listOf(${list(core)})
 
-    /** The functions of hdgife_util.ink. */
-    internal val UTIL_FUNCTIONS: List<String> = listOf(${list(util)})
+    internal val utilFunctions: List<String> = listOf(${list(util)})
 
-    /**
-     * Every function name the libraries reserve, from hdgife.ink and hdgife_util.ink (the names are not prefixed, so a
-     * story must not define its own with these names). validateStory warns about one defined without its library.
-     */
-    public val LIBRARY_FUNCTIONS: List<String> = CORE_FUNCTIONS + UTIL_FUNCTIONS
+    public val libraryFunctions: List<String> = coreFunctions + utilFunctions
 }
 """
   }
@@ -139,8 +103,6 @@ publishing {
     maven(MavenPublication) {
       from components.java
       artifactId = 'hdgife'
-      // Gradle writes `strictly` only to the module metadata. A plain pom version is a soft preference to Maven, so
-      // write the Blade Ink dependencies as an exact range, [1.3.2], which Maven honors as a hard requirement.
       pom {
         name = 'hdgife'
         description = 'HDG Interactive Fiction Engine: Blade Ink narrative engine for Kotlin and libGDX games'

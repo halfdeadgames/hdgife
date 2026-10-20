@@ -11,55 +11,42 @@ import com.github.halfdeadgames.hdgife.story.Tags
 import com.github.halfdeadgames.hdgife.story.TextMarker
 import com.github.halfdeadgames.hdgife.story.TextSpan
 
-/*
- * Text building for the two panels. Everything here runs once per step, never per frame.
- * Both panels draw with libGDX color markup (`[#rrggbbaa]text[]`), so a literal `[` is written `[[`.
- */
-
 internal fun esc(text: String): String = text.replace("[", "[[")
 
-private const val TITLE = "[#9ecbff]"
-private const val DIM = "[#8a8a8a]"
+private const val titleMarkup = "[#9ecbff]"
+private const val dimMarkup = "[#8a8a8a]"
 
-/** Style names this harness draws itself. Everything else is an effect: annotated, and shaken or bobbed. */
-private val DRAWN = setOf("em", "b", "color")
+private val drawnStyleNames = setOf("em", "b", "color")
 
-/** Effect names that make the rendered line move for a moment. */
-internal val SHAKES = setOf("shake")
-internal val BOBS = setOf("wave", "bounce")
+internal val shakeStyleNames = setOf("shake")
+internal val bobStyleNames = setOf("wave", "bounce")
 
-/** Speaker name colors, given out in order of first appearance. All are in libGDX's Colors table. */
-private val SPEAKER_COLORS = arrayOf("SKY", "SALMON", "LIME", "GOLD", "VIOLET", "TEAL", "CORAL", "CHARTREUSE")
+private val speakerColorNames = arrayOf("SKY", "SALMON", "LIME", "GOLD", "VIOLET", "TEAL", "CORAL", "CHARTREUSE")
 
 internal class SpeakerColors {
     private val assigned = HashMap<String, String>()
 
-    fun of(name: String): String = assigned.getOrPut(name) { SPEAKER_COLORS[assigned.size % SPEAKER_COLORS.size] }
+    fun of(name: String): String = assigned.getOrPut(name) { speakerColorNames[assigned.size % speakerColorNames.size] }
 }
 
-/**
- * Harness-only mapping from engine style names to libGDX color markup. The engine just reports names.
- * `em` and `b` get fixed colors. `color` is resolved here: hex (`Style.hexColor()` is not null) becomes
- * `#rrggbbaa`, anything else is looked up by name in libGDX's `Colors` table. The innermost style that sets a color wins.
- */
 internal fun styleColor(span: TextSpan): String? {
-    var result: String? = null
+    var color: String? = null
     for (style in span.styles) {
         when (style.name) {
-            "em" -> result = "#ffd27f"
-            "b" -> result = "#ffffff"
+            "em" -> color = "#ffd27f"
+            "b" -> color = "#ffffff"
             "color" -> {
                 val hex = style.hexColor()
                 if (hex != null) {
-                    result = "#%08x".format(hex)
+                    color = "#%08x".format(hex)
                 } else {
                     val name = style.value?.uppercase()
-                    if (name != null && Colors.get(name) != null) result = name
+                    if (name != null && Colors.get(name) != null) color = name
                 }
             }
         }
     }
-    return result
+    return color
 }
 
 internal fun show(value: Any?): String = if (value is Float && value % 1f == 0f) value.toInt().toString() else value.toString()
@@ -67,34 +54,30 @@ internal fun show(value: Any?): String = if (value is Float && value % 1f == 0f)
 internal fun describeStyle(style: Style) = buildString {
     append(style.name)
     style.value?.let { append('=').append(it) }
-    for ((k, v) in style.params) append(' ').append(k).append('=').append(v)
+    for ((key, value) in style.params) append(' ').append(key).append('=').append(value)
 }
 
 internal fun describeMarker(marker: TextMarker) = buildString {
     append(marker.name)
     marker.value?.let { append('=').append(it) }
-    for ((k, v) in marker.params) append(' ').append(k).append('=').append(v)
+    for ((key, value) in marker.params) append(' ').append(key).append('=').append(value)
 }
 
-private fun effectsOf(span: TextSpan): List<Style> = span.styles.filter { it.name !in DRAWN }
+private fun effectsOf(span: TextSpan): List<Style> = span.styles.filter { it.name !in drawnStyleNames }
 
-internal fun hasEffect(spans: List<TextSpan>, names: Set<String>): Boolean = spans.any { s -> s.styles.any { it.name in names } }
+internal fun hasEffect(spans: List<TextSpan>, names: Set<String>): Boolean = spans.any { span -> span.styles.any { it.name in names } }
 
-/**
- * Spans and markers to libGDX markup. Colored spans get a color tag. An effect span is followed by a dim `~name`
- * note. A point marker is written as a dim `|name=value|` at its offset into the plain text.
- */
 internal fun toMarkup(spans: List<TextSpan>, markers: List<TextMarker>): String = buildString {
-    var written = 0 // plain characters written so far, to compare with marker offsets
-    var m = 0
-    fun marker(marker: TextMarker) = append(DIM).append('|').append(esc(describeMarker(marker))).append("|[]")
+    var written = 0
+    var markerIndex = 0
+    fun marker(marker: TextMarker) = append(dimMarkup).append('|').append(esc(describeMarker(marker))).append("|[]")
     for ((spanIndex, span) in spans.withIndex()) {
         val color = styleColor(span)
         val text = span.text
         var start = 0
         while (start < text.length) {
-            while (m < markers.size && markers[m].offset <= written) marker(markers[m++])
-            val untilMarker = if (m < markers.size) markers[m].offset - written else Int.MAX_VALUE
+            while (markerIndex < markers.size && markers[markerIndex].offset <= written) marker(markers[markerIndex++])
+            val untilMarker = if (markerIndex < markers.size) markers[markerIndex].offset - written else Int.MAX_VALUE
             val end = if (untilMarker >= text.length - start) text.length else start + untilMarker
             if (color != null) append('[').append(color).append(']')
             append(esc(text.substring(start, end)))
@@ -102,13 +85,12 @@ internal fun toMarkup(spans: List<TextSpan>, markers: List<TextMarker>): String 
             written += end - start
             start = end
         }
-        // one note per effect, where its run of spans ends
         val following = spans.getOrNull(spanIndex + 1)
         for (effect in effectsOf(span)) {
-            if (following == null || effect !in following.styles) append(DIM).append('~').append(esc(effect.name)).append("[]")
+            if (following == null || effect !in following.styles) append(dimMarkup).append('~').append(esc(effect.name)).append("[]")
         }
     }
-    while (m < markers.size) marker(markers[m++])
+    while (markerIndex < markers.size) marker(markers[markerIndex++])
 }
 
 internal fun lineMarkup(line: DialogLine, colors: SpeakerColors): String {
@@ -116,33 +98,31 @@ internal fun lineMarkup(line: DialogLine, colors: SpeakerColors): String {
     return prefix + toMarkup(line.spans, line.markers)
 }
 
-/** What a requirement says, in a short form: `player.wits >= 7 (have 6)`. */
-internal fun describe(r: RequirementResult): String = when (r) {
-    is RequirementResult.Unreadable -> "bad requirement '${r.raw}'"
-    is RequirementResult.MissingStat -> "${r.entity ?: "?"}.${r.stat} ${r.op.symbol} ${show(r.target)} (stat missing)"
-    is RequirementResult.Met -> "${r.entity}.${r.stat} ${r.op.symbol} ${show(r.target)} (have ${show(r.actual)})"
-    is RequirementResult.Unmet -> "${r.entity}.${r.stat} ${r.op.symbol} ${show(r.target)} (have ${show(r.actual)})"
-    is RequirementResult.Mismatch -> "${r.entity}.${r.stat} ${r.op.symbol} ${show(r.target)} (have ${show(r.actual)}, type mismatch)"
-    is RequirementResult.AnyOf -> r.results.joinToString(" or ", transform = ::describe)
-    is RequirementResult.Not -> "not (${describe(r.result)})"
+internal fun describe(requirement: RequirementResult): String = when (requirement) {
+    is RequirementResult.Unreadable -> "bad requirement '${requirement.raw}'"
+    is RequirementResult.MissingStat -> "${requirement.entity ?: "?"}.${requirement.stat} ${requirement.op.symbol} ${show(requirement.target)} (stat missing)"
+    is RequirementResult.Met -> "${requirement.entity}.${requirement.stat} ${requirement.op.symbol} ${show(requirement.target)} (have ${show(requirement.actual)})"
+    is RequirementResult.Unmet -> "${requirement.entity}.${requirement.stat} ${requirement.op.symbol} ${show(requirement.target)} (have ${show(requirement.actual)})"
+    is RequirementResult.Mismatch -> "${requirement.entity}.${requirement.stat} ${requirement.op.symbol} ${show(requirement.target)} (have ${show(requirement.actual)}, type mismatch)"
+    is RequirementResult.AnyOf -> requirement.results.joinToString(" or ", transform = ::describe)
+    is RequirementResult.Not -> "not (${describe(requirement.operand)})"
 }
 
-/** The leaf results under [r] with the nesting shown by indentation: an AnyOf lists its alternatives, a Not its operand. */
-private fun StringBuilder.requirementTree(r: RequirementResult, indent: Int) {
-    when (r) {
+private fun StringBuilder.requirementTree(requirement: RequirementResult, indent: Int) {
+    when (requirement) {
         is RequirementResult.AnyOf -> {
             repeat(indent) { append(' ') }
-            append("any of (isMet=").append(r.isMet).append(")\n")
-            for (alt in r.results) requirementTree(alt, indent + 2)
+            append("any of (isMet=").append(requirement.isMet).append(")\n")
+            for (alternative in requirement.results) requirementTree(alternative, indent + 2)
         }
         is RequirementResult.Not -> {
             repeat(indent) { append(' ') }
-            append("not (isMet=").append(r.isMet).append(")\n")
-            requirementTree(r.result, indent + 2)
+            append("not (isMet=").append(requirement.isMet).append(")\n")
+            requirementTree(requirement.operand, indent + 2)
         }
         else -> {
             repeat(indent) { append(' ') }
-            append(esc(describe(r))).append(" -> ").append(r::class.simpleName).append('\n')
+            append(esc(describe(requirement))).append(" -> ").append(requirement::class.simpleName).append('\n')
         }
     }
 }
@@ -164,7 +144,6 @@ private fun typeName(value: Any?): String = when (value) {
     else -> value.javaClass.simpleName
 }
 
-/** A value with its type, so an Int target and a Float actual can be told apart: `7 (Int)`. */
 private fun typed(value: Any?): String = if (value == null) "null" else "${esc(value.toString())} (${typeName(value)})"
 
 private fun quote(text: String) = "\"" + esc(text.replace("\n", "\\n")) + "\""
@@ -175,14 +154,13 @@ private fun styleChips(styles: List<Style>): String =
         esc(describeStyle(style)) + if (hex != null) " (hex %08x)".format(hex) else ""
     }
 
-private fun StringBuilder.title(text: String) = append(TITLE).append(text).append("[]\n")
+private fun StringBuilder.title(text: String) = append(titleMarkup).append(text).append("[]\n")
 
 private fun StringBuilder.field(indent: Int, key: String, value: String) {
     repeat(indent) { append(' ') }
     append(key.padEnd(10)).append(": ").append(value).append('\n')
 }
 
-/** The fields a requirement result has: who and what was asked, and the target. The actual value only when it was found. */
 private fun StringBuilder.requirementFields(
     entity: String?, stat: String, op: Comparison, target: Any, actual: Any?, hasActual: Boolean = true,
 ) {
@@ -211,12 +189,6 @@ private fun StringBuilder.spansAndMarkers(indent: Int, spans: List<TextSpan>, ma
     }
 }
 
-/**
- * The exact [DialogStep] the engine gave, as readable text: every field, nothing left out. [number] counts the
- * steps shown. [note] says when the harness changed anything before showing it (a restored save, refreshed choices).
- * [linesFrom] is the step whose lines and step tags are listed, [step] itself unless the harness kept the lines of an
- * earlier step (after a load).
- */
 fun formatRaw(step: DialogStep, number: Int, note: String? = null, linesFrom: DialogStep = step): String = buildString {
     title("STEP $number")
     field(0, "ended", step.isEnded.toString())
@@ -224,7 +196,7 @@ fun formatRaw(step: DialogStep, number: Int, note: String? = null, linesFrom: Di
     append('\n')
     title("LINES (${linesFrom.lines.size})")
     for ((i, line) in linesFrom.lines.withIndex()) {
-        append(DIM).append("[[").append(i).append("][]\n")
+        append(dimMarkup).append("[[").append(i).append("][]\n")
         field(2, "text", quote(line.text))
         field(2, "speaker", line.speaker?.let { esc(it) } ?: "null")
         tags(2, line.tags)
@@ -236,23 +208,23 @@ fun formatRaw(step: DialogStep, number: Int, note: String? = null, linesFrom: Di
     append('\n')
     title("CHOICES (${step.choices.size})")
     for (choice in step.choices) {
-        append(DIM).append("[[").append(choice.index).append("][]\n")
+        append(dimMarkup).append("[[").append(choice.index).append("][]\n")
         field(2, "text", quote(choice.text))
         field(2, "available", choice.isAvailable.toString())
         tags(2, choice.tags)
         spansAndMarkers(2, choice.spans, choice.markers)
         field(2, "requires", choice.requirements.size.toString())
-        for (r in choice.requirements) {
-            append("    - ").append(quote(r.raw)).append('\n')
-            when (r) {
-                is RequirementResult.Met -> requirementFields(r.entity, r.stat, r.op, r.target, r.actual)
-                is RequirementResult.Unmet -> requirementFields(r.entity, r.stat, r.op, r.target, r.actual)
-                is RequirementResult.Mismatch -> requirementFields(r.entity, r.stat, r.op, r.target, r.actual)
-                is RequirementResult.MissingStat -> requirementFields(r.entity, r.stat, r.op, r.target, null, hasActual = false)
-                is RequirementResult.AnyOf, is RequirementResult.Not -> requirementTree(r, 6)
+        for (requirement in choice.requirements) {
+            append("    - ").append(quote(requirement.raw)).append('\n')
+            when (requirement) {
+                is RequirementResult.Met -> requirementFields(requirement.entity, requirement.stat, requirement.op, requirement.target, requirement.actual)
+                is RequirementResult.Unmet -> requirementFields(requirement.entity, requirement.stat, requirement.op, requirement.target, requirement.actual)
+                is RequirementResult.Mismatch -> requirementFields(requirement.entity, requirement.stat, requirement.op, requirement.target, requirement.actual)
+                is RequirementResult.MissingStat -> requirementFields(requirement.entity, requirement.stat, requirement.op, requirement.target, null, hasActual = false)
+                is RequirementResult.AnyOf, is RequirementResult.Not -> requirementTree(requirement, 6)
                 is RequirementResult.Unreadable -> {}
             }
-            append("      result=").append(r::class.simpleName).append(" isMet=").append(r.isMet).append('\n')
+            append("      result=").append(requirement::class.simpleName).append(" isMet=").append(requirement.isMet).append('\n')
         }
     }
     append('\n')

@@ -23,29 +23,29 @@ class StateTest {
         + [again] -> loop
     """.trimIndent()
 
-    private fun roll(m: StoryManager, times: Int): List<String> {
-        val out = ArrayList<String>()
-        var step = m.next()
+    private fun roll(manager: StoryManager, times: Int): List<String> {
+        val rolled = ArrayList<String>()
+        var step = manager.next()
         repeat(times) {
-            out += step.texts()
-            step = m.choose(0)
+            rolled += step.texts()
+            step = manager.choose(0)
         }
-        return out
+        return rolled
     }
 
     @Test
     fun `saveState and loadState restore variables and position`() {
-        val m = managerOf(loopInk)
-        m.next()
-        m.choose(0)
-        val saved = m.saveState()
-        m.choose(0)
-        m.choose(0)
-        assertEquals(4, m.getVariable("count"))
-        m.loadState(saved)
-        assertEquals(2, m.getVariable("count"))
-        assertTrue(m.next().texts().isEmpty(), "choices are pending, so no new lines")
-        assertEquals(3, m.choose(0).texts().single().substringAfter("count ").toInt())
+        val manager = managerOf(loopInk)
+        manager.next()
+        manager.choose(0)
+        val saved = manager.saveState()
+        manager.choose(0)
+        manager.choose(0)
+        assertEquals(4, manager.getVariable("count"))
+        manager.loadState(saved)
+        assertEquals(2, manager.getVariable("count"))
+        assertTrue(manager.next().texts().isEmpty(), "choices are pending, so no new lines")
+        assertEquals(3, manager.choose(0).texts().single().substringAfter("count ").toInt())
     }
 
     @Test
@@ -61,44 +61,44 @@ class StateTest {
 
     @Test
     fun `loadState rejects text that is not a state with a SaveStateException that wraps ink's error`() {
-        val m = managerOf(loopInk)
-        val ex = assertFailsWith<SaveStateException> { m.loadState("garbage") }
+        val manager = managerOf(loopInk)
+        val ex = assertFailsWith<SaveStateException> { manager.loadState("garbage") }
         assertTrue(ex.cause != null)
     }
 
     @Test
     fun `loadState rejects a damaged envelope`() {
-        val m = managerOf(loopInk)
-        assertFailsWith<SaveStateException> { m.loadState("{\"v\":1,\"ink\":5}") }
-        assertFailsWith<SaveStateException> { m.loadState("{\"v\":\"x\",\"ink\":\"{}\"}") }
-        assertFailsWith<SaveStateException> { m.loadState("{\"v\":1,\"ink\":\"{}\",\"styles\":[5]}") }
+        val manager = managerOf(loopInk)
+        assertFailsWith<SaveStateException> { manager.loadState("{\"v\":1,\"ink\":5}") }
+        assertFailsWith<SaveStateException> { manager.loadState("{\"v\":\"x\",\"ink\":\"{}\"}") }
+        assertFailsWith<SaveStateException> { manager.loadState("{\"v\":1,\"ink\":\"{}\",\"styles\":[5]}") }
     }
 
     @Test
     fun `the same seed gives the same random sequence`() {
-        val a = managerOf(loopInk).also { it.seedRandom(42) }
-        val b = managerOf(loopInk).also { it.seedRandom(42) }
-        assertEquals(roll(a, 6), roll(b, 6))
+        val firstManager = managerOf(loopInk).also { it.seedRandom(42) }
+        val secondManager = managerOf(loopInk).also { it.seedRandom(42) }
+        assertEquals(roll(firstManager, 6), roll(secondManager, 6))
     }
 
     @Test
     fun `different seeds give different sequences`() {
-        val a = managerOf(loopInk).also { it.seedRandom(1) }
-        val b = managerOf(loopInk).also { it.seedRandom(2) }
-        assertNotEquals(roll(a, 6), roll(b, 6))
+        val firstManager = managerOf(loopInk).also { it.seedRandom(1) }
+        val secondManager = managerOf(loopInk).also { it.seedRandom(2) }
+        assertNotEquals(roll(firstManager, 6), roll(secondManager, 6))
     }
 
     @Test
     fun `a saved state carries the seed and the sequence continues exactly`() {
-        val m = managerOf(loopInk)
-        m.seedRandom(7)
-        var step = m.next()
-        step = m.choose(0)
-        val saved = m.saveState()
+        val manager = managerOf(loopInk)
+        manager.seedRandom(7)
+        var step = manager.next()
+        step = manager.choose(0)
+        val saved = manager.saveState()
         val expected = ArrayList<String>()
-        repeat(4) { step = m.choose(0); expected += step.texts() }
+        repeat(4) { step = manager.choose(0); expected += step.texts() }
 
-        val other = StoryManager(compiler.loadCompiled(m.story.toJson()))
+        val other = StoryManager(compiler.loadCompiled(manager.story.toJson()))
         other.loadState(saved)
         val actual = ArrayList<String>()
         repeat(4) { actual += other.choose(0).texts() }
@@ -107,101 +107,101 @@ class StateTest {
 
     @Test
     fun `lastSeed reports the last seed and loadState clears it`() {
-        val m = managerOf(loopInk)
-        assertNull(m.lastSeed)
-        m.seedRandom(5)
-        assertEquals(5, m.lastSeed)
-        m.loadState(m.saveState())
-        assertNull(m.lastSeed)
+        val manager = managerOf(loopInk)
+        assertNull(manager.lastSeed)
+        manager.seedRandom(5)
+        assertEquals(5, manager.lastSeed)
+        manager.loadState(manager.saveState())
+        assertNull(manager.lastSeed)
     }
 
     @Test
     fun `seedRandom throws without the library`() {
-        val m = managerOf("Hi", lib = false)
-        assertFailsWith<IncompatibleLibraryException> { m.seedRandom(1) }
-        assertNull(m.lastSeed)
+        val manager = managerOf("Hi", lib = false)
+        assertFailsWith<IncompatibleLibraryException> { manager.seedRandom(1) }
+        assertNull(manager.lastSeed)
     }
 
     @Test
     fun `reset restores variables position and speaker`() {
-        val m = managerOf(loopInk)
-        m.speaker = "guard"
-        m.next()
-        m.choose(0)
-        m.choose(0)
-        m.reset()
-        assertEquals(0, m.getVariable("count"))
-        assertNull(m.speaker)
-        val step = m.next()
+        val manager = managerOf(loopInk)
+        manager.speaker = "guard"
+        manager.next()
+        manager.choose(0)
+        manager.choose(0)
+        manager.reset()
+        assertEquals(0, manager.getVariable("count"))
+        assertNull(manager.speaker)
+        val step = manager.next()
         assertEquals(1, step.texts().single().substringAfter("count ").toInt())
     }
 
     @Test
     fun `reset keeps bindings and settings`() {
-        val m = managerOf("{twice(4)}\n-> END\nEXTERNAL twice(x)\n=== function twice(x) ===\n~ return 0")
-        m.bindFunction("twice") { it.int(0) * 2 }
-        m.next()
-        m.reset()
-        assertEquals(listOf("8"), m.next().texts())
+        val manager = managerOf("{twice(4)}\n-> END\nEXTERNAL twice(x)\n=== function twice(x) ===\n~ return 0")
+        manager.bindFunction("twice") { it.int(0) * 2 }
+        manager.next()
+        manager.reset()
+        assertEquals(listOf("8"), manager.next().texts())
     }
 
     @Test
     fun `reset without the library clears the fallback speaker`() {
-        val m = managerOf("Hi", lib = false)
-        m.speaker = "guard"
-        assertEquals("guard", m.speaker)
-        m.reset()
-        assertNull(m.speaker)
+        val manager = managerOf("Hi", lib = false)
+        manager.speaker = "guard"
+        assertEquals("guard", manager.speaker)
+        manager.reset()
+        assertNull(manager.speaker)
     }
 
     @Test
     fun `reset reseeds so the old seed no longer applies`() {
-        val m = managerOf(loopInk)
-        m.seedRandom(3)
-        m.reset()
-        assertNull(m.lastSeed)
+        val manager = managerOf(loopInk)
+        manager.seedRandom(3)
+        manager.reset()
+        assertNull(manager.lastSeed)
     }
 
     @Test
     fun `a stat free story needs no provider and no library`() {
-        val m = managerOf("Hello\n* [Go] Gone -> END", lib = false)
-        val step = m.next()
+        val manager = managerOf("Hello\n* [Go] Gone -> END", lib = false)
+        val step = manager.next()
         assertEquals(listOf("Hello"), step.texts())
-        assertEquals(listOf("Gone"), m.choose(0).texts())
+        assertEquals(listOf("Gone"), manager.choose(0).texts())
     }
 
     @Test
     fun `a stat free story can save and load`() {
-        val m = managerOf("Hello\n* [Go] Gone -> END", lib = false)
-        m.next()
-        val saved = m.saveState()
-        m.choose(0)
-        m.loadState(saved)
-        assertEquals(listOf("Gone"), m.choose(0).texts())
+        val manager = managerOf("Hello\n* [Go] Gone -> END", lib = false)
+        manager.next()
+        val saved = manager.saveState()
+        manager.choose(0)
+        manager.loadState(saved)
+        assertEquals(listOf("Gone"), manager.choose(0).texts())
     }
 
     @Test
     fun `a story with its own VAR n can include the library`() {
-        val m = managerOf("VAR n = 3\nVAR x = 1\nVAR name = \"Ann\"\nn {n} x {x} {name} {stat(\"hp\")}")
-        assertEquals(listOf("n 3 x 1 Ann 0.0"), m.next().texts())
-        assertEquals(3, m.getVariable("n"))
+        val manager = managerOf("VAR n = 3\nVAR x = 1\nVAR name = \"Ann\"\nn {n} x {x} {name} {stat(\"hp\")}")
+        assertEquals(listOf("n 3 x 1 Ann 0.0"), manager.next().texts())
+        assertEquals(3, manager.getVariable("n"))
     }
 
     @Test
     fun `library parameter names do not clash with story variables`() {
-        val m = managerOf("INCLUDE hdgife_util.ink\nVAR hdg = 1\n{clamp(15, 0, 10)} {avg2(2, 4)} {fmt(2.5, 0, \"floor\")}")
-        assertEquals(listOf("10 3.0 2"), m.next().texts())
+        val manager = managerOf("INCLUDE hdgife_util.ink\nVAR hdg = 1\n{clamp(15, 0, 10)} {avg2(2, 4)} {fmt(2.5, 0, \"floor\")}")
+        assertEquals(listOf("10 3.0 2"), manager.next().texts())
     }
 
     private val styledInk = "He said <color=red>stop\n* [Wait] and <b>go</b> now</color> then.\n-> END"
 
     @Test
     fun `a style open at save time continues after load`() {
-        val m = managerOf(styledInk)
-        val first = m.next()
+        val manager = managerOf(styledInk)
+        val first = manager.next()
         assertEquals(listOf(Style("color", "red")), first.openStyles)
-        val saved = m.saveState()
-        val expected = m.choose(0)
+        val saved = manager.saveState()
+        val expected = manager.choose(0)
 
         val other = managerOf(styledInk)
         other.loadState(saved)
@@ -212,40 +212,40 @@ class StateTest {
 
     @Test
     fun `saving and loading in the same manager restores open styles`() {
-        val m = managerOf(styledInk)
-        m.next()
-        val saved = m.saveState()
-        val expected = m.choose(0)
-        m.loadState(saved)
-        assertEquals(expected, m.choose(0))
+        val manager = managerOf(styledInk)
+        manager.next()
+        val saved = manager.saveState()
+        val expected = manager.choose(0)
+        manager.loadState(saved)
+        assertEquals(expected, manager.choose(0))
     }
 
     @Test
     fun `style values and params survive a save`() {
         val ink = "<shake amp=2 speed=\"0.5 fast\">a\n<color=ff0000>b\n* [Go] c -> END"
-        val m = managerOf(ink)
-        val open = m.next().openStyles
+        val manager = managerOf(ink)
+        val open = manager.next().openStyles
         assertEquals(2, open.size)
         val other = managerOf(ink)
-        other.loadState(m.saveState())
+        other.loadState(manager.saveState())
         assertEquals(open, other.choose(0).lines.single().spans.single().styles)
     }
 
     @Test
     fun `load of an older save without styles closes open ones`() {
-        val m = managerOf(styledInk)
-        m.next()
-        m.loadState(m.story.state.toJson())
-        val line = m.choose(0).lines.single()
+        val manager = managerOf(styledInk)
+        manager.next()
+        manager.loadState(manager.story.state.toJson())
+        val line = manager.choose(0).lines.single()
         assertEquals("and go now then.", line.text)
         assertTrue(line.spans.none { span -> span.styles.any { it.name == "color" } })
     }
 
     @Test
     fun `the save is a versioned envelope around the ink state`() {
-        val m = managerOf(styledInk)
-        m.next()
-        val parsed = SimpleJson.textToDictionary(m.saveState())
+        val manager = managerOf(styledInk)
+        manager.next()
+        val parsed = SimpleJson.textToDictionary(manager.saveState())
         assertEquals(1, parsed["v"])
         assertTrue(parsed["ink"] is String)
         assertEquals(1, (parsed["styles"] as List<*>).size)
@@ -253,33 +253,33 @@ class StateTest {
 
     @Test
     fun `an unsupported save version is refused and nothing changes`() {
-        val m = managerOf(styledInk)
-        m.next()
-        val saved = m.saveState().replace("\"v\":1", "\"v\":99")
-        assertFailsWith<SaveStateException> { m.loadState(saved) }
-        val line = m.choose(0).lines.single()
+        val manager = managerOf(styledInk)
+        manager.next()
+        val saved = manager.saveState().replace("\"v\":1", "\"v\":99")
+        assertFailsWith<SaveStateException> { manager.loadState(saved) }
+        val line = manager.choose(0).lines.single()
         assertEquals("and go now then.", line.text)
         assertEquals(Style("color", "red"), line.spans.first().styles.single())
     }
 
     @Test
     fun `a plain ink state json still loads`() {
-        val m = managerOf("Hello\n* [Go] Gone -> END", lib = false)
-        m.next()
-        val plain = m.story.state.toJson()
-        m.choose(0)
-        m.loadState(plain)
-        assertEquals(listOf("Gone"), m.choose(0).texts())
+        val manager = managerOf("Hello\n* [Go] Gone -> END", lib = false)
+        manager.next()
+        val plain = manager.story.state.toJson()
+        manager.choose(0)
+        manager.loadState(plain)
+        assertEquals(listOf("Gone"), manager.choose(0).texts())
     }
 
     @Test
     fun `the fallback speaker is saved without the library`() {
-        val m = managerOf("Hi\n* [Go] Bye -> END", lib = false)
-        m.speaker = "guard"
-        m.next()
-        val saved = m.saveState()
-        m.speaker = "other"
-        m.loadState(saved)
-        assertEquals("guard", m.speaker)
+        val manager = managerOf("Hi\n* [Go] Bye -> END", lib = false)
+        manager.speaker = "guard"
+        manager.next()
+        val saved = manager.saveState()
+        manager.speaker = "other"
+        manager.loadState(saved)
+        assertEquals("guard", manager.speaker)
     }
 }
