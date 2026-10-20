@@ -1,4 +1,4 @@
-package com.github.halfdeadgames.hdgife.harness
+package com.github.halfdeadgames.hdgife.ktx.scene2d
 
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.Colors
@@ -8,7 +8,7 @@ import com.badlogic.gdx.math.MathUtils
 import com.badlogic.gdx.scenes.scene2d.ui.Widget
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable
 import com.badlogic.gdx.utils.Align
-import com.badlogic.gdx.utils.IntArray
+import com.badlogic.gdx.utils.IntArray as GdxIntArray
 import com.github.halfdeadgames.hdgife.story.Style
 import com.github.halfdeadgames.hdgife.story.TextMarker
 import com.github.halfdeadgames.hdgife.story.TextSpan
@@ -22,7 +22,6 @@ private const val charsPerSecond = 70f
 private const val defaultPauseSeconds = 0.5f
 private const val flashSeconds = 0.4f
 private const val flashAlpha = 0.3f
-private const val amplitudeScale = 1f
 private const val shakeDegreesPerSecond = 1500f
 private const val waveDegreesPerSecond = 360f
 private const val bounceDegreesPerSecond = 180f
@@ -33,23 +32,19 @@ private val dimColor = Color(0.54f, 0.54f, 0.54f, 1f)
 private const val pauseTrigger: Byte = 0
 private const val flashTrigger: Byte = 1
 
-/**
- * One rendered dialog line, drawn glyph by glyph so that shake, wave and bounce spans move, `pause` markers hold the
- * typewriter reveal and `slam` markers flash the line. Layout and per-glyph data are built once; draw does not allocate.
- */
-class RichLine(
+public class RichDialogLabel(
     private val font: BitmapFont,
     private val flashBackground: Drawable,
     private val baseColor: Color,
-    speaker: String?,
-    speakerColorName: String?,
     spans: List<TextSpan>,
     markers: List<TextMarker>,
-    stillOpen: List<Style>,
-    typewriter: Boolean,
+    speaker: String? = null,
+    speakerColorName: String? = null,
+    stillOpen: List<Style> = emptyList(),
+    typewriter: Boolean = true,
 ) : Widget() {
-    val markup: String
-    val text: String
+    public val markup: String
+    public val text: String
 
     private val chars: CharArray
     private val colors: Array<Color>
@@ -59,14 +54,17 @@ class RichLine(
     private val instant: BooleanArray
     private val positions: FloatArray
 
-    private val triggerAt: kotlin.IntArray
+    private val triggerAt: IntArray
     private val triggerKind: ByteArray
     private val triggerSeconds: FloatArray
 
-    private val lineStarts = IntArray()
+    private val lineStarts = GdxIntArray()
     private val tint = Color()
+    private val savedFontColor = Color()
 
     private var laidOutWidth = -1f
+    private var laidOutScaleX = 0f
+    private var laidOutScaleY = 0f
     private var lineHeight = 0f
     private var nextTrigger = 0
     private var carry = 0f
@@ -74,16 +72,16 @@ class RichLine(
     private var flashLeft = 0f
     private var time = 0f
 
-    var revealedChars = 0
+    public var revealedChars: Int = 0
         private set
-    var started = false
+    public var started: Boolean = false
 
-    val totalChars: Int get() = chars.size
-    val isDone: Boolean get() = revealedChars >= chars.size
-    val isPaused: Boolean get() = pauseLeft > 0f
-    val isFlashing: Boolean get() = flashLeft > 0f
-    val animationTime: Float get() = time
-    val hasEffects: Boolean
+    public val totalChars: Int get() = chars.size
+    public val isDone: Boolean get() = revealedChars >= chars.size
+    public val isPaused: Boolean get() = pauseLeft > 0f
+    public val isFlashing: Boolean get() = flashLeft > 0f
+    public val animationTime: Float get() = time
+    public val hasEffects: Boolean
 
     init {
         val builtColors = ArrayList<Color>()
@@ -93,6 +91,7 @@ class RichLine(
         val builtInstant = ArrayList<Boolean>()
         val triggers = ArrayList<Triple<Int, Byte, Float>>()
         val plain = StringBuilder()
+        val markupText = StringBuilder(speakerPrefixMarkup(speaker, speakerColorName))
 
         fun add(runText: String, color: Color, effect: Style?, isInstant: Boolean) {
             val kind = when (effect?.name) {
@@ -115,6 +114,7 @@ class RichLine(
 
         if (speaker != null) add("$speaker: ", speakerColorName?.let(Colors::get) ?: baseColor, null, true)
         walkRuns(spans, markers, stillOpen) { kind, runText, color, effect, marker ->
+            markupText.appendRunMarkup(kind, runText, color)
             when (kind) {
                 RunKind.Text -> add(runText, color?.let(::resolveColor) ?: baseColor, effect, false)
                 RunKind.Note -> add(runText, dimColor, null, true)
@@ -128,7 +128,7 @@ class RichLine(
                 }
             }
         }
-        markup = (if (speaker != null && speakerColorName != null) "[$speakerColorName]${esc(speaker)}:[] " else "") + toMarkup(spans, markers, stillOpen)
+        markup = markupText.toString()
         text = plain.toString()
         chars = text.toCharArray()
         colors = builtColors.toTypedArray()
@@ -137,7 +137,7 @@ class RichLine(
         speeds = builtSpeeds.toFloatArray()
         instant = builtInstant.toBooleanArray()
         positions = FloatArray(chars.size)
-        triggerAt = kotlin.IntArray(triggers.size) { triggers[it].first }
+        triggerAt = IntArray(triggers.size) { triggers[it].first }
         triggerKind = ByteArray(triggers.size) { triggers[it].second }
         triggerSeconds = FloatArray(triggers.size) { triggers[it].third }
         hasEffects = effects.any { it != noEffect }
@@ -151,7 +151,7 @@ class RichLine(
         }
     }
 
-    fun skip() {
+    public fun skip() {
         revealedChars = chars.size
         pauseLeft = 0f
         nextTrigger = triggerAt.size
@@ -205,9 +205,11 @@ class RichLine(
     }
 
     private fun layoutFor(targetWidth: Float) {
-        if (targetWidth == laidOutWidth) return
-        laidOutWidth = targetWidth
         val data = font.data
+        if (targetWidth == laidOutWidth && data.scaleX == laidOutScaleX && data.scaleY == laidOutScaleY) return
+        laidOutWidth = targetWidth
+        laidOutScaleX = data.scaleX
+        laidOutScaleY = data.scaleY
         lineHeight = data.lineHeight
         lineStarts.clear()
         lineStarts.add(0)
@@ -249,6 +251,7 @@ class RichLine(
         val data = font.data
         val wasMarkup = data.markupEnabled
         data.markupEnabled = false
+        savedFontColor.set(font.color)
         val jitter = if (flashLeft > 0f) flashLeft / flashSeconds * 4f else 0f
         val jitterX = jitter * MathUtils.sinDeg(time * 2400f)
         val jitterY = jitter * MathUtils.cosDeg(time * 1900f)
@@ -276,6 +279,7 @@ class RichLine(
             }
         }
         data.markupEnabled = wasMarkup
+        font.color = savedFontColor
     }
 
     private fun drawRange(batch: Batch, color: Color, parentAlpha: Float, drawX: Float, drawY: Float, from: Int, to: Int) {
@@ -287,11 +291,11 @@ class RichLine(
 
     private fun offsetX(index: Int): Float {
         if (effects[index] != shakeEffect) return 0f
-        return amplitudes[index] * amplitudeScale * MathUtils.sinDeg(time * speeds[index] * shakeDegreesPerSecond + index * 131f)
+        return amplitudes[index] * MathUtils.sinDeg(time * speeds[index] * shakeDegreesPerSecond + index * 131f)
     }
 
     private fun offsetY(index: Int): Float {
-        val amplitude = amplitudes[index] * amplitudeScale
+        val amplitude = amplitudes[index]
         return when (effects[index]) {
             shakeEffect -> amplitude * MathUtils.sinDeg(time * speeds[index] * shakeDegreesPerSecond * 0.8f + index * 57f)
             waveEffect -> amplitude * MathUtils.sinDeg(time * speeds[index] * waveDegreesPerSecond + index * 40f)
@@ -306,5 +310,11 @@ private fun numberParam(style: Style, key: String, positional: Int): Float =
 
 private fun pauseSeconds(marker: TextMarker): Float = marker.value?.toFloatOrNull() ?: defaultPauseSeconds
 
-private fun resolveColor(name: String): Color? =
-    if (name.startsWith("#")) Color.valueOf(name.substring(1)) else Colors.get(name)
+private fun resolveColor(name: String): Color? {
+    if (!name.startsWith("#")) return Colors.get(name)
+    return try {
+        Color.valueOf(name.substring(1))
+    } catch (_: RuntimeException) {
+        null
+    }
+}

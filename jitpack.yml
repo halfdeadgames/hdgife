@@ -1,4 +1,4 @@
 jdk:
   - openjdk17
 install:
-  - ./gradlew -PskipAndroid -PskipWeb :core:test :core:publishToMavenLocal
+  - ./gradlew -PskipAndroid -PskipWeb :core:test :ktx:test :core:publishToMavenLocal :ktx:publishToMavenLocal

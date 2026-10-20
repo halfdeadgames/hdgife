@@ -1,0 +1,81 @@
+public final class com/github/halfdeadgames/hdgife/ktx/CompilerAsyncKt {
+	public static final fun compileAsync (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Lcom/badlogic/gdx/files/FileHandle;Ljava/util/List;Lkotlin/coroutines/CoroutineContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun compileAsync (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Ljava/util/List;Lkotlin/coroutines/CoroutineContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun compileAsync$default (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Lcom/badlogic/gdx/files/FileHandle;Ljava/util/List;Lkotlin/coroutines/CoroutineContext;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun compileAsync$default (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Ljava/util/List;Lkotlin/coroutines/CoroutineContext;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun loadCompiledAsync (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Ljava/lang/String;Lkotlin/coroutines/CoroutineContext;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun loadCompiledAsync$default (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Ljava/lang/String;Lkotlin/coroutines/CoroutineContext;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/github/halfdeadgames/hdgife/ktx/InkAssetStorageKt {
+	public static final fun loadInkStory (Lktx/assets/async/AssetStorage;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun registerInkLoaders (Lktx/assets/async/AssetStorage;Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;)V
+	public static synthetic fun registerInkLoaders$default (Lktx/assets/async/AssetStorage;Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;ILjava/lang/Object;)V
+}
+
+public final class com/github/halfdeadgames/hdgife/ktx/InkStoryLoader : com/badlogic/gdx/assets/loaders/AsynchronousAssetLoader {
+	public fun <init> (Lcom/badlogic/gdx/assets/loaders/FileHandleResolver;)V
+	public fun <init> (Lcom/badlogic/gdx/assets/loaders/FileHandleResolver;Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;)V
+	public synthetic fun <init> (Lcom/badlogic/gdx/assets/loaders/FileHandleResolver;Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getDependencies (Ljava/lang/String;Lcom/badlogic/gdx/files/FileHandle;Lcom/badlogic/gdx/assets/AssetLoaderParameters;)Lcom/badlogic/gdx/utils/Array;
+	public fun loadAsync (Lcom/badlogic/gdx/assets/AssetManager;Ljava/lang/String;Lcom/badlogic/gdx/files/FileHandle;Lcom/badlogic/gdx/assets/AssetLoaderParameters;)V
+	public fun loadSync (Lcom/badlogic/gdx/assets/AssetManager;Ljava/lang/String;Lcom/badlogic/gdx/files/FileHandle;Lcom/badlogic/gdx/assets/AssetLoaderParameters;)Lcom/bladecoder/ink/runtime/HdgifeStory;
+	public synthetic fun loadSync (Lcom/badlogic/gdx/assets/AssetManager;Ljava/lang/String;Lcom/badlogic/gdx/files/FileHandle;Lcom/badlogic/gdx/assets/AssetLoaderParameters;)Ljava/lang/Object;
+	public fun unloadAsync (Lcom/badlogic/gdx/assets/AssetManager;Ljava/lang/String;Lcom/badlogic/gdx/files/FileHandle;Lcom/badlogic/gdx/assets/AssetLoaderParameters;)V
+}
+
+public final class com/github/halfdeadgames/hdgife/ktx/InkStoryLoaderKt {
+	public static final field inkCompiledSuffix Ljava/lang/String;
+	public static final field inkSourceSuffix Ljava/lang/String;
+	public static final fun registerInkLoaders (Lcom/badlogic/gdx/assets/AssetManager;Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;)V
+	public static synthetic fun registerInkLoaders$default (Lcom/badlogic/gdx/assets/AssetManager;Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;ILjava/lang/Object;)V
+}
+
+public final class com/github/halfdeadgames/hdgife/ktx/StoryFlowsKt {
+	public static final fun eventFlow (Lcom/github/halfdeadgames/hdgife/story/StoryManager;I)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun eventFlow$default (Lcom/github/halfdeadgames/hdgife/story/StoryManager;IILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public static final fun eventSharedFlow (Lcom/github/halfdeadgames/hdgife/story/StoryManager;II)Lkotlinx/coroutines/flow/SharedFlow;
+	public static synthetic fun eventSharedFlow$default (Lcom/github/halfdeadgames/hdgife/story/StoryManager;IIILjava/lang/Object;)Lkotlinx/coroutines/flow/SharedFlow;
+	public static final fun observeVariableFlow (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Ljava/lang/String;Lkotlin/reflect/KClass;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/github/halfdeadgames/hdgife/ktx/StoryLoggingKt {
+	public static final fun ktxHdgifeLog (Lktx/log/Logger;)Lcom/github/halfdeadgames/hdgife/HdgifeLog;
+	public static synthetic fun ktxHdgifeLog$default (Lktx/log/Logger;ILjava/lang/Object;)Lcom/github/halfdeadgames/hdgife/HdgifeLog;
+}
+
+public final class com/github/halfdeadgames/hdgife/ktx/scene2d/MarkupTextKt {
+	public static final fun describeMarker (Lcom/github/halfdeadgames/hdgife/story/TextMarker;)Ljava/lang/String;
+	public static final fun describeStyle (Lcom/github/halfdeadgames/hdgife/story/Style;)Ljava/lang/String;
+	public static final fun escapeMarkup (Ljava/lang/String;)Ljava/lang/String;
+	public static final fun toMarkup (Ljava/util/List;Ljava/util/List;Ljava/util/List;)Ljava/lang/String;
+	public static synthetic fun toMarkup$default (Ljava/util/List;Ljava/util/List;Ljava/util/List;ILjava/lang/Object;)Ljava/lang/String;
+}
+
+public final class com/github/halfdeadgames/hdgife/ktx/scene2d/RichDialogLabel : com/badlogic/gdx/scenes/scene2d/ui/Widget {
+	public fun <init> (Lcom/badlogic/gdx/graphics/g2d/BitmapFont;Lcom/badlogic/gdx/scenes/scene2d/utils/Drawable;Lcom/badlogic/gdx/graphics/Color;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;Z)V
+	public synthetic fun <init> (Lcom/badlogic/gdx/graphics/g2d/BitmapFont;Lcom/badlogic/gdx/scenes/scene2d/utils/Drawable;Lcom/badlogic/gdx/graphics/Color;Ljava/util/List;Ljava/util/List;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun act (F)V
+	public fun draw (Lcom/badlogic/gdx/graphics/g2d/Batch;F)V
+	public final fun getAnimationTime ()F
+	public final fun getHasEffects ()Z
+	public final fun getMarkup ()Ljava/lang/String;
+	public fun getPrefHeight ()F
+	public fun getPrefWidth ()F
+	public final fun getRevealedChars ()I
+	public final fun getStarted ()Z
+	public final fun getText ()Ljava/lang/String;
+	public final fun getTotalChars ()I
+	public final fun isDone ()Z
+	public final fun isFlashing ()Z
+	public final fun isPaused ()Z
+	public fun layout ()V
+	public final fun setStarted (Z)V
+	public final fun skip ()V
+}
+
+public final class com/github/halfdeadgames/hdgife/ktx/scene2d/RichDialogLabelBuilderKt {
+	public static final fun richDialogLabel (Lktx/scene2d/KWidget;Lcom/badlogic/gdx/graphics/g2d/BitmapFont;Lcom/badlogic/gdx/scenes/scene2d/utils/Drawable;Ljava/util/List;Ljava/util/List;Lcom/badlogic/gdx/graphics/Color;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZLkotlin/jvm/functions/Function2;)Lcom/github/halfdeadgames/hdgife/ktx/scene2d/RichDialogLabel;
+	public static synthetic fun richDialogLabel$default (Lktx/scene2d/KWidget;Lcom/badlogic/gdx/graphics/g2d/BitmapFont;Lcom/badlogic/gdx/scenes/scene2d/utils/Drawable;Ljava/util/List;Ljava/util/List;Lcom/badlogic/gdx/graphics/Color;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ZLkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lcom/github/halfdeadgames/hdgife/ktx/scene2d/RichDialogLabel;
+}
+

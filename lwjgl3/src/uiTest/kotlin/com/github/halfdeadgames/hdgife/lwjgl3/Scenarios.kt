@@ -8,6 +8,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Skin
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.github.halfdeadgames.hdgife.harness.*
+import com.github.halfdeadgames.hdgife.ktx.scene2d.RichDialogLabel
 import ktx.async.skipFrame
 
 private const val hubLine = "tester: Hub. Each choice opens a feature group."

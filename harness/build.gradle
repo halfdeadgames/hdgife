@@ -14,7 +14,7 @@ def consoleLibrary = tasks.register('consoleLibrary', Jar) {
 }
 
 dependencies {
-  api project(':core')
+  api project(':ktx')
   api "io.github.quillraven.libktx:ktx-app:$ktxVersion"
   implementation "io.github.quillraven.libktx:ktx-log:$ktxVersion"
   implementation "io.github.quillraven.libktx:ktx-scene2d:$ktxVersion"

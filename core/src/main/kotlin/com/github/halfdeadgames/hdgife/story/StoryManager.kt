@@ -83,6 +83,22 @@ public class StoryManager private constructor(
 
     public var onEvent: StoryEventListener = StoryEventListener { }
 
+    private class EventRegistration(val listener: StoryEventListener)
+
+    // Copy-on-write: closing a registration may happen on a collector thread while the story thread is delivering.
+    @Volatile
+    private var eventRegistrations: List<EventRegistration> = emptyList()
+
+    private val eventRegistrationsLock = Any()
+
+    public fun addEventListener(listener: StoryEventListener): AutoCloseable {
+        val registration = EventRegistration(listener)
+        synchronized(eventRegistrationsLock) { eventRegistrations = eventRegistrations + registration }
+        return AutoCloseable {
+            synchronized(eventRegistrationsLock) { eventRegistrations = eventRegistrations - registration }
+        }
+    }
+
     public var maxOpenStyles: Int = 16
         set(value) {
             require(value >= 1) { "maxOpenStyles must be at least 1" }
@@ -156,6 +172,7 @@ public class StoryManager private constructor(
         observations.clear()
         unbindOwn(story)
         userFunctions.clear()
+        eventRegistrations = emptyList()
         dropEvents()
         closeStyles("the manager was closed")
     }
@@ -528,10 +545,12 @@ public class StoryManager private constructor(
     }
 
     private fun notifyEvents(events: List<StoryEvent>) {
-        val listener = onEvent
+        val primary = onEvent
+        val registrations = eventRegistrations
         for (i in events.indices) {
             try {
-                listener.onEvent(events[i])
+                primary.onEvent(events[i])
+                for (r in registrations.indices) registrations[r].listener.onEvent(events[i])
             } catch (e: Exception) {
                 for (j in i + 1 until events.size) undelivered += events[j]
                 throw e

@@ -15,6 +15,9 @@ import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable
 import com.badlogic.gdx.utils.Align
+import com.github.halfdeadgames.hdgife.ktx.scene2d.RichDialogLabel
+import com.github.halfdeadgames.hdgife.ktx.scene2d.describeStyle
+import com.github.halfdeadgames.hdgife.ktx.scene2d.escapeMarkup
 import com.github.halfdeadgames.hdgife.story.DialogLine
 import com.github.halfdeadgames.hdgife.story.DialogStep
 import com.github.halfdeadgames.hdgife.story.StoryEvent
@@ -152,9 +155,9 @@ class RenderedPanel(private val skin: Skin, private val touch: Boolean = false, 
         choicePane.validate()
     }
 
-    val rowMarkup: List<String> get() = rows.map { if (it is RichLine) it.markup else (it as Label).text.toString() }
+    val rowMarkup: List<String> get() = rows.map { if (it is RichDialogLabel) it.markup else (it as Label).text.toString() }
 
-    val richLines: List<RichLine> get() = rows.filterIsInstance<RichLine>()
+    val richLines: List<RichDialogLabel> get() = rows.filterIsInstance<RichDialogLabel>()
 
     val isRevealing: Boolean get() = current < rows.size
 
@@ -163,7 +166,7 @@ class RenderedPanel(private val skin: Skin, private val touch: Boolean = false, 
     override fun act(delta: Float) {
         super.act(delta)
         val row = rows.getOrNull(current)
-        if (row is RichLine && row.isDone) {
+        if (row is RichDialogLabel && row.isDone) {
             current++
             revealCurrent()
         }
@@ -173,7 +176,7 @@ class RenderedPanel(private val skin: Skin, private val touch: Boolean = false, 
         for (index in current until rows.size) {
             val row = rows[index]
             row.isVisible = true
-            if (row is RichLine) row.skip()
+            if (row is RichDialogLabel) row.skip()
         }
         current = rows.size
     }
@@ -182,7 +185,7 @@ class RenderedPanel(private val skin: Skin, private val touch: Boolean = false, 
         while (current < rows.size) {
             val row = rows[current]
             row.isVisible = true
-            if (row is RichLine && !row.isDone) {
+            if (row is RichDialogLabel && !row.isDone) {
                 row.started = true
                 return
             }
@@ -216,7 +219,7 @@ class RenderedPanel(private val skin: Skin, private val touch: Boolean = false, 
         }
         while (next < step.events.size) addEvent(step.events[next++])
         if (step.openStyles.isNotEmpty()) {
-            addRow("(style still open: ${esc(step.openStyles.joinToString { describeStyle(it) })})", dimColor)
+            addRow("(style still open: ${escapeMarkup(step.openStyles.joinToString { describeStyle(it) })})", dimColor)
         }
         if (typewriter) {
             for (row in rows) row.isVisible = false
@@ -231,16 +234,16 @@ class RenderedPanel(private val skin: Skin, private val touch: Boolean = false, 
     private fun addLine(line: DialogLine, stillOpen: List<Style>) {
         val speakerName = line.speaker
         val colorName = speakerName?.let { speakers.of(it) }
-        val rich = RichLine(
-            bodyStyle.font, flashBackground, bodyStyle.fontColor ?: Color.WHITE, speakerName, colorName,
-            line.spans, line.markers, stillOpen, typewriter,
+        val rich = RichDialogLabel(
+            bodyStyle.font, flashBackground, bodyStyle.fontColor ?: Color.WHITE, line.spans, line.markers,
+            speakerName, colorName, stillOpen, typewriter,
         )
         place(rich, false)
-        if (!line.tags.isEmpty) addRow(esc(line.tags.raw.joinToString("  ") { describeTag(it, line.tags) }), dimColor)
+        if (!line.tags.isEmpty) addRow(escapeMarkup(line.tags.raw.joinToString("  ") { describeTag(it, line.tags) }), dimColor)
     }
 
     private fun addEvent(event: StoryEvent) {
-        addRow("! event ${esc(describeEvent(event))}", Color.GOLDENROD)
+        addRow("! event ${escapeMarkup(describeEvent(event))}", Color.GOLDENROD)
     }
 
     fun showChoices(step: DialogStep, mode: ChoiceMode) {

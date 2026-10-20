@@ -18,6 +18,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.badlogic.gdx.utils.Align
 import com.badlogic.gdx.utils.viewport.ScreenViewport
 import com.github.halfdeadgames.hdgife.compiler.InkCompilerService
+import com.github.halfdeadgames.hdgife.ktx.scene2d.RichDialogLabel
 import com.github.halfdeadgames.hdgife.story.DialogStep
 import com.github.halfdeadgames.hdgife.story.StoryManager
 import com.strongjoshua.console.GUIConsole
@@ -224,7 +225,7 @@ class DialogScreen(
 
     val renderedMarkup: List<String> get() = rendered.rowMarkup
 
-    val renderedLines: List<RichLine> get() = rendered.richLines
+    val renderedLines: List<RichDialogLabel> get() = rendered.richLines
 
     val isRevealing: Boolean get() = rendered.isRevealing
 

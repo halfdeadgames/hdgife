@@ -1,6 +1,9 @@
 package com.github.halfdeadgames.hdgife.harness
 
-import com.badlogic.gdx.graphics.Colors
+import com.github.halfdeadgames.hdgife.ktx.scene2d.describeMarker
+import com.github.halfdeadgames.hdgife.ktx.scene2d.describeStyle
+import com.github.halfdeadgames.hdgife.ktx.scene2d.escapeMarkup
+import com.github.halfdeadgames.hdgife.ktx.scene2d.toMarkup
 import com.github.halfdeadgames.hdgife.story.Comparison
 import com.github.halfdeadgames.hdgife.story.DialogChoice
 import com.github.halfdeadgames.hdgife.story.DialogLine
@@ -12,14 +15,8 @@ import com.github.halfdeadgames.hdgife.story.Tags
 import com.github.halfdeadgames.hdgife.story.TextMarker
 import com.github.halfdeadgames.hdgife.story.TextSpan
 
-internal fun esc(text: String): String = text.replace("[", "[[")
-
 private const val titleMarkup = "[#9ecbff]"
 private const val dimMarkup = "[#8a8a8a]"
-
-internal val animatedStyleNames = setOf("shake", "wave", "bounce")
-
-internal val flashMarkerNames = setOf("slam", "flash")
 
 private val speakerColorNames = arrayOf("SKY", "SALMON", "LIME", "GOLD", "VIOLET", "TEAL", "CORAL", "CHARTREUSE")
 
@@ -29,86 +26,7 @@ internal class SpeakerColors {
     fun of(name: String): String = assigned.getOrPut(name) { speakerColorNames[assigned.size % speakerColorNames.size] }
 }
 
-private fun colorOf(style: Style): String? {
-    val hex = style.hexColor()
-    if (hex != null) return "#%08x".format(hex)
-    val name = style.value?.uppercase()
-    return if (name != null && Colors.get(name) != null) name else null
-}
-
-private fun isDrawn(style: Style) = style.name == "color" && colorOf(style) != null
-
-internal fun styleColor(span: TextSpan): String? {
-    var emphasis: String? = null
-    var explicit: String? = null
-    for (style in span.styles) {
-        when (style.name) {
-            "em" -> emphasis = "#ffd27f"
-            "b" -> emphasis = "#ffffff"
-            "color" -> colorOf(style)?.let { explicit = it }
-        }
-    }
-    return explicit ?: emphasis
-}
-
 internal fun show(value: Any?): String = if (value is Float && value % 1f == 0f) value.toInt().toString() else value.toString()
-
-internal fun describeStyle(style: Style) = buildString {
-    append(style.name)
-    style.value?.let { append('=').append(it) }
-    for ((key, value) in style.params) append(' ').append(key).append('=').append(value)
-}
-
-internal fun describeMarker(marker: TextMarker) = buildString {
-    append(marker.name)
-    marker.value?.let { append('=').append(it) }
-    for ((key, value) in marker.params) append(' ').append(key).append('=').append(value)
-}
-
-internal enum class RunKind { Text, Marker, Note }
-
-internal fun interface RunSink {
-    fun run(kind: RunKind, text: String, color: String?, effect: Style?, marker: TextMarker?)
-}
-
-internal fun walkRuns(spans: List<TextSpan>, markers: List<TextMarker>, stillOpen: List<Style>, sink: RunSink) {
-    var written = 0
-    var markerIndex = 0
-    fun emitMarker(marker: TextMarker) = sink.run(RunKind.Marker, "|" + describeMarker(marker) + "|", null, null, marker)
-    for ((spanIndex, span) in spans.withIndex()) {
-        val color = styleColor(span)
-        val effect = span.styles.firstOrNull { it.name in animatedStyleNames }
-        val text = span.text
-        var start = 0
-        while (start < text.length) {
-            while (markerIndex < markers.size && markers[markerIndex].offset <= written) emitMarker(markers[markerIndex++])
-            val untilMarker = if (markerIndex < markers.size) markers[markerIndex].offset - written else Int.MAX_VALUE
-            val end = if (untilMarker >= text.length - start) text.length else start + untilMarker
-            sink.run(RunKind.Text, text.substring(start, end), color, effect, null)
-            written += end - start
-            start = end
-        }
-        val continuing = spans.getOrNull(spanIndex + 1)?.styles ?: stillOpen
-        for (style in span.styles) {
-            if (!isDrawn(style) && style !in continuing) {
-                sink.run(RunKind.Note, "[" + describeStyle(style) + "]", null, null, null)
-            }
-        }
-    }
-    while (markerIndex < markers.size) emitMarker(markers[markerIndex++])
-}
-
-internal fun toMarkup(spans: List<TextSpan>, markers: List<TextMarker>, stillOpen: List<Style> = emptyList()): String = buildString {
-    walkRuns(spans, markers, stillOpen) { kind, text, color, _, _ ->
-        if (kind == RunKind.Text && color != null) {
-            append('[').append(color).append(']').append(esc(text)).append("[]")
-        } else if (kind == RunKind.Text) {
-            append(esc(text))
-        } else {
-            append(dimMarkup).append(esc(text)).append("[]")
-        }
-    }
-}
 
 internal fun describe(requirement: RequirementResult, nested: Boolean = false): String {
     val verdict = if (nested) (if (requirement.isMet) " = ok" else " = no") else ""
@@ -137,7 +55,7 @@ private fun StringBuilder.requirementTree(requirement: RequirementResult, indent
         }
         else -> {
             repeat(indent) { append(' ') }
-            append(esc(describe(requirement))).append(" -> ").append(requirement::class.simpleName).append('\n')
+            append(escapeMarkup(describe(requirement))).append(" -> ").append(requirement::class.simpleName).append('\n')
         }
     }
 }
@@ -146,9 +64,9 @@ internal fun choiceMarkup(choice: DialogChoice): String = buildString {
     append(toMarkup(choice.spans, choice.markers))
     if (!choice.isAvailable) {
         val needs = choice.requirements.filterNot { it.isMet }.joinToString("; ") { describe(it) }
-        append("  [#ff8a80](needs ").append(esc(needs)).append(")[]")
+        append("  [#ff8a80](needs ").append(escapeMarkup(needs)).append(")[]")
     } else if (choice.requirements.isNotEmpty()) {
-        append("  [#7fbf7f](met ").append(esc(choice.requirements.joinToString("; ") { describe(it) })).append(")[]")
+        append("  [#7fbf7f](met ").append(escapeMarkup(choice.requirements.joinToString("; ") { describe(it) })).append(")[]")
     }
 }
 
@@ -179,14 +97,14 @@ internal fun typeName(value: Any?): String = when (value) {
     else -> value.javaClass.simpleName
 }
 
-private fun typed(value: Any?): String = if (value == null) "null" else "${esc(value.toString())} (${typeName(value)})"
+private fun typed(value: Any?): String = if (value == null) "null" else "${escapeMarkup(value.toString())} (${typeName(value)})"
 
-private fun quote(text: String) = "\"" + esc(text.replace("\n", "\\n")) + "\""
+private fun quote(text: String) = "\"" + escapeMarkup(text.replace("\n", "\\n")) + "\""
 
 private fun styleChips(styles: List<Style>): String =
     if (styles.isEmpty()) "-" else styles.joinToString(" + ") { style ->
         val hex = style.hexColor()
-        esc(describeStyle(style)) + if (hex != null) " (hex %08x)".format(hex) else ""
+        escapeMarkup(describeStyle(style)) + if (hex != null) " (hex %08x)".format(hex) else ""
     }
 
 private fun StringBuilder.title(text: String) = append(titleMarkup).append(text).append("[]\n")
@@ -199,8 +117,8 @@ private fun StringBuilder.field(indent: Int, key: String, value: String) {
 private fun StringBuilder.requirementFields(
     entity: String?, stat: String, op: Comparison, target: Any, actual: Any?, hasActual: Boolean = true,
 ) {
-    append("      entity=").append(entity?.let { esc(it) } ?: "null")
-    append(" stat=").append(esc(stat)).append(" op=").append(op.symbol).append('\n')
+    append("      entity=").append(entity?.let { escapeMarkup(it) } ?: "null")
+    append(" stat=").append(escapeMarkup(stat)).append(" op=").append(op.symbol).append('\n')
     append("      target=").append(typed(target))
     if (hasActual) append(" actual=").append(typed(actual))
     append('\n')
@@ -208,7 +126,7 @@ private fun StringBuilder.requirementFields(
 
 private fun StringBuilder.tags(indent: Int, tags: Tags) {
     field(indent, "tags.raw", tags.raw.joinToString(", ", "[[", "]") { quote(it) })
-    field(indent, "tags.map", esc(tags.map.toString()))
+    field(indent, "tags.map", escapeMarkup(tags.map.toString()))
 }
 
 private fun StringBuilder.spansAndMarkers(indent: Int, spans: List<TextSpan>, markers: List<TextMarker>) {
@@ -220,20 +138,20 @@ private fun StringBuilder.spansAndMarkers(indent: Int, spans: List<TextSpan>, ma
     field(indent, "markers", markers.size.toString())
     for (marker in markers) {
         repeat(indent + 2) { append(' ') }
-        append(esc(describeMarker(marker))).append(" @").append(marker.offset).append('\n')
+        append(escapeMarkup(describeMarker(marker))).append(" @").append(marker.offset).append('\n')
     }
 }
 
 fun formatRaw(step: DialogStep, number: Int, note: String? = null, linesFrom: DialogStep = step): String = buildString {
     title("STEP $number")
     field(0, "ended", step.isEnded.toString())
-    note?.let { field(0, "note", esc(it)) }
+    note?.let { field(0, "note", escapeMarkup(it)) }
     append('\n')
     title("LINES (${linesFrom.lines.size})")
     for ((i, line) in linesFrom.lines.withIndex()) {
         append(dimMarkup).append("[[").append(i).append("][]\n")
         field(2, "text", quote(line.text))
-        field(2, "speaker", line.speaker?.let { esc(it) } ?: "null")
+        field(2, "speaker", line.speaker?.let { escapeMarkup(it) } ?: "null")
         tags(2, line.tags)
         spansAndMarkers(2, line.spans, line.markers)
     }
@@ -265,7 +183,7 @@ fun formatRaw(step: DialogStep, number: Int, note: String? = null, linesFrom: Di
     append('\n')
     title("EVENTS (${step.events.size})")
     for (event in step.events) {
-        append("  ").append(esc(event.name)).append('(')
+        append("  ").append(escapeMarkup(event.name)).append('(')
         event.args.joinTo(this) { typed(it) }
         append(")  lineIndex=").append(event.lineIndex).append("  id=").append(event.id).append('\n')
     }

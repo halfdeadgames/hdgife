@@ -26,7 +26,7 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.java }}
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew -PskipAndroid -PskipWeb :core:check :core:publishToMavenLocal
+      - run: ./gradlew -PskipAndroid -PskipWeb :core:check :ktx:check :core:publishToMavenLocal :ktx:publishToMavenLocal
 
   # The desktop harness has to compile. The window test (uiTest) needs a display, so it is not run here.
   desktop:

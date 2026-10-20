@@ -1,9 +1,19 @@
 package com.github.halfdeadgames.hdgife.compiler
 
+import com.badlogic.gdx.assets.loaders.FileHandleResolver
 import com.badlogic.gdx.files.FileHandle
 import com.bladecoder.ink.runtime.HdgifeStory
 
 public fun InkSource.Companion.of(file: FileHandle): InkSource = fileSource(file, normalizePath(file.path()))
+
+public fun InkSource.Companion.of(path: String, resolver: FileHandleResolver): InkSource = resolvedSource(resolver, normalizePath(path))
+
+private fun resolvedSource(resolver: FileHandleResolver, path: String): InkSource =
+    InkSource.lazy(path, { relative ->
+        val siblingPath = normalizePath(path.substringBeforeLast('/', "") + "/" + relative)
+        val sibling = resolver.resolve(siblingPath)
+        if (sibling.exists() && !sibling.isDirectory) resolvedSource(resolver, siblingPath) else null
+    }) { resolver.resolve(path).readString("UTF-8") }
 
 private fun fileSource(file: FileHandle, name: String): InkSource =
     InkSource.lazy(name, { relative ->

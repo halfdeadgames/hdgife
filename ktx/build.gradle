@@ -1,0 +1,70 @@
+eclipse.project.name = appName + '-ktx'
+
+dependencies {
+  api project(':core')
+  api "io.github.quillraven.libktx:ktx-async:$ktxVersion"
+  api "io.github.quillraven.libktx:ktx-assets-async:$ktxVersion"
+  api "io.github.quillraven.libktx:ktx-log:$ktxVersion"
+  api "io.github.quillraven.libktx:ktx-scene2d:$ktxVersion"
+  api "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinxCoroutinesVersion"
+
+  testImplementation "org.jetbrains.kotlin:kotlin-test-junit5:$kotlinVersion"
+  testImplementation platform("org.junit:junit-bom:5.14.4")
+  testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+kotlin {
+  explicitApi()
+  abiValidation {
+    enabled = true
+  }
+}
+
+test {
+  useJUnitPlatform()
+}
+
+apply plugin: 'maven-publish'
+
+java {
+  withSourcesJar()
+  withJavadocJar()
+}
+
+publishing {
+  publications {
+    maven(MavenPublication) {
+      from components.java
+      artifactId = 'hdgife-ktx'
+      pom {
+        name = 'hdgife-ktx'
+        description = 'KTX extensions for hdgife: coroutines, Flow, asset loading, ktx-log and a scene2d dialog label'
+        url = 'https://github.com/halfdeadgames/hdgife'
+        licenses {
+          license {
+            name = 'Apache License, Version 2.0'
+            url = 'https://www.apache.org/licenses/LICENSE-2.0.txt'
+            distribution = 'repo'
+          }
+        }
+        developers {
+          developer {
+            id = 'halfdeadgames'
+            name = 'halfdeadgames'
+          }
+        }
+        scm {
+          url = 'https://github.com/halfdeadgames/hdgife'
+          connection = 'scm:git:git://github.com/halfdeadgames/hdgife.git'
+          developerConnection = 'scm:git:ssh://git@github.com/halfdeadgames/hdgife.git'
+        }
+      }
+    }
+  }
+}
+
+jar {
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+  from(rootProject.layout.projectDirectory.file('LICENSE')) { into 'META-INF' }
+  from(rootProject.layout.projectDirectory.file('NOTICE')) { into 'META-INF' }
+}

@@ -38,6 +38,7 @@ public final class com/github/halfdeadgames/hdgife/compiler/GdxSourcesKt {
 	public static final fun compileFolder (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Lcom/badlogic/gdx/files/FileHandle;Z)Lcom/bladecoder/ink/runtime/HdgifeStory;
 	public static synthetic fun compileFolder$default (Lcom/github/halfdeadgames/hdgife/compiler/InkCompilerService;Lcom/badlogic/gdx/files/FileHandle;ZILjava/lang/Object;)Lcom/bladecoder/ink/runtime/HdgifeStory;
 	public static final fun of (Lcom/github/halfdeadgames/hdgife/compiler/InkSource$Companion;Lcom/badlogic/gdx/files/FileHandle;)Lcom/github/halfdeadgames/hdgife/compiler/InkSource;
+	public static final fun of (Lcom/github/halfdeadgames/hdgife/compiler/InkSource$Companion;Ljava/lang/String;Lcom/badlogic/gdx/assets/loaders/FileHandleResolver;)Lcom/github/halfdeadgames/hdgife/compiler/InkSource;
 }
 
 public final class com/github/halfdeadgames/hdgife/compiler/InkCompileException : com/github/halfdeadgames/hdgife/HdgifeException {
@@ -74,6 +75,10 @@ public final class com/github/halfdeadgames/hdgife/compiler/InkSource$Companion 
 
 public abstract interface class com/github/halfdeadgames/hdgife/state/NarrativeStateProvider {
 	public abstract fun getStat (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;
+}
+
+public final class com/github/halfdeadgames/hdgife/state/NarrativeStateProviderKt {
+	public static final fun mapStatProvider (Ljava/util/Map;)Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;
 }
 
 public final class com/github/halfdeadgames/hdgife/story/Comparison : java/lang/Enum {
@@ -133,6 +138,18 @@ public final class com/github/halfdeadgames/hdgife/story/DialogStep {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class com/github/halfdeadgames/hdgife/story/EventRouter : java/lang/AutoCloseable {
+	public fun close ()V
+	public final fun fallback (Lkotlin/jvm/functions/Function1;)V
+	public final fun on (Ljava/lang/String;Lkotlin/jvm/functions/Function0;)V
+	public final fun register (Ljava/lang/String;Ljava/util/List;Lkotlin/jvm/functions/Function1;)V
+}
+
+public final class com/github/halfdeadgames/hdgife/story/EventRouterKt {
+	public static final fun argAs (Lcom/github/halfdeadgames/hdgife/story/StoryEvent;ILkotlin/reflect/KClass;)Ljava/lang/Object;
+	public static final fun events (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/jvm/functions/Function1;)Lcom/github/halfdeadgames/hdgife/story/EventRouter;
+}
+
 public final class com/github/halfdeadgames/hdgife/story/FunctionArgs {
 	public final fun bool (I)Z
 	public final fun float (I)F
@@ -148,6 +165,11 @@ public final class com/github/halfdeadgames/hdgife/story/FunctionArgs {
 public final class com/github/halfdeadgames/hdgife/story/IncompatibleLibraryException : com/github/halfdeadgames/hdgife/HdgifeException {
 	public final fun getExpected ()I
 	public final fun getFound ()I
+}
+
+public final class com/github/halfdeadgames/hdgife/story/InkVariable : kotlin/properties/ReadWriteProperty {
+	public fun getValue (Ljava/lang/Object;Lkotlin/reflect/KProperty;)Ljava/lang/Object;
+	public fun setValue (Ljava/lang/Object;Lkotlin/reflect/KProperty;Ljava/lang/Object;)V
 }
 
 public final class com/github/halfdeadgames/hdgife/story/IssueKind : java/lang/Enum {
@@ -322,6 +344,7 @@ public final class com/github/halfdeadgames/hdgife/story/StoryManager : java/lan
 	public fun <init> (Lcom/bladecoder/ink/runtime/HdgifeStory;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;)V
 	public fun <init> (Lcom/bladecoder/ink/runtime/HdgifeStory;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;Lkotlin/jvm/functions/Function1;)V
 	public synthetic fun <init> (Lcom/bladecoder/ink/runtime/HdgifeStory;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun addEventListener (Lcom/github/halfdeadgames/hdgife/story/StoryEventListener;)Ljava/lang/AutoCloseable;
 	public final fun beginScene (Ljava/lang/String;)V
 	public final fun beginScene (Ljava/lang/String;Ljava/lang/String;)V
 	public static synthetic fun beginScene$default (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)V
@@ -396,6 +419,16 @@ public final class com/github/halfdeadgames/hdgife/story/StoryManager$Companion 
 	public final fun forPlainStory (Lcom/bladecoder/ink/runtime/Story;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
 	public final fun forPlainStory (Lcom/bladecoder/ink/runtime/Story;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;Lkotlin/jvm/functions/Function1;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
 	public static synthetic fun forPlainStory$default (Lcom/github/halfdeadgames/hdgife/story/StoryManager$Companion;Lcom/bladecoder/ink/runtime/Story;Lcom/github/halfdeadgames/hdgife/state/NarrativeStateProvider;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lcom/github/halfdeadgames/hdgife/story/StoryManager;
+}
+
+public final class com/github/halfdeadgames/hdgife/story/StoryManagerExtensionsKt {
+	public static final fun formatOverride (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/jvm/functions/Function2;)V
+	public static final fun get (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Ljava/lang/String;)Ljava/lang/Object;
+	public static final fun inkVariable (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/reflect/KClass;Ljava/lang/String;)Lcom/github/halfdeadgames/hdgife/story/InkVariable;
+	public static synthetic fun inkVariable$default (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/reflect/KClass;Ljava/lang/String;ILjava/lang/Object;)Lcom/github/halfdeadgames/hdgife/story/InkVariable;
+	public static final fun onEvent (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/jvm/functions/Function1;)V
+	public static final fun set (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Ljava/lang/String;Ljava/lang/Object;)V
+	public static final fun valueConverter (Lcom/github/halfdeadgames/hdgife/story/StoryManager;Lkotlin/jvm/functions/Function1;)V
 }
 
 public final class com/github/halfdeadgames/hdgife/story/StoryManagerKt {

@@ -38,7 +38,7 @@ configure(subprojects.findAll { it.name != 'android' }) {
 }
 
 subprojects {
-  group = 'com.github.halfdeadgames'
+  group = 'com.github.halfdeadgames.hdgife'
   version = "$projectVersion"
   ext.appName = 'hdgife'
   repositories {
