@@ -18,10 +18,10 @@ First public release. From here the public API in `core/api/core.api`, save form
 - Bound game functions (`bindFunction`) with lookahead-safe support, typed `FunctionArgs`, variable access, `observe` and `seedRandom`.
 - Save and load in a versioned envelope that includes open styles, with optional `storyId` and `saveFingerprint` (envelope v2) to tie a save to its story.
 - `StoryManager.close()` and `isClosed`.
-- `hdgife.ink` (version 2) and `hdgife_util.ink` bundled in the jar, with `HdgifeInk.VERSION` and `LIBRARY_FUNCTIONS`.
+- `hdgife.ink` (version 2) and `hdgife_util.ink` bundled in the jar, with `HdgifeInk.version` and `libraryFunctions`.
 - `validateStory` and `StoryValidator` (experimental).
 - A typed exception hierarchy under `HdgifeException`.
-- Test harness on desktop, Android and web (TeaVM). The desktop one has a 23-scenario UI test.
+- Test harness on desktop, Android and web (TeaVM). The story is a feature showcase with a typewriter renderer and per-glyph effects. The desktop one has a 24-scenario UI test.
 - Apache-2.0 license, `NOTICE`, `THIRD_PARTY_NOTICES.md`, pom metadata, a binary compatibility dump and a CI workflow.
 
 ### Changed
@@ -30,6 +30,7 @@ First public release. From here the public API in `core/api/core.api`, save form
 - If `onEvent` throws, the remaining events are kept and delivered on the next `next()`.
 - `speak()` also reports when it ran, so a `speak()` after a line no longer changes that line's speaker.
 - `Comparison` is stable API.
+- Constants and enum entries follow Kotlin naming: `Hdgife.version`, `HdgifeInk.version`, `HdgifeInk.libraryFunctions`, `Tags.empty`, and PascalCase entries for `Rounding`, `Comparison`, `Severity` and `IssueKind`. `RequirementResult.Not.result` is `operand`.
 - Core falls back to `Gdx.files.classpath` to read the bundled ink libraries where there is no class loader (web).
 
 ### Fixed
